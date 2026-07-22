@@ -5,6 +5,7 @@ import {
   Unlock, KeyRound, SeparatorHorizontal, Sprout, ShieldOff, Sparkles, Target, Dices,
   HandMetal, ShieldPlus, CircleDot, VolumeX, Bot, Users, ChevronLeft, Copy, Check, Wifi,
   BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw,
+  UserCircle, LogOut, Mail, ShieldQuestion,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -17,6 +18,10 @@ import {
 import { loadSettings, saveSettings } from './settings.js';
 import { sounds, setSoundEnabled } from './sound.js';
 import { loadRecords, saveRecord, deleteRecord } from './records.js';
+import {
+  watchAuthState, signInWithGoogle, signUpWithEmail, signInWithEmail,
+  resendVerificationEmail, signOutUser, mapAuthError,
+} from './auth.js';
 
 const ICONS = {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
@@ -108,6 +113,7 @@ export default function App() {
   const [state, dispatch] = useReducer(gameReducer, null, createInitialState);
   const [online, setOnline] = useState(null); // null | { code, localColor, role: 'host'|'guest'|'spectator' }
   const [settings, setSettingsState] = useState(() => loadSettings());
+  const [user, setUser] = useState(null); // null | { uid, displayName, email, photoURL, emailVerified, isGoogle }
   const pendingLocalRef = useRef(false);
   const gameStartedRef = useRef(false);
   const recordSavedRef = useRef(false);
@@ -152,6 +158,12 @@ export default function App() {
   useEffect(() => {
     setSoundEnabled(settings.soundEnabled);
   }, [settings.soundEnabled]);
+
+  // 로그인 상태 구독
+  useEffect(() => {
+    const unsub = watchAuthState(setUser);
+    return unsub;
+  }, []);
 
   // 버튼을 누를 때마다 짧은 탁 소리를 내요
   useEffect(() => {
@@ -261,7 +273,7 @@ export default function App() {
 
   let screen;
   if (state.phase === 'setup') {
-    screen = <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} />;
+    screen = <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} user={user} />;
   } else if (state.phase === 'draft') {
     screen = <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} />;
   } else {
@@ -273,6 +285,7 @@ export default function App() {
         onReset={handleReset}
         settings={settings}
         updateSettings={updateSettings}
+        user={user}
       />
     );
   }
@@ -343,7 +356,7 @@ function useAIDriver(state, dispatch, online) {
   }, [state, dispatch, online]);
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -356,6 +369,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
   const [tutorialPage, setTutorialPage] = useState(0);
   const [records, setRecords] = useState([]);
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'signup'
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authNickname, setAuthNickname] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
 
   async function handleCreateRoom(hostColor) {
     setBusy(true);
@@ -437,6 +455,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
         <header className="header">
           <h1>증강 오목</h1>
           <div className="top-toggles">
+            <button className="icon-toggle-btn" onClick={() => setStep('account')} title="계정">
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="" style={{ width: 18, height: 18, borderRadius: '50%' }} />
+              ) : (
+                <UserCircle size={16} />
+              )}
+            </button>
             <button className="icon-toggle-btn" onClick={() => setStep('settings')} title="설정">
               <Settings size={16} />
             </button>
@@ -475,6 +500,156 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
             <History size={16} /> 기보 보기
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (step === 'account') {
+    async function handleGoogleLogin() {
+      setBusy(true);
+      setErrorMsg('');
+      try {
+        await signInWithGoogle();
+      } catch (e) {
+        setErrorMsg(mapAuthError(e.code));
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function handleEmailAuth() {
+      setBusy(true);
+      setErrorMsg('');
+      setAuthNotice('');
+      try {
+        if (authMode === 'signup') {
+          await signUpWithEmail(authEmail.trim(), authPassword, authNickname.trim());
+          setAuthNotice('인증 메일을 보냈어요! 메일함을 확인하고 링크를 눌러주세요.');
+        } else {
+          await signInWithEmail(authEmail.trim(), authPassword);
+        }
+      } catch (e) {
+        setErrorMsg(mapAuthError(e.code));
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function handleResend() {
+      setBusy(true);
+      try {
+        await resendVerificationEmail();
+        setAuthNotice('인증 메일을 다시 보냈어요.');
+      } catch {
+        setErrorMsg('메일을 다시 보내지 못했어요.');
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    if (user) {
+      return (
+        <div className="page">
+          <header className="header">
+            <h1>증강 오목</h1>
+          </header>
+          <p className="subtitle">내 계정</p>
+
+          <button className="setup-back" onClick={() => setStep('mode')}>
+            <ChevronLeft size={16} /> 설정으로 돌아가기
+          </button>
+
+          <div className="tutorial-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              {user.photoURL ? (
+                <img src={user.photoURL} alt="" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+              ) : (
+                <UserCircle size={40} />
+              )}
+              <div>
+                <div className="tutorial-title" style={{ marginBottom: 2 }}>{user.displayName || '이름 없음'}</div>
+                <div className="setup-card-desc">{user.email}</div>
+              </div>
+            </div>
+
+            {!user.isGoogle && !user.emailVerified && (
+              <div className="setup-warning">
+                이메일 인증이 아직 안 됐어요. 메일함에서 인증 링크를 눌러주세요.
+                <div style={{ marginTop: 8 }}>
+                  <button className="reset-btn" disabled={busy} onClick={handleResend}>인증 메일 다시 보내기</button>
+                </div>
+              </div>
+            )}
+
+            <button className="reset-btn" onClick={() => signOutUser()}>
+              <LogOut size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> 로그아웃
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">로그인 / 계정 만들기</p>
+
+        <button className="setup-back" onClick={() => setStep('mode')}>
+          <ChevronLeft size={16} /> 설정으로 돌아가기
+        </button>
+
+        {!isFirebaseConfigured() && (
+          <p className="setup-warning">계정 기능을 쓰려면 firebaseConfig.js 설정이 필요해요.</p>
+        )}
+
+        <button className="setup-card" disabled={busy} onClick={handleGoogleLogin} style={{ marginBottom: 16 }}>
+          <div className="setup-card-title">구글로 로그인</div>
+          <div className="setup-card-desc">한 번 클릭으로 바로 시작해요.</div>
+        </button>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">{authMode === 'signup' ? '이메일로 계정 만들기' : '이메일로 로그인'}</div>
+
+          {authMode === 'signup' && (
+            <input
+              className="join-input"
+              style={{ letterSpacing: 0, fontSize: 14, marginBottom: 10, width: '100%' }}
+              value={authNickname}
+              onChange={(e) => setAuthNickname(e.target.value)}
+              placeholder="닉네임"
+            />
+          )}
+          <input
+            className="join-input"
+            style={{ letterSpacing: 0, fontSize: 14, marginBottom: 10, width: '100%' }}
+            value={authEmail}
+            onChange={(e) => setAuthEmail(e.target.value)}
+            placeholder="이메일"
+            type="email"
+          />
+          <input
+            className="join-input"
+            style={{ letterSpacing: 0, fontSize: 14, marginBottom: 12, width: '100%' }}
+            value={authPassword}
+            onChange={(e) => setAuthPassword(e.target.value)}
+            placeholder="비밀번호 (6자 이상)"
+            type="password"
+          />
+          <button className="reset-btn" disabled={busy} onClick={handleEmailAuth} style={{ width: '100%', marginBottom: 10 }}>
+            {authMode === 'signup' ? '가입하고 인증메일 받기' : '로그인'}
+          </button>
+          <button
+            className="setup-tutorial-link"
+            onClick={() => { setAuthMode(authMode === 'signup' ? 'login' : 'signup'); setErrorMsg(''); setAuthNotice(''); }}
+          >
+            {authMode === 'signup' ? '이미 계정이 있어요' : '계정이 없어요, 새로 만들게요'}
+          </button>
+        </div>
+
+        {authNotice && <p className="setup-warning" style={{ color: 'var(--accent)' }}>{authNotice}</p>}
+        {errorMsg && <p className="setup-warning">{errorMsg}</p>}
       </div>
     );
   }
@@ -1157,7 +1332,7 @@ function TurnTimer({ state, dispatch, online }) {
   );
 }
 
-function ChatPanel({ online }) {
+function ChatPanel({ online, user }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const listRef = useRef(null);
@@ -1177,7 +1352,8 @@ function ChatPanel({ online }) {
 
   if (!online) return null;
 
-  const myLabel = online.role === 'spectator' ? '관전자' : PLAYER_LABEL[online.localColor];
+  const colorLabel = online.role === 'spectator' ? '관전자' : PLAYER_LABEL[online.localColor];
+  const myLabel = user?.displayName ? `${user.displayName} (${colorLabel})` : colorLabel;
 
   function send(t) {
     const trimmed = t.trim();
@@ -1219,7 +1395,7 @@ function ChatPanel({ online }) {
   );
 }
 
-function GameScreen({ state, dispatch, online, onReset, settings, updateSettings }) {
+function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user }) {
   const gameOver = state.phase === 'over';
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
   const isSpectator = online && online.role === 'spectator';
@@ -1275,7 +1451,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
         ))}
       </div>
 
-      {online && <ChatPanel online={online} />}
+      {online && <ChatPanel online={online} user={user} />}
     </div>
   );
 }
