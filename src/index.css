@@ -263,6 +263,76 @@ body {
   box-shadow: inset 0 0 0 1px rgba(194, 118, 10, 0.5);
 }
 
+.card-option-readonly {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.card-option-readonly:hover {
+  transform: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border-color: var(--border);
+}
+
+.pick-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  animation: cardEnter 0.25s ease-out;
+}
+
+.card-use-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.card-use-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 36px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  animation: cardUsePop 1s ease-out forwards;
+  color: var(--text);
+}
+
+.card-use-overlay-icon {
+  color: var(--accent);
+}
+
+.card-use-overlay-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.card-use-overlay-player {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+@keyframes cardUsePop {
+  0% { opacity: 0; transform: scale(0.7); }
+  15% { opacity: 1; transform: scale(1.05); }
+  25% { transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.96); }
+}
+
 .blocked-mark {
   width: 40%;
   height: 40%;

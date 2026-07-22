@@ -30,6 +30,43 @@ function tone(freq, duration, { type = 'sine', gain = 0.15, delay = 0 } = {}) {
   osc.stop(startAt + duration + 0.02);
 }
 
+// 체스 말을 딱 내려놓는 듯한 짧고 단단한 "톡" 소리. 순수 톤이 아니라 짧은 노이즈
+// 버스트를 밴드패스 필터에 통과시켜서 나무/플라스틱 조각이 부딪히는 질감을 내요.
+function knock({ gain = 0.5, delay = 0, freq = 900 } = {}) {
+  const audio = getCtx();
+  if (!audio) return;
+  const startAt = audio.currentTime + delay;
+  const duration = 0.06;
+
+  const bufferSize = Math.floor(audio.sampleRate * duration);
+  const buffer = audio.createBuffer(1, bufferSize, audio.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+  }
+
+  const noise = audio.createBufferSource();
+  noise.buffer = buffer;
+
+  const bandpass = audio.createBiquadFilter();
+  bandpass.type = 'bandpass';
+  bandpass.frequency.value = freq;
+  bandpass.Q.value = 1.2;
+
+  const g = audio.createGain();
+  g.gain.setValueAtTime(gain, startAt);
+  g.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+
+  noise.connect(bandpass);
+  bandpass.connect(g);
+  g.connect(audio.destination);
+  noise.start(startAt);
+  noise.stop(startAt + duration + 0.01);
+
+  // 낮은 "퉁" 하는 몸통음을 살짝 더해 체스 말이 나무판에 닿는 무게감을 줘요
+  tone(140, 0.05, { type: 'sine', gain: gain * 0.35, delay });
+}
+
 let enabled = true;
 export function setSoundEnabled(v) {
   enabled = v;
@@ -38,7 +75,7 @@ export function setSoundEnabled(v) {
 export const sounds = {
   place() {
     if (!enabled) return;
-    tone(520, 0.08, { type: 'sine', gain: 0.12 });
+    knock({ gain: 0.5, freq: 1000 });
   },
   card() {
     if (!enabled) return;

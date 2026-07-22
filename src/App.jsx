@@ -93,6 +93,28 @@ export default function App() {
   const gameStartedRef = useRef(false);
   const recordSavedRef = useRef(false);
   const prevRef = useRef({ stoneCount: 0, handTotal: 0, phase: 'setup', message: '' });
+  const prevLastUsedRef = useRef({ [BLACK]: null, [WHITE]: null });
+  const [cardOverlay, setCardOverlay] = useState(null);
+
+  // 카드가 사용될 때마다(어느 쪽이든) 화면 중앙에 잠깐 띄워줘요
+  useEffect(() => {
+    if (!state.lastUsedCard) return;
+    const prev = prevLastUsedRef.current;
+    for (const p of [BLACK, WHITE]) {
+      const cur = state.lastUsedCard[p];
+      if (cur && cur !== prev[p]) {
+        const card = getCardById(cur);
+        if (card) setCardOverlay({ player: p, card, key: Date.now() });
+      }
+    }
+    prevLastUsedRef.current = { ...state.lastUsedCard };
+  }, [state.lastUsedCard]);
+
+  useEffect(() => {
+    if (!cardOverlay) return undefined;
+    const t = setTimeout(() => setCardOverlay(null), 1000);
+    return () => clearTimeout(t);
+  }, [cardOverlay]);
 
   const updateSettings = useCallback((patch) => {
     setSettingsState((prev) => {
@@ -206,23 +228,37 @@ export default function App() {
     dispatch({ type: 'RESET_GAME' });
   }
 
+  let screen;
   if (state.phase === 'setup') {
-    return <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} />;
-  }
-
-  if (state.phase === 'draft') {
-    return <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} />;
+    screen = <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} />;
+  } else if (state.phase === 'draft') {
+    screen = <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} />;
+  } else {
+    screen = (
+      <GameScreen
+        state={state}
+        dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch}
+        online={online}
+        onReset={handleReset}
+        settings={settings}
+        updateSettings={updateSettings}
+      />
+    );
   }
 
   return (
-    <GameScreen
-      state={state}
-      dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch}
-      online={online}
-      onReset={handleReset}
-      settings={settings}
-      updateSettings={updateSettings}
-    />
+    <>
+      {screen}
+      {cardOverlay && (
+        <div className="card-use-overlay">
+          <div className="card-use-overlay-inner" key={cardOverlay.key}>
+            <div className="card-use-overlay-icon"><CardIcon name={cardOverlay.card.icon} size={40} /></div>
+            <div className="card-use-overlay-name">{cardOverlay.card.name}</div>
+            <div className="card-use-overlay-player">{PLAYER_LABEL[cardOverlay.player]} 사용</div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -963,6 +999,21 @@ function DraftScreen({ state, dispatch, online }) {
   const isOnlineWaiting = online && currentPlayer !== online.localColor;
   const waiting = isAITurn || isOnlineWaiting;
 
+  const [pickBanner, setPickBanner] = useState(null);
+  const lastPickKeyRef = useRef(null);
+
+  useEffect(() => {
+    if (!draft.lastPick) return;
+    const key = `${draft.lastPick.round}-${draft.lastPick.cardId}`;
+    if (lastPickKeyRef.current === key) return;
+    lastPickKeyRef.current = key;
+
+    const card = getCardById(draft.lastPick.cardId);
+    setPickBanner({ player: draft.lastPick.player, card });
+    const t = setTimeout(() => setPickBanner(null), 1200);
+    return () => clearTimeout(t);
+  }, [draft.lastPick]);
+
   return (
     <div className="page">
       <header className="header">
@@ -979,30 +1030,31 @@ function DraftScreen({ state, dispatch, online }) {
         </span>
       </div>
 
-      {waiting ? (
-        <div className="ai-thinking">
-          <Bot size={20} strokeWidth={1.6} />
-          <span>기다리는 중...</span>
-        </div>
-      ) : (
-        <div className="draft-options" key={roundNumber}>
-          {draft.options.map((cardId, i) => {
-            const card = getCardById(cardId);
-            return (
-              <button
-                key={cardId}
-                className="card-option"
-                style={{ animationDelay: `${i * 60}ms` }}
-                onClick={() => dispatch({ type: 'DRAFT_PICK', cardId })}
-              >
-                <div className="card-icon"><CardIcon name={card.icon} size={22} /></div>
-                <div className="card-name">{card.name}</div>
-                <div className="card-desc">{card.desc}</div>
-              </button>
-            );
-          })}
+      {pickBanner && (
+        <div className="pick-banner">
+          <CardIcon name={pickBanner.card.icon} size={18} />
+          {PLAYER_LABEL[pickBanner.player]}이(가) <b>{pickBanner.card.name}</b>을(를) 선택했어요
         </div>
       )}
+
+      <div className="draft-options" key={roundNumber}>
+        {draft.options.map((cardId, i) => {
+          const card = getCardById(cardId);
+          return (
+            <button
+              key={cardId}
+              className={`card-option ${waiting ? 'card-option-readonly' : ''}`}
+              style={{ animationDelay: `${i * 60}ms` }}
+              disabled={waiting}
+              onClick={() => dispatch({ type: 'DRAFT_PICK', cardId })}
+            >
+              <div className="card-icon"><CardIcon name={card.icon} size={22} /></div>
+              <div className="card-name">{card.name}</div>
+              <div className="card-desc">{card.desc}</div>
+            </button>
+          );
+        })}
+      </div>
 
       <HandsPreview hands={draft.hands} />
     </div>

@@ -677,19 +677,20 @@ export function gameReducer(state, action) {
       const pool = state.draft.pool.filter((id) => id !== cardId);
       const hands = { ...state.draft.hands, [player]: [...state.draft.hands[player], cardId] };
       const currentIndex = state.draft.currentIndex + 1;
+      const lastPick = { player, cardId, round: state.draft.currentIndex };
 
       if (currentIndex >= state.draft.order.length) {
         return withDeadline({
           ...state,
           phase: 'play',
           message: '흑 차례예요.',
-          draft: { ...state.draft, pool, hands, currentIndex, options: [] },
+          draft: { ...state.draft, pool, hands, currentIndex, options: [], lastPick },
         });
       }
 
       return {
         ...state,
-        draft: { ...state.draft, pool, hands, currentIndex, options: drawRandomCards(pool, 3) },
+        draft: { ...state.draft, pool, hands, currentIndex, options: drawRandomCards(pool, 3), lastPick },
       };
     }
 
