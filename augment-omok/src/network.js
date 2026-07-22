@@ -4,10 +4,8 @@
 // 동기화하기 때문에 어긋날 일이 없어요.
 
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, set, get, update, onValue, onChildAdded, off, push, serverTimestamp } from 'firebase/database';
+import { getDatabase, ref, set, get, update, onValue, off, serverTimestamp } from 'firebase/database';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
-import { getClientId } from './settings.js';
-import { BLACK, WHITE } from './gameLogic.js';
 
 let dbInstance = null;
 
@@ -40,41 +38,22 @@ export async function createRoom(hostColor) {
   await set(ref(db, `rooms/${code}`), {
     status: 'waiting',
     hostColor,
-    hostClientId: getClientId(),
-    guestClientId: null,
     createdAt: serverTimestamp(),
     state: null,
   });
   return code;
 }
 
-// 코드로 방에 참가해요.
-// - 예전에 이 방의 호스트/게스트였던 기기(clientId 일치)가 다시 들어오면 "재접속"으로
-//   원래 자기 색을 그대로 돌려줘요.
-// - 처음 보는 기기인데 방이 대기 중이면 게스트로 참가해요.
-// - 처음 보는 기기인데 이미 대국 중이면 관전자로 참가해요.
+// 코드로 방에 참가해요. 성공하면 방장의 색 정보를 반환해요.
 export async function joinRoom(code) {
   const db = getDb();
   const roomRef = ref(db, `rooms/${code}`);
   const snap = await get(roomRef);
   if (!snap.exists()) return { ok: false, reason: 'not-found' };
   const data = snap.val();
-  const myId = getClientId();
-
-  if (data.hostClientId === myId) {
-    return { ok: true, hostColor: data.hostColor, localColor: data.hostColor, rejoin: true };
-  }
-  if (data.guestClientId && data.guestClientId === myId) {
-    const guestColor = data.hostColor === BLACK ? WHITE : BLACK;
-    return { ok: true, hostColor: data.hostColor, localColor: guestColor, rejoin: true };
-  }
-
-  if (data.status === 'waiting') {
-    await update(roomRef, { status: 'active', guestClientId: myId });
-    return { ok: true, hostColor: data.hostColor, asSpectator: false };
-  }
-
-  return { ok: true, hostColor: data.hostColor, asSpectator: true };
+  if (data.status !== 'waiting') return { ok: false, reason: 'full' };
+  await update(roomRef, { status: 'active' });
+  return { ok: true, hostColor: data.hostColor };
 }
 
 // 방 전체(상태 포함)를 구독해요. onUpdate(roomData)가 변경마다 호출돼요.
@@ -113,24 +92,6 @@ export async function leaveRoom(code) {
   } catch {
     // 방이 이미 없거나 설정이 안 된 경우는 조용히 무시
   }
-}
-
-// 채팅 메시지 하나를 방에 추가해요.
-export async function sendChatMessage(code, sender, text) {
-  const db = getDb();
-  await push(ref(db, `rooms/${code}/chat`), { sender, text, at: Date.now() });
-}
-
-// 채팅 메시지가 새로 추가될 때마다 호출돼요.
-export function subscribeChat(code, onMessage) {
-  const db = getDb();
-  const chatRef = ref(db, `rooms/${code}/chat`);
-  const handler = (snap) => {
-    const val = snap.val();
-    if (val) onMessage({ id: snap.key, ...val });
-  };
-  onChildAdded(chatRef, handler);
-  return () => off(chatRef, 'child_added', handler);
 }
 
 export { isFirebaseConfigured };

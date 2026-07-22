@@ -3,20 +3,13 @@ import {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
   Minimize2, Trophy, Repeat2, Snowflake, Biohazard, Bomb, Undo2, History, Shuffle,
   Unlock, KeyRound, SeparatorHorizontal, Sprout, ShieldOff, Sparkles, Target, Dices,
-  HandMetal, ShieldPlus, CircleDot, VolumeX, Bot, Users, ChevronLeft, Copy, Check, Wifi,
-  BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw,
+  HandMetal, ShieldPlus, CircleDot, VolumeX, Bot, Users, ChevronLeft, Copy, Check, Wifi, BookOpen, ChevronRight,
 } from 'lucide-react';
-import { BOARD_SIZE, otherPlayer } from './gameLogic.js';
+import { BOARD_SIZE } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
 import { getCardById, CARDS } from './cards.js';
 import { decideAIAction, pickDraftCard, chooseBestCell, computeAITarget, DIFFICULTIES } from './ai.js';
-import {
-  createRoom, joinRoom, subscribeRoom, pushGameState, leaveRoom, isFirebaseConfigured,
-  sendChatMessage, subscribeChat,
-} from './network.js';
-import { loadSettings, saveSettings } from './settings.js';
-import { sounds, setSoundEnabled } from './sound.js';
-import { loadRecords, saveRecord, deleteRecord } from './records.js';
+import { createRoom, joinRoom, subscribeRoom, pushGameState, leaveRoom, isFirebaseConfigured } from './network.js';
 
 const ICONS = {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
@@ -87,30 +80,9 @@ const TUTORIAL_PAGES = [
 
 export default function App() {
   const [state, dispatch] = useReducer(gameReducer, null, createInitialState);
-  const [online, setOnline] = useState(null); // null | { code, localColor, role: 'host'|'guest'|'spectator' }
-  const [settings, setSettingsState] = useState(() => loadSettings());
+  const [online, setOnline] = useState(null); // null | { code, localColor, role: 'host'|'guest' }
   const pendingLocalRef = useRef(false);
   const gameStartedRef = useRef(false);
-  const recordSavedRef = useRef(false);
-  const prevRef = useRef({ stoneCount: 0, handTotal: 0, phase: 'setup', message: '' });
-
-  const updateSettings = useCallback((patch) => {
-    setSettingsState((prev) => {
-      const next = { ...prev, ...patch };
-      saveSettings(next);
-      return next;
-    });
-  }, []);
-
-  // 테마 적용
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', settings.theme);
-  }, [settings.theme]);
-
-  // 사운드 on/off 반영
-  useEffect(() => {
-    setSoundEnabled(settings.soundEnabled);
-  }, [settings.soundEnabled]);
 
   const localDispatch = useCallback((action) => {
     pendingLocalRef.current = true;
@@ -119,7 +91,7 @@ export default function App() {
 
   // 내가 직접 만든 변화만 온라인 방에 그대로 반영해요 (상대에게서 받은 변화는 되돌려보내지 않음)
   useEffect(() => {
-    if (!online || online.role === 'spectator') return;
+    if (!online) return;
     if (pendingLocalRef.current) {
       pendingLocalRef.current = false;
       pushGameState(online.code, state).catch(() => {});
@@ -136,13 +108,7 @@ export default function App() {
       if (online.role === 'host' && room.status === 'active' && !gameStartedRef.current) {
         gameStartedRef.current = true;
         pendingLocalRef.current = true;
-        dispatch({
-          type: 'START_GAME',
-          aiPlayer: null,
-          difficulty: 'normal',
-          timeLimitSec: online.timeLimitSec || 0,
-          cardsPerPlayer: online.cardsPerPlayer || 3,
-        });
+        dispatch({ type: 'START_GAME', aiPlayer: null, difficulty: 'normal', timeLimitSec: online.timeLimitSec || 0 });
       }
     });
     return unsub;
@@ -150,56 +116,9 @@ export default function App() {
 
   useAIDriver(state, dispatch, online);
 
-  // 효과음: 돌 놓기 / 카드 사용 / 승패 / 시간초과를 대략적으로 감지해서 재생
-  useEffect(() => {
-    const stoneCount = state.board ? state.board.flat().filter((v) => v !== 0).length : 0;
-    const handTotal = state.draft ? state.draft.hands[BLACK].length + state.draft.hands[WHITE].length : 0;
-    const prev = prevRef.current;
-
-    if (state.phase === 'play' && prev.phase === 'play' && stoneCount > prev.stoneCount) {
-      sounds.place();
-    } else if (state.phase === 'play' && prev.phase === 'play' && handTotal !== prev.handTotal) {
-      sounds.card();
-    }
-
-    if (state.message && state.message !== prev.message && state.message.includes('시간 초과')) {
-      sounds.timeout();
-    }
-
-    if (state.phase === 'over' && prev.phase !== 'over') {
-      if (state.winner === null) {
-        sounds.timeout();
-      } else {
-        const myColor = online ? online.localColor : state.aiPlayer ? otherPlayer(state.aiPlayer) : null;
-        if (myColor && state.winner !== myColor) sounds.lose();
-        else sounds.win();
-      }
-    }
-
-    prevRef.current = { stoneCount, handTotal, phase: state.phase, message: state.message };
-  }, [state, online]);
-
-  // 대국이 끝나면 기보를 한 번만 저장
-  useEffect(() => {
-    if (state.phase === 'over' && !recordSavedRef.current) {
-      recordSavedRef.current = true;
-      let modeLabel = '2인 대국';
-      if (state.aiPlayer) modeLabel = `AI 대전 (${DIFFICULTIES[state.aiDifficulty]?.label ?? '보통'})`;
-      if (online) modeLabel = '온라인 대전';
-      saveRecord({
-        date: new Date().toISOString(),
-        winner: state.winner,
-        mode: modeLabel,
-        moves: state.history,
-      });
-    } else if (state.phase !== 'over') {
-      recordSavedRef.current = false;
-    }
-  }, [state.phase, state.winner, state.aiPlayer, state.aiDifficulty, state.history, online]);
-
   function handleReset() {
     if (online) {
-      if (online.role !== 'spectator') leaveRoom(online.code);
+      leaveRoom(online.code);
       gameStartedRef.current = false;
       setOnline(null);
     }
@@ -207,21 +126,19 @@ export default function App() {
   }
 
   if (state.phase === 'setup') {
-    return <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} />;
+    return <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} />;
   }
 
   if (state.phase === 'draft') {
-    return <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} />;
+    return <DraftScreen state={state} dispatch={online ? localDispatch : dispatch} online={online} />;
   }
 
   return (
     <GameScreen
       state={state}
-      dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch}
+      dispatch={online ? localDispatch : dispatch}
       online={online}
       onReset={handleReset}
-      settings={settings}
-      updateSettings={updateSettings}
     />
   );
 }
@@ -276,32 +193,24 @@ function useAIDriver(state, dispatch, online) {
   }, [state, dispatch, online]);
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) {
-  const [step, setStep] = useState('mode');
+function SetupScreen({ dispatch, online, setOnline }) {
+  const [step, setStep] = useState('mode'); // 'mode' | 'timelimit' | 'color' | 'difficulty' | 'online-menu' | 'online-host-color' | 'online-waiting' | 'online-join' | 'online-error'
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
+  const [timeLimitSec, setTimeLimitSec] = useState(0);
   const [customSeconds, setCustomSeconds] = useState('30');
-  const [customCards, setCustomCards] = useState('3');
   const [joinCode, setJoinCode] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tutorialPage, setTutorialPage] = useState(0);
-  const [records, setRecords] = useState([]);
-  const [selectedRecord, setSelectedRecord] = useState(null);
 
   async function handleCreateRoom(hostColor) {
     setBusy(true);
     setErrorMsg('');
     try {
       const code = await createRoom(hostColor);
-      setOnline({
-        code,
-        localColor: hostColor,
-        role: 'host',
-        timeLimitSec: settings.timeLimitSec,
-        cardsPerPlayer: settings.cardsPerPlayer,
-      });
+      setOnline({ code, localColor: hostColor, role: 'host', timeLimitSec });
       setStep('online-waiting');
     } catch {
       setErrorMsg('방을 만들지 못했어요. Firebase 설정을 확인해주세요 (README 참고).');
@@ -322,18 +231,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
     try {
       const res = await joinRoom(code);
       if (!res.ok) {
-        setErrorMsg('존재하지 않는 코드예요.');
-        setBusy(false);
-        return;
-      }
-      if (res.rejoin) {
-        setOnline({ code, localColor: res.localColor, role: 'guest', rejoined: true });
-        setStep('online-waiting');
-        setBusy(false);
-        return;
-      }
-      if (res.asSpectator) {
-        setOnline({ code, localColor: null, role: 'spectator' });
+        setErrorMsg(res.reason === 'not-found' ? '존재하지 않는 코드예요.' : '이미 꽉 찬 방이에요.');
         setBusy(false);
         return;
       }
@@ -355,45 +253,31 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
     });
   }
 
-  function goStartLocal() {
-    dispatch({
-      type: 'START_GAME',
-      aiPlayer: null,
-      timeLimitSec: settings.timeLimitSec,
-      cardsPerPlayer: settings.cardsPerPlayer,
-    });
-  }
-
   if (step === 'mode') {
     return (
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
-          <div className="top-toggles">
-            <button className="icon-toggle-btn" onClick={() => setStep('settings')} title="설정">
-              <Settings size={16} />
-            </button>
-          </div>
+          <p className="subtitle">대국 방식을 선택하세요</p>
         </header>
-        <p className="subtitle">대국 방식을 선택하세요</p>
 
         <div className="setup-options">
-          <button className="setup-card" onClick={() => { setModeChoice('local'); goStartLocal(); }}>
+          <button className="setup-card" onClick={() => { setModeChoice('local'); setStep('timelimit'); }}>
             <Users size={26} strokeWidth={1.6} />
             <div className="setup-card-title">2인이서 대국</div>
             <div className="setup-card-desc">한 화면에서 번갈아 플레이해요.</div>
           </button>
 
-          <button className="setup-card" onClick={() => { setModeChoice('ai'); setStep('color'); }}>
+          <button className="setup-card" onClick={() => { setModeChoice('ai'); setStep('timelimit'); }}>
             <Bot size={26} strokeWidth={1.6} />
             <div className="setup-card-title">AI와 대국</div>
             <div className="setup-card-desc">내가 할 색과 AI 난이도를 정해요.</div>
           </button>
 
-          <button className="setup-card" onClick={() => { setModeChoice('online'); setStep('online-menu'); }}>
+          <button className="setup-card" onClick={() => { setModeChoice('online'); setStep('timelimit'); }}>
             <Wifi size={26} strokeWidth={1.6} />
             <div className="setup-card-title">친구와 플레이 (온라인)</div>
-            <div className="setup-card-desc">방을 만들거나, 받은 코드로 참가·관전해요.</div>
+            <div className="setup-card-desc">방을 만들거나, 받은 코드로 참가해요.</div>
           </button>
         </div>
 
@@ -404,131 +288,6 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
           <button className="setup-tutorial-link" onClick={() => setStep('cardlist')}>
             <Layers size={16} /> 카드 목록 보기
           </button>
-          <button className="setup-tutorial-link" onClick={() => { setRecords(loadRecords()); setStep('records'); }}>
-            <History size={16} /> 기보 보기
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === 'settings') {
-    const applyCustomSeconds = () => {
-      const v = Math.max(1, parseInt(customSeconds, 10) || 0);
-      updateSettings({ timeLimitSec: v });
-    };
-    const applyCustomCards = () => {
-      const v = Math.min(20, Math.max(1, parseInt(customCards, 10) || 3));
-      updateSettings({ cardsPerPlayer: v });
-    };
-
-    return (
-      <div className="page">
-        <header className="header">
-          <h1>증강 오목</h1>
-        </header>
-        <p className="subtitle">설정</p>
-
-        <button className="setup-back" onClick={() => setStep('mode')}>
-          <ChevronLeft size={16} /> 뒤로
-        </button>
-
-        <div className="tutorial-card">
-          <div className="tutorial-title">화면 테마</div>
-          <div className="setup-options" style={{ gridTemplateColumns: '1fr 1fr', display: 'grid' }}>
-            <button
-              className="card-option"
-              style={{ borderColor: settings.theme === 'light' ? 'var(--accent)' : undefined }}
-              onClick={() => updateSettings({ theme: 'light' })}
-            >
-              <Sun size={18} />
-              <div className="card-name">밝게</div>
-            </button>
-            <button
-              className="card-option"
-              style={{ borderColor: settings.theme === 'dark' ? 'var(--accent)' : undefined }}
-              onClick={() => updateSettings({ theme: 'dark' })}
-            >
-              <Moon size={18} />
-              <div className="card-name">어둡게</div>
-            </button>
-          </div>
-        </div>
-
-        <div className="tutorial-card">
-          <div className="tutorial-title">효과음</div>
-          <div className="setup-options" style={{ gridTemplateColumns: '1fr 1fr', display: 'grid' }}>
-            <button
-              className="card-option"
-              style={{ borderColor: settings.soundEnabled ? 'var(--accent)' : undefined }}
-              onClick={() => updateSettings({ soundEnabled: true })}
-            >
-              <Volume2 size={18} />
-              <div className="card-name">켜기</div>
-            </button>
-            <button
-              className="card-option"
-              style={{ borderColor: !settings.soundEnabled ? 'var(--accent)' : undefined }}
-              onClick={() => updateSettings({ soundEnabled: false })}
-            >
-              <VolumeX size={18} />
-              <div className="card-name">끄기</div>
-            </button>
-          </div>
-        </div>
-
-        <div className="tutorial-card">
-          <div className="tutorial-title">한 수당 제한 시간</div>
-          <div className="draft-options" style={{ marginBottom: 12 }}>
-            {[0, 15, 30, 60].map((sec) => (
-              <button
-                key={sec}
-                className="card-option"
-                style={{ borderColor: settings.timeLimitSec === sec ? 'var(--accent)' : undefined }}
-                onClick={() => updateSettings({ timeLimitSec: sec })}
-              >
-                <div className="card-name">{sec === 0 ? '제한 없음' : `${sec}초`}</div>
-              </button>
-            ))}
-          </div>
-          <div className="join-form">
-            <input
-              className="join-input"
-              style={{ letterSpacing: 0, fontSize: 16 }}
-              value={customSeconds}
-              onChange={(e) => setCustomSeconds(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
-              placeholder="직접 입력(초)"
-            />
-            <button className="reset-btn" onClick={applyCustomSeconds}>이 값으로</button>
-          </div>
-          <p className="setup-card-desc">현재: {settings.timeLimitSec === 0 ? '제한 없음' : `${settings.timeLimitSec}초`}</p>
-        </div>
-
-        <div className="tutorial-card">
-          <div className="tutorial-title">1인당 카드 개수</div>
-          <div className="draft-options" style={{ marginBottom: 12 }}>
-            {[1, 3, 5].map((n) => (
-              <button
-                key={n}
-                className="card-option"
-                style={{ borderColor: settings.cardsPerPlayer === n ? 'var(--accent)' : undefined }}
-                onClick={() => updateSettings({ cardsPerPlayer: n })}
-              >
-                <div className="card-name">{n}장</div>
-              </button>
-            ))}
-          </div>
-          <div className="join-form">
-            <input
-              className="join-input"
-              style={{ letterSpacing: 0, fontSize: 16 }}
-              value={customCards}
-              onChange={(e) => setCustomCards(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
-              placeholder="직접 입력(장)"
-            />
-            <button className="reset-btn" onClick={applyCustomCards}>이 값으로</button>
-          </div>
-          <p className="setup-card-desc">현재: {settings.cardsPerPlayer}장 (드래프트 총 {settings.cardsPerPlayer * 2}라운드)</p>
         </div>
       </div>
     );
@@ -543,8 +302,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">튜토리얼 · {tutorialPage + 1} / {TUTORIAL_PAGES.length}</p>
         </header>
-        <p className="subtitle">튜토리얼 · {tutorialPage + 1} / {TUTORIAL_PAGES.length}</p>
 
         <button className="setup-back" onClick={() => { setStep('mode'); setTutorialPage(0); }}>
           <ChevronLeft size={16} /> 설정으로 돌아가기
@@ -560,7 +319,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
         </div>
 
         <div className="tutorial-nav">
-          <button className="reset-btn" disabled={isFirst} onClick={() => setTutorialPage((p) => Math.max(0, p - 1))}>
+          <button
+            className="reset-btn"
+            disabled={isFirst}
+            onClick={() => setTutorialPage((p) => Math.max(0, p - 1))}
+          >
             <ChevronLeft size={14} /> 이전
           </button>
           <div className="tutorial-dots">
@@ -569,7 +332,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
             ))}
           </div>
           {isLast ? (
-            <button className="reset-btn" onClick={() => { setStep('mode'); setTutorialPage(0); }}>완료</button>
+            <button className="reset-btn" onClick={() => { setStep('mode'); setTutorialPage(0); }}>
+              완료
+            </button>
           ) : (
             <button className="reset-btn" onClick={() => setTutorialPage((p) => Math.min(TUTORIAL_PAGES.length - 1, p + 1))}>
               다음 <ChevronRight size={14} />
@@ -585,8 +350,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">카드 목록 · 전체 {CARDS.length}종</p>
         </header>
-        <p className="subtitle">카드 목록 · 전체 {CARDS.length}종</p>
 
         <button className="setup-back" onClick={() => setStep('mode')}>
           <ChevronLeft size={16} /> 설정으로 돌아가기
@@ -615,49 +380,66 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
     );
   }
 
-  if (step === 'records') {
+  if (step === 'timelimit') {
+    function goNext() {
+      if (modeChoice === 'local') {
+        dispatch({ type: 'START_GAME', aiPlayer: null, timeLimitSec });
+      } else if (modeChoice === 'ai') {
+        setStep('color');
+      } else {
+        setStep('online-menu');
+      }
+    }
+
     return (
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">한 수당 제한 시간을 정하세요</p>
         </header>
-        <p className="subtitle">기보 목록 · {records.length}개</p>
 
         <button className="setup-back" onClick={() => setStep('mode')}>
-          <ChevronLeft size={16} /> 설정으로 돌아가기
+          <ChevronLeft size={16} /> 뒤로
         </button>
 
-        {records.length === 0 && <p className="setup-card-desc">저장된 기보가 없어요. 대국을 끝내면 자동으로 저장돼요.</p>}
-
-        <div className="records-list">
-          {records.map((r) => (
+        <div className="draft-options" style={{ marginBottom: 16 }}>
+          {[0, 15, 30, 60].map((sec) => (
             <button
-              key={r.id}
-              className="record-item"
-              onClick={() => { setSelectedRecord(r); setStep('replay'); }}
+              key={sec}
+              className="card-option"
+              style={{ borderColor: timeLimitSec === sec ? '#c2760a' : undefined }}
+              onClick={() => setTimeLimitSec(sec)}
             >
-              <div>
-                <div className="record-item-result">
-                  {r.winner === null ? '무승부' : `${PLAYER_LABEL[r.winner]} 승리`} · {r.mode}
-                </div>
-                <div className="record-item-date">{new Date(r.date).toLocaleString()} · {r.moves.length}수</div>
-              </div>
-              <button
-                className="icon-toggle-btn"
-                onClick={(e) => { e.stopPropagation(); deleteRecord(r.id); setRecords(loadRecords()); }}
-                title="삭제"
-              >
-                ✕
-              </button>
+              <div className="card-name">{sec === 0 ? '제한 없음' : `${sec}초`}</div>
             </button>
           ))}
         </div>
+
+        <div className="join-form">
+          <input
+            className="join-input"
+            style={{ letterSpacing: 0, fontSize: 16 }}
+            value={customSeconds}
+            onChange={(e) => setCustomSeconds(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+            placeholder="직접 입력(초)"
+          />
+          <button
+            className="reset-btn"
+            onClick={() => setTimeLimitSec(Math.max(1, parseInt(customSeconds, 10) || 0))}
+          >
+            이 값으로
+          </button>
+        </div>
+
+        <p className="setup-card-desc" style={{ marginBottom: 16 }}>
+          현재 선택: {timeLimitSec === 0 ? '제한 없음' : `${timeLimitSec}초`}
+        </p>
+
+        <button className="setup-card" onClick={goNext}>
+          <div className="setup-card-title">다음</div>
+        </button>
       </div>
     );
-  }
-
-  if (step === 'replay' && selectedRecord) {
-    return <ReplayScreen record={selectedRecord} onBack={() => setStep('records')} />;
   }
 
   if (step === 'color') {
@@ -665,10 +447,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">어느 색으로 플레이할까요?</p>
         </header>
-        <p className="subtitle">어느 색으로 플레이할까요?</p>
 
-        <button className="setup-back" onClick={() => setStep('mode')}>
+        <button className="setup-back" onClick={() => setStep('timelimit')}>
           <ChevronLeft size={16} /> 뒤로
         </button>
 
@@ -691,19 +473,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
 
   if (step === 'difficulty') {
     const aiPlayer = humanColor === BLACK ? WHITE : BLACK;
-    const desc = {
-      easy: '상대 위협을 종종 놓치고, 수를 더 무작위로 둬요.',
-      normal: '위협은 대체로 잘 막고, 적당히 카드를 섞어 써요.',
-      hard: '위협을 거의 놓치지 않고, 카드도 적극적으로 활용해요.',
-      hell: '두 수 앞까지 내다보며 상대의 응수를 계산해요.',
-      impossible: '더 넓고 깊게 내다봐요. 이기기 매우 어려워요.',
-    };
     return (
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">AI 난이도를 선택하세요</p>
         </header>
-        <p className="subtitle">AI 난이도를 선택하세요</p>
 
         <button className="setup-back" onClick={() => setStep('color')}>
           <ChevronLeft size={16} /> 뒤로
@@ -714,16 +489,14 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
             <button
               key={key}
               className="setup-card"
-              onClick={() => dispatch({
-                type: 'START_GAME',
-                aiPlayer,
-                difficulty: key,
-                timeLimitSec: settings.timeLimitSec,
-                cardsPerPlayer: settings.cardsPerPlayer,
-              })}
+              onClick={() => dispatch({ type: 'START_GAME', aiPlayer, difficulty: key, timeLimitSec })}
             >
               <div className="setup-card-title">{cfg.label}</div>
-              <div className="setup-card-desc">{desc[key]}</div>
+              <div className="setup-card-desc">
+                {key === 'easy' && '상대 위협을 종종 놓치고, 수를 더 무작위로 둬요.'}
+                {key === 'normal' && '위협은 대체로 잘 막고, 적당히 카드를 섞어 써요.'}
+                {key === 'hard' && '위협을 거의 놓치지 않고, 카드도 적극적으로 활용해요.'}
+              </div>
             </button>
           ))}
         </div>
@@ -736,10 +509,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">친구와 온라인으로 플레이해요</p>
         </header>
-        <p className="subtitle">친구와 온라인으로 플레이해요</p>
 
-        <button className="setup-back" onClick={() => setStep('mode')}>
+        <button className="setup-back" onClick={() => setStep('timelimit')}>
           <ChevronLeft size={16} /> 뒤로
         </button>
 
@@ -757,10 +530,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
 
           <button className="setup-card" onClick={() => setStep('online-join')}>
             <div className="setup-card-title">코드로 참가하기</div>
-            <div className="setup-card-desc">
-              친구에게 받은 6자리 코드를 입력해요. 진행 중인 방이면 관전자로 들어가고,
-              원래 쓰던 기기로 같은 코드를 다시 입력하면 내 색으로 재접속돼요.
-            </div>
+            <div className="setup-card-desc">친구에게 받은 6자리 코드를 입력해요.</div>
           </button>
         </div>
       </div>
@@ -772,8 +542,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">어느 색으로 플레이할까요?</p>
         </header>
-        <p className="subtitle">어느 색으로 플레이할까요?</p>
 
         <button className="setup-back" onClick={() => setStep('online-menu')}>
           <ChevronLeft size={16} /> 뒤로
@@ -798,8 +568,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">받은 6자리 코드를 입력하세요</p>
         </header>
-        <p className="subtitle">받은 6자리 코드를 입력하세요</p>
 
         <button className="setup-back" onClick={() => setStep('online-menu')}>
           <ChevronLeft size={16} /> 뒤로
@@ -828,14 +598,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
+          <p className="subtitle">
+            {online?.role === 'host' ? '친구가 들어오길 기다리는 중이에요' : '호스트가 게임을 시작하길 기다리는 중이에요'}
+          </p>
         </header>
-        <p className="subtitle">
-          {online?.rejoined
-            ? '재접속했어요. 곧 이어서 진행돼요'
-            : online?.role === 'host'
-              ? '친구가 들어오길 기다리는 중이에요'
-              : '호스트가 게임을 시작하길 기다리는 중이에요'}
-        </p>
 
         {online?.role === 'host' && (
           <div className="room-code-box">
@@ -859,97 +625,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
     <div className="page">
       <header className="header">
         <h1>증강 오목</h1>
+        <p className="subtitle">문제가 발생했어요</p>
       </header>
-      <p className="subtitle">문제가 발생했어요</p>
       <p className="setup-warning">{errorMsg}</p>
       <button className="setup-back" onClick={() => setStep('online-menu')}>
         <ChevronLeft size={16} /> 다시 시도
       </button>
-    </div>
-  );
-}
-
-function ReplayScreen({ record, onBack }) {
-  const [index, setIndex] = useState(record.moves.length - 1);
-  const board = record.moves[index] || record.moves[record.moves.length - 1];
-  const size = BOARD_SIZE;
-  const gapPct = 100 / (size - 1);
-
-  return (
-    <div className="page">
-      <header className="header">
-        <h1>증강 오목</h1>
-      </header>
-      <p className="subtitle">
-        기보 다시보기 · {record.winner === null ? '무승부' : `${PLAYER_LABEL[record.winner]} 승리`} · {record.mode}
-      </p>
-
-      <button className="setup-back" onClick={onBack}>
-        <ChevronLeft size={16} /> 목록으로
-      </button>
-
-      <div className="replay-board-wrap">
-        <div className="board-scroll">
-          <div className="board">
-            <div className="grid-area">
-              <svg className="grid-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
-                {Array.from({ length: size }).map((_, i) => (
-                  <line key={`v-${i}`} x1={i * gapPct} y1={0} x2={i * gapPct} y2={100} />
-                ))}
-                {Array.from({ length: size }).map((_, i) => (
-                  <line key={`h-${i}`} x1={0} y1={i * gapPct} x2={100} y2={i * gapPct} />
-                ))}
-              </svg>
-              {Array.from({ length: size }).map((_, y) =>
-                Array.from({ length: size }).map((_, x) => {
-                  const value = board[y][x];
-                  return (
-                    <div
-                      key={`${x}-${y}`}
-                      className="cell"
-                      style={{
-                        left: `${x * gapPct}%`,
-                        top: `${y * gapPct}%`,
-                        width: `${gapPct}%`,
-                        height: `${gapPct}%`,
-                      }}
-                    >
-                      {value !== 0 && (
-                        <span className={`stone ${value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'}`} />
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="replay-controls">
-        <button className="icon-toggle-btn" onClick={() => setIndex(0)} title="처음으로">
-          <RotateCcw size={16} />
-        </button>
-        <button className="reset-btn" disabled={index <= 0} onClick={() => setIndex((i) => Math.max(0, i - 1))}>
-          <ChevronLeft size={14} /> 이전 수
-        </button>
-        <input
-          type="range"
-          className="replay-slider"
-          min={0}
-          max={record.moves.length - 1}
-          value={index}
-          onChange={(e) => setIndex(Number(e.target.value))}
-        />
-        <button
-          className="reset-btn"
-          disabled={index >= record.moves.length - 1}
-          onClick={() => setIndex((i) => Math.min(record.moves.length - 1, i + 1))}
-        >
-          다음 수 <ChevronRight size={14} />
-        </button>
-        <span className="replay-count">{index + 1} / {record.moves.length}</span>
-      </div>
     </div>
   );
 }
@@ -1074,125 +755,40 @@ function TurnTimer({ state, dispatch, online }) {
   );
 }
 
-function ChatPanel({ online }) {
-  const [messages, setMessages] = useState([]);
-  const [text, setText] = useState('');
-  const listRef = useRef(null);
-
-  useEffect(() => {
-    if (!online) return undefined;
-    setMessages([]);
-    const unsub = subscribeChat(online.code, (msg) => {
-      setMessages((prev) => [...prev, msg]);
-    });
-    return unsub;
-  }, [online?.code]);
-
-  useEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
-  }, [messages]);
-
-  if (!online) return null;
-
-  const myLabel = online.role === 'spectator' ? '관전자' : PLAYER_LABEL[online.localColor];
-
-  function send(t) {
-    const trimmed = t.trim();
-    if (!trimmed) return;
-    sendChatMessage(online.code, myLabel, trimmed).catch(() => {});
-    setText('');
-  }
-
-  return (
-    <div className="chat-panel">
-      <div className="chat-title"><MessageCircle size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />채팅</div>
-      <div className="chat-messages" ref={listRef}>
-        {messages.length === 0 && <span className="chat-empty">아직 메시지가 없어요.</span>}
-        {messages.map((m) => (
-          <div key={m.id} className={`chat-message ${m.sender === myLabel ? 'chat-message-mine' : ''}`}>
-            <span className="chat-sender">{m.sender}</span>{m.text}
-          </div>
-        ))}
-      </div>
-      <div className="chat-quick-row">
-        {['👍', '🎉', '😅', '🔥', '😭'].map((e) => (
-          <button key={e} className="chat-quick-btn" onClick={() => send(e)}>{e}</button>
-        ))}
-      </div>
-      <div className="chat-input-row">
-        <input
-          className="chat-input"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') send(text); }}
-          placeholder="메시지 입력..."
-          maxLength={200}
-        />
-        <button className="icon-toggle-btn" onClick={() => send(text)} title="보내기">
-          <Send size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function GameScreen({ state, dispatch, online, onReset, settings, updateSettings }) {
+function GameScreen({ state, dispatch, online, onReset }) {
   const gameOver = state.phase === 'over';
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
-  const isSpectator = online && online.role === 'spectator';
-  const isOnlineWaiting = online && !isSpectator && state.turn !== online.localColor && !gameOver;
+  const isOnlineWaiting = online && state.turn !== online.localColor && !gameOver;
 
   let modeLabel = '2인 대국';
   if (state.aiPlayer) modeLabel = `AI 대전 · AI는 ${PLAYER_LABEL[state.aiPlayer]} · 난이도 ${DIFFICULTIES[state.aiDifficulty]?.label ?? '보통'}`;
-  if (online) {
-    modeLabel = isSpectator
-      ? `온라인 대전 · 방 ${online.code} · 관전 중`
-      : `온라인 대전 · 방 ${online.code} · 나는 ${PLAYER_LABEL[online.localColor]}`;
-  }
+  if (online) modeLabel = `온라인 대전 · 방 ${online.code} · 나는 ${PLAYER_LABEL[online.localColor]}`;
 
   return (
     <div className="page">
       <header className="header">
         <h1>증강 오목</h1>
-        <div className="top-toggles">
-          <button className="icon-toggle-btn" onClick={() => updateSettings({ soundEnabled: !settings.soundEnabled })} title="효과음">
-            {settings.soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-          </button>
-          <button
-            className="icon-toggle-btn"
-            onClick={() => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' })}
-            title="테마"
-          >
-            {settings.theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-        </div>
+        <p className="subtitle">{modeLabel} · 렌주 금수(3-3, 4-4, 육목)는 흑에게만 적용돼요</p>
       </header>
-      <p className="subtitle">
-        {modeLabel}{isSpectator && <span className="spectator-badge"><Eye size={11} style={{ verticalAlign: 'middle' }} /> 관전</span>} · 렌주 금수(3-3, 4-4, 육목)는 흑에게만 적용돼요
-      </p>
 
       <div className="status-row">
         <span key={state.message} className={`status-text ${gameOver ? 'status-win' : ''}`}>
           {isAITurn ? 'AI가 생각하는 중...' : isOnlineWaiting ? '상대의 차례를 기다리는 중...' : state.message}
         </span>
         <button className="reset-btn" onClick={onReset}>
-          {isSpectator ? '나가기' : '다시 시작'}
+          다시 시작
         </button>
       </div>
 
       <TurnTimer state={state} dispatch={dispatch} online={online} />
 
-      <div className="board-scroll">
-        <Board state={state} dispatch={dispatch} online={online} />
-      </div>
+      <Board state={state} dispatch={dispatch} online={online} />
 
       <div className="hands-row">
         {[BLACK, WHITE].map((p) => (
           <HandPanel key={p} player={p} state={state} dispatch={dispatch} disabled={gameOver} online={online} />
         ))}
       </div>
-
-      {online && <ChatPanel online={online} />}
     </div>
   );
 }
@@ -1200,9 +796,8 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
 function HandPanel({ player, state, dispatch, disabled, online }) {
   const hand = state.draft.hands[player];
   const isAISide = state.aiPlayer === player;
-  const isSpectator = online && online.role === 'spectator';
-  const isRemoteSide = online && !isSpectator && online.localColor !== player;
-  const isCurrentTurn = state.turn === player && !disabled && !isAISide && !isRemoteSide && !isSpectator;
+  const isRemoteSide = online && online.localColor !== player;
+  const isCurrentTurn = state.turn === player && !disabled && !isAISide && !isRemoteSide;
   const activeId = state.activeCard?.id;
   const silenced = state.silencedTurns[player] > 0;
 
@@ -1248,9 +843,7 @@ function Board({ state, dispatch, online }) {
   const gapPct = 100 / (size - 1);
   const gameOver = state.phase === 'over';
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
-  const isSpectator = online && online.role === 'spectator';
-  const isOnlineWaiting = online && (isSpectator || state.turn !== online.localColor) && !gameOver;
-  const forcedZone = state.forcedZone && state.forcedZone.player === state.turn ? state.forcedZone : null;
+  const isOnlineWaiting = online && state.turn !== online.localColor && !gameOver;
 
   return (
     <div className="board">
@@ -1270,12 +863,11 @@ function Board({ state, dispatch, online }) {
             const blocked = isBlocked(state, x, y);
             const protectedStone = !!state.protectedStones[`${x},${y}`];
             const disabled = gameOver || isAITurn || isOnlineWaiting;
-            const inForcedZone = forcedZone && x >= forcedZone.x0 && x <= forcedZone.x1 && y >= forcedZone.y0 && y <= forcedZone.y1;
 
             return (
               <button
                 key={`${x}-${y}`}
-                className={`cell ${blocked ? 'cell-blocked' : ''} ${inForcedZone ? 'cell-forced' : ''}`}
+                className={`cell ${blocked ? 'cell-blocked' : ''}`}
                 style={{
                   left: `${x * gapPct}%`,
                   top: `${y * gapPct}%`,

@@ -17,8 +17,6 @@ export const DIFFICULTIES = {
   easy: { label: '쉬움', blockChance: 0.45, cardUseChance: 0.15, noise: 45 },
   normal: { label: '보통', blockChance: 0.85, cardUseChance: 0.35, noise: 14 },
   hard: { label: '어려움', blockChance: 1, cardUseChance: 0.55, noise: 0 },
-  hell: { label: '지옥', blockChance: 1, cardUseChance: 0.6, noise: 0, deepSearch: true, searchWidth: 8, searchDepth: 2 },
-  impossible: { label: '불가능', blockChance: 1, cardUseChance: 0.7, noise: 0, deepSearch: true, searchWidth: 16, searchDepth: 3 },
 };
 
 function inB(size, x, y) {
@@ -73,15 +71,9 @@ function isUsable(board, blockedFn, x, y) {
 
 // 보드에서 둘 만한 칸 하나를 골라요. 내 공격과 상대 방어를 함께 고려.
 export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'normal') {
-  const cfg = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
-  if (cfg.deepSearch) {
-    const deep = chooseBestCellDeep(board, me, blockedFn, ruleFlags, cfg.searchWidth ?? 10, cfg.searchDepth ?? 2);
-    if (deep) return deep;
-  }
-
   const size = board.length;
   const opponent = otherPlayer(me);
-  const noise = cfg.noise ?? 14;
+  const noise = DIFFICULTIES[difficulty]?.noise ?? 14;
   let best = null;
   let bestScore = -Infinity;
   const center = (size - 1) / 2;
@@ -101,82 +93,6 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
         bestScore = total;
         best = { x, y };
       }
-    }
-  }
-
-  return best;
-}
-
-// 상대의 응수 중 가장 좋은 점수를 계산해요 (재귀적으로 depth만큼 더 내다볼 수 있음).
-function bestReplyScore(board, player, ruleFlags, width, depth) {
-  const size = board.length;
-  const candidates = [];
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if (board[y][x] !== 0) continue;
-      if (player === BLACK && isForbiddenMove(board, x, y, BLACK, ruleFlags)) continue;
-      const quick = scoreCellFor(board, x, y, player);
-      candidates.push({ x, y, quick });
-    }
-  }
-
-  if (candidates.length === 0) return 0;
-  candidates.sort((a, b) => b.quick - a.quick);
-  const top = candidates.slice(0, width);
-
-  let best = -Infinity;
-  for (const c of top) {
-    const trial = board.map((row) => row.slice());
-    trial[c.y][c.x] = player;
-    if (checkWin(trial, c.x, c.y, player, {})) return 999999;
-
-    let score = scoreCellFor(trial, c.x, c.y, player);
-    if (depth > 1) {
-      const opponent = otherPlayer(player);
-      score -= bestReplyScore(trial, opponent, ruleFlags, Math.max(4, Math.floor(width / 2)), depth - 1) * 1.05;
-    }
-    if (score > best) best = score;
-  }
-  return best;
-}
-
-// 유력한 후보 몇 칸을 놓아본 뒤, 상대의 최선 응수(그리고 필요하면 그 다음 내 응수까지)를
-// 내다봐서 가장 좋은 자리를 골라요. width/depth가 클수록 더 강하지만 느려져요.
-function chooseBestCellDeep(board, me, blockedFn, ruleFlags, width, depth) {
-  const size = board.length;
-  const opponent = otherPlayer(me);
-  const candidates = [];
-
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if (!isUsable(board, blockedFn, x, y)) continue;
-      if (me === BLACK && isForbiddenMove(board, x, y, BLACK, ruleFlags)) continue;
-      const quick = scoreCellFor(board, x, y, me) + scoreCellFor(board, x, y, opponent) * 1.05;
-      candidates.push({ x, y, quick });
-    }
-  }
-
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => b.quick - a.quick);
-  const top = candidates.slice(0, width);
-
-  let best = null;
-  let bestScore = -Infinity;
-
-  for (const c of top) {
-    const trial = board.map((row) => row.slice());
-    trial[c.y][c.x] = me;
-
-    if (checkWin(trial, c.x, c.y, me, {})) return { x: c.x, y: c.y }; // 즉시 승리면 바로 선택
-
-    const myEval = scoreCellFor(trial, c.x, c.y, me);
-    const oppBest = bestReplyScore(trial, opponent, ruleFlags, Math.max(6, Math.floor(width * 0.75)), depth - 1);
-    const total = myEval - oppBest * 1.1;
-
-    if (total > bestScore) {
-      bestScore = total;
-      best = { x: c.x, y: c.y };
     }
   }
 

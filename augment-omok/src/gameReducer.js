@@ -39,17 +39,8 @@ function isBlocked(state, x, y) {
   return expire === Infinity || state.ply < expire;
 }
 
-function buildDraftOrder(cardsPerPlayer) {
-  const n = Math.max(1, cardsPerPlayer || 3);
-  const order = [];
-  for (let i = 0; i < n; i++) {
-    order.push(BLACK, WHITE);
-  }
-  return order;
-}
-
 export function createInitialState() {
-  const order = buildDraftOrder(3);
+  const order = [BLACK, WHITE, BLACK, WHITE, BLACK, WHITE];
   return {
     phase: 'setup',
     aiPlayer: null,
@@ -652,8 +643,7 @@ export function gameReducer(state, action) {
       return action.state;
 
     case 'START_GAME': {
-      const { aiPlayer, difficulty, timeLimitSec, cardsPerPlayer } = action;
-      const order = buildDraftOrder(cardsPerPlayer);
+      const { aiPlayer, difficulty, timeLimitSec } = action;
       return {
         ...state,
         phase: 'draft',
@@ -661,13 +651,6 @@ export function gameReducer(state, action) {
         aiDifficulty: difficulty || 'normal',
         timeLimitSec: timeLimitSec || 0,
         message: '카드를 뽑는 중이에요.',
-        draft: {
-          pool: CARDS.map((c) => c.id),
-          hands: { [BLACK]: [], [WHITE]: [] },
-          order,
-          currentIndex: 0,
-          options: drawRandomCards(CARDS.map((c) => c.id), 3),
-        },
       };
     }
 
