@@ -4,7 +4,7 @@ import {
   Minimize2, Trophy, Repeat2, Snowflake, Biohazard, Bomb, Undo2, History, Shuffle,
   Unlock, KeyRound, SeparatorHorizontal, Sprout, ShieldOff, Sparkles, Target, Dices,
   HandMetal, ShieldPlus, CircleDot, VolumeX, Bot, Users, ChevronLeft, Copy, Check, Wifi,
-  BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw,
+  BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw, Mail,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -443,6 +443,50 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings }) 
           <button className="setup-tutorial-link" onClick={() => { setRecords(loadRecords()); setStep('records'); }}>
             <History size={16} /> 기보 보기
           </button>
+          <button className="setup-tutorial-link" onClick={() => setStep('contact')}>
+            <Mail size={16} /> 버그 및 문의
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'contact') {
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">버그 제보 및 문의</p>
+
+        <button className="setup-back" onClick={() => setStep('mode')}>
+          <ChevronLeft size={16} /> 설정으로 돌아가기
+        </button>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">이메일로 알려주세요</div>
+          <p className="setup-card-desc" style={{ marginBottom: 14 }}>
+            버그를 발견했거나 궁금한 점, 건의하고 싶은 내용이 있으면 아래 이메일로 편하게 보내주세요.
+          </p>
+          <div className="room-code-box">
+            <div className="room-code" style={{ fontSize: 16, letterSpacing: 0.5 }}>
+              goodlucktoyoul@naver.com
+            </div>
+            <button
+              className="reset-btn"
+              onClick={() => {
+                navigator.clipboard?.writeText('goodlucktoyoul@naver.com').then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? '복사됨' : '주소 복사'}
+            </button>
+          </div>
+          <a className="reset-btn" style={{ display: 'inline-block', textDecoration: 'none' }} href="mailto:goodlucktoyoul@naver.com">
+            메일 앱으로 바로 보내기
+          </a>
         </div>
       </div>
     );
