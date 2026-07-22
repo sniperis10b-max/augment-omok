@@ -77,6 +77,10 @@ export const sounds = {
     if (!enabled) return;
     knock({ gain: 0.5, freq: 1000 });
   },
+  click() {
+    if (!enabled) return;
+    knock({ gain: 0.28, freq: 1600 });
+  },
   card() {
     if (!enabled) return;
     tone(760, 0.1, { type: 'triangle', gain: 0.1 });

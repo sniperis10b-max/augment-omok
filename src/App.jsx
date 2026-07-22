@@ -134,6 +134,16 @@ export default function App() {
     setSoundEnabled(settings.soundEnabled);
   }, [settings.soundEnabled]);
 
+  // 버튼을 누를 때마다 짧은 탁 소리를 내요
+  useEffect(() => {
+    const handler = (e) => {
+      const btn = e.target.closest('button');
+      if (btn && !btn.disabled) sounds.click();
+    };
+    document.addEventListener('click', handler, true);
+    return () => document.removeEventListener('click', handler, true);
+  }, []);
+
   const localDispatch = useCallback((action) => {
     pendingLocalRef.current = true;
     dispatch(action);
@@ -181,6 +191,8 @@ export default function App() {
     if (state.phase === 'play' && prev.phase === 'play' && stoneCount > prev.stoneCount) {
       sounds.place();
     } else if (state.phase === 'play' && prev.phase === 'play' && handTotal !== prev.handTotal) {
+      sounds.card();
+    } else if (state.phase === 'draft' && prev.phase === 'draft' && handTotal > prev.handTotal) {
       sounds.card();
     }
 
