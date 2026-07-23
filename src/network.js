@@ -34,18 +34,35 @@ export function generateRoomCode() {
 }
 
 // 방을 만들고 코드를 반환해요. hostColor: 방장이 플레이할 색(BLACK|WHITE 숫자값)
-export async function createRoom(hostColor) {
+export async function createRoom(hostColor, timeLimitSec, cardsPerPlayer) {
   const db = getDb();
   const code = generateRoomCode();
   await set(ref(db, `rooms/${code}`), {
     status: 'waiting',
     hostColor,
+    timeLimitSec: timeLimitSec || 0,
+    cardsPerPlayer: cardsPerPlayer || 3,
     hostClientId: getClientId(),
     guestClientId: null,
     createdAt: serverTimestamp(),
     state: null,
   });
   return code;
+}
+
+// 참가하기 전에 방장의 색/시간제한/카드 개수를 미리 확인만 해요 (참가 처리는 안 함).
+export async function peekRoom(code) {
+  const db = getDb();
+  const snap = await get(ref(db, `rooms/${code}`));
+  if (!snap.exists()) return { ok: false, reason: 'not-found' };
+  const data = snap.val();
+  return {
+    ok: true,
+    hostColor: data.hostColor,
+    timeLimitSec: data.timeLimitSec || 0,
+    cardsPerPlayer: data.cardsPerPlayer || 3,
+    status: data.status,
+  };
 }
 
 // 코드로 방에 참가해요.

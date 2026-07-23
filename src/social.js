@@ -108,7 +108,7 @@ export function subscribeFriends(uid, onChange) {
 // ---------- 대국 초대 ----------
 
 export async function inviteFriendToGame(myUser, friendUid, hostColor, timeLimitSec, cardsPerPlayer) {
-  const code = await createRoom(hostColor);
+  const code = await createRoom(hostColor, timeLimitSec, cardsPerPlayer);
   const db = getDb();
   await set(ref(db, `users/${friendUid}/invites/${myUser.uid}`), {
     code,

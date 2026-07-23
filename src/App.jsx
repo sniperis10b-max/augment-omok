@@ -12,7 +12,7 @@ import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_AC
 import { getCardById, CARDS } from './cards.js';
 import { decideAIAction, pickDraftCard, chooseBestCell, computeAITarget, DIFFICULTIES } from './ai.js';
 import {
-  createRoom, joinRoom, subscribeRoom, pushGameState, leaveRoom, isFirebaseConfigured,
+  createRoom, joinRoom, peekRoom, subscribeRoom, pushGameState, leaveRoom, isFirebaseConfigured,
   sendChatMessage, subscribeChat,
 } from './network.js';
 import { loadSettings, saveSettings } from './settings.js';
@@ -529,6 +529,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0 });
+  const [joinPreview, setJoinPreview] = useState(null);
   const [loginNotice, setLoginNotice] = useState('');
 
   useEffect(() => {
@@ -550,7 +551,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     setBusy(true);
     setErrorMsg('');
     try {
-      const code = await createRoom(hostColor);
+      const code = await createRoom(hostColor, settings.timeLimitSec, settings.cardsPerPlayer);
       setOnline({
         code,
         localColor: hostColor,
@@ -798,7 +799,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <div className="tutorial-title"><Bell size={15} style={{ verticalAlign: 'middle', marginRight: 4 }} />받은 대국 초대</div>
             {invites.map((inv) => (
               <div key={inv.fromUid} className="friend-row">
-                <span>{inv.displayName}님의 초대</span>
+                <span>
+                  {inv.displayName}님의 초대
+                  <span className="setup-card-desc" style={{ display: 'block', fontSize: 11 }}>
+                    시간제한 {inv.timeLimitSec === 0 || !inv.timeLimitSec ? '없음' : `${inv.timeLimitSec}초`} · 카드 {inv.cardsPerPlayer || 3}장
+                  </span>
+                </span>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button className="reset-btn" disabled={busy} onClick={() => handleAcceptInvite(inv)}>참가</button>
                   <button className="icon-toggle-btn" onClick={() => clearInvite(user.uid, inv.fromUid)} title="거절"><XIcon size={14} /></button>
@@ -1629,6 +1635,29 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     );
   }
 
+  async function handleLookupCode() {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length !== 6) {
+      setErrorMsg('6자리 코드를 입력해주세요.');
+      return;
+    }
+    setBusy(true);
+    setErrorMsg('');
+    try {
+      const res = await peekRoom(code);
+      if (!res.ok) {
+        setErrorMsg('존재하지 않는 코드예요.');
+        setBusy(false);
+        return;
+      }
+      setJoinPreview({ code, ...res });
+    } catch {
+      setErrorMsg('조회하지 못했어요. Firebase 설정을 확인해주세요 (README 참고).');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (step === 'online-join') {
     return (
       <div className="page">
@@ -1637,23 +1666,40 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         </header>
         <p className="subtitle">받은 6자리 코드를 입력하세요</p>
 
-        <button className="setup-back" onClick={() => setStep('online-friend-menu')}>
+        <button className="setup-back" onClick={() => { setJoinPreview(null); setStep('online-friend-menu'); }}>
           <ChevronLeft size={16} /> 뒤로
         </button>
 
-        <div className="join-form">
-          <input
-            className="join-input"
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 6))}
-            placeholder="ABC123"
-            maxLength={6}
-            autoFocus
-          />
-          <button className="reset-btn" disabled={busy} onClick={handleJoinRoom}>
-            참가하기
-          </button>
-        </div>
+        {!joinPreview ? (
+          <div className="join-form">
+            <input
+              className="join-input"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 6))}
+              placeholder="ABC123"
+              maxLength={6}
+              autoFocus
+            />
+            <button className="reset-btn" disabled={busy} onClick={handleLookupCode}>
+              확인
+            </button>
+          </div>
+        ) : (
+          <div className="tutorial-card">
+            <div className="tutorial-title">이 방으로 참가할까요?</div>
+            <ul className="tutorial-body">
+              <li>방장 색: {PLAYER_LABEL[joinPreview.hostColor]} (나는 {PLAYER_LABEL[otherPlayer(joinPreview.hostColor)]}이 돼요)</li>
+              <li>한 수당 제한 시간: {joinPreview.timeLimitSec === 0 ? '없음' : `${joinPreview.timeLimitSec}초`}</li>
+              <li>1인당 카드 개수: {joinPreview.cardsPerPlayer}장</li>
+              {joinPreview.status !== 'waiting' && <li>이미 대국이 진행 중인 방이라, 참가하면 관전자로 들어가요.</li>}
+            </ul>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="reset-btn" onClick={() => setJoinPreview(null)}>취소</button>
+              <button className="reset-btn" disabled={busy} onClick={() => handleJoinRoom(joinPreview.code)}>참가하기</button>
+            </div>
+          </div>
+        )}
+
         {errorMsg && <p className="setup-warning">{errorMsg}</p>}
       </div>
     );
