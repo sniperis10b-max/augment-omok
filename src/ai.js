@@ -72,6 +72,43 @@ function isUsable(board, blockedFn, x, y) {
   return board[y][x] === 0 && !blockedFn(x, y);
 }
 
+// opponent가 이 칸에 두면 동시에 여러 개의 강한 위협(사 또는 사+삼)을 만들어서,
+// 다음 내 한 수로는 전부 막을 수 없게 되는 자리를 찾아요. 이런 자리는 열린 삼이
+// 되기도 전에 미리 막아야 해요 - 안 그러면 뒤늦게 열린 삼을 막아도 이미 늦어요.
+function findOpponentForcingCell(board, aiPlayer, ruleFlags) {
+  const opponent = otherPlayer(aiPlayer);
+  const size = board.length;
+  let best = null;
+  let bestSeverity = 0;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (board[y][x] !== 0) continue;
+      if (opponent === BLACK && isForbiddenMove(board, x, y, BLACK, ruleFlags)) continue;
+
+      const trial = board.map((row) => row.slice());
+      trial[y][x] = opponent;
+
+      let fours = 0;
+      let openThrees = 0;
+      for (const [dx, dy] of DIRECTIONS) {
+        const { count, openEnds } = lineStrength(trial, x, y, dx, dy, opponent);
+        if (count >= 4 && openEnds >= 1) fours++;
+        else if (count === 3 && openEnds === 2) openThrees++;
+      }
+
+      // 사가 2개 이상(더블포), 또는 사+삼 조합이면 한 수로 못 막는 강제 승리 찬스예요.
+      const severity = fours >= 2 ? 3 : (fours >= 1 && openThrees >= 1) ? 2 : 0;
+      if (severity > bestSeverity) {
+        bestSeverity = severity;
+        best = { x, y };
+      }
+    }
+  }
+
+  return best;
+}
+
 // player가 지금 바로(이 한 수로) 이길 수 있는 칸이 있으면 반환
 function findWinningCellFor(board, player, blockedFn, ruleFlags) {
   const size = board.length;
@@ -101,6 +138,13 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
   const oppWin = findOpponentWinningCell(board, me);
   if (oppWin && isUsable(board, blockedFn, oppWin.x, oppWin.y) && Math.random() < cfg.blockChance) {
     return oppWin;
+  }
+
+  // 1.5) 상대가 그 자리에 두면 사(四)를 2개 만들거나 사+삼을 동시에 만들어서 한 수로는
+  //      절대 못 막게 되는 자리가 있으면, 열린 삼이 되기 전에 미리 막아요.
+  const forcingCell = findOpponentForcingCell(board, me, ruleFlags);
+  if (forcingCell && isUsable(board, blockedFn, forcingCell.x, forcingCell.y) && Math.random() < cfg.blockChance) {
+    return forcingCell;
   }
 
   // 2) 상대의 열린 삼(놔두면 어느 쪽으로도 못 막는 열린 사가 되는 자리)도 최우선으로 차단해요.
@@ -289,12 +333,16 @@ const AI_CARD_HANDLERS = {
   barrier: (board, ai, blockedFn = () => false) => {
     const win = findOpponentWinningCell(board, ai);
     if (win && !blockedFn(win.x, win.y)) return win;
+    const forcing = findOpponentForcingCell(board, ai, {});
+    if (forcing && !blockedFn(forcing.x, forcing.y)) return forcing;
     const flanks = opponentOpenThreeFlanks(board, ai).filter((c) => board[c.y][c.x] === 0 && !blockedFn(c.x, c.y));
     return flanks[0] || null;
   },
   freezeCell: (board, ai, blockedFn = () => false) => {
     const win = findOpponentWinningCell(board, ai);
     if (win && !blockedFn(win.x, win.y)) return win;
+    const forcing = findOpponentForcingCell(board, ai, {});
+    if (forcing && !blockedFn(forcing.x, forcing.y)) return forcing;
     const flanks = opponentOpenThreeFlanks(board, ai).filter((c) => board[c.y][c.x] === 0 && !blockedFn(c.x, c.y));
     return flanks[0] || null;
   },
@@ -322,6 +370,11 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
   const { blockChance, cardUseChance } = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
   const board = state.board;
   const opponentThreat = findOpponentWinningCell(board, aiPlayer);
+  const forcingCell = opponentThreat ? null : findOpponentForcingCell(board, aiPlayer, state.ruleFlags);
+  const urgentFlanks = (opponentThreat || forcingCell)
+    ? []
+    : opponentOpenThreeFlanks(board, aiPlayer).filter((c) => board[c.y][c.x] === 0 && !blockedFn(c.x, c.y));
+  const hasUrgentThreat = !!opponentThreat || !!forcingCell || urgentFlanks.length > 0;
 
   // 1) 상대가 바로 이길 수 있는 상황이면, 막을 수 있는 카드부터 우선 사용 (난이도에 따라 놓칠 수도 있음)
   if (opponentThreat && Math.random() < blockChance) {
@@ -334,21 +387,28 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     if (hand.includes('winShield')) return { cardId: 'winShield' };
   }
 
+  // 1.5) 상대가 한 수로 사(四)를 2개 만들거나 사+삼을 만들어 강제로 이기게 되는 자리가
+  //      있으면, 카드로 미리 막을 수 있으면 막아요
+  if (!opponentThreat && forcingCell && Math.random() < blockChance) {
+    for (const cardId of ['barrier', 'freezeCell']) {
+      if (hand.includes(cardId)) return { cardId, target: forcingCell };
+    }
+    if (hand.includes('destroy')) {
+      const target = findMostConnectedStone(board, otherPlayer(aiPlayer));
+      if (target) return { cardId: 'destroy', target };
+    }
+  }
+
   // 2) 상대가 열린 삼(다음다음 수에 못 막는 위협이 될 수 있는 자리)을 만들었으면 미리 막아요
-  if (!opponentThreat) {
-    const flanks = opponentOpenThreeFlanks(board, aiPlayer).filter(
-      (c) => board[c.y][c.x] === 0 && !blockedFn(c.x, c.y)
-    );
-    if (flanks.length > 0 && Math.random() < blockChance) {
-      for (const cardId of ['barrier', 'freezeCell']) {
-        if (hand.includes(cardId)) {
-          return { cardId, target: flanks[0] };
-        }
+  if (!opponentThreat && !forcingCell && urgentFlanks.length > 0 && Math.random() < blockChance) {
+    for (const cardId of ['barrier', 'freezeCell']) {
+      if (hand.includes(cardId)) {
+        return { cardId, target: urgentFlanks[0] };
       }
-      if (hand.includes('destroy')) {
-        const target = findMostConnectedStone(board, otherPlayer(aiPlayer));
-        if (target) return { cardId: 'destroy', target };
-      }
+    }
+    if (hand.includes('destroy')) {
+      const target = findMostConnectedStone(board, otherPlayer(aiPlayer));
+      if (target) return { cardId: 'destroy', target };
     }
   }
 
@@ -363,7 +423,10 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     }
   }
 
-  // 4) 여유 있는 상황이면, 실제로 의미 있을 때만 카드를 써요 (아무 때나 쓰지 않도록 최소 조건을 둠)
+  // 4) 위협 상황이 아니라 진짜로 여유 있을 때만 카드를 써요. 위협을 막을 카드가 마침 없어서
+  //    1~2번에서 대응 못 했더라도, 여기서 엉뚱한 카드를 쓰며 턴을 낭비하면 안 되니 확실히 막아요.
+  if (hasUrgentThreat) return null;
+
   const opponentHand = state.draft?.hands?.[otherPlayer(aiPlayer)] ?? [];
   const developCandidates = ['fourToWin', 'bomb', 'doubleMove', 'randomSummon', 'miracle'].filter((id) => hand.includes(id));
   // 침묵은 상대에게 아직 쓸 카드가 남아있을 때만 의미가 있어요
