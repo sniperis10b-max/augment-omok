@@ -515,6 +515,15 @@ body {
   white-space: nowrap;
 }
 
+.dev-badge-floating {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
 /* 드래프트 화면 */
 .draft-status {
   display: flex;

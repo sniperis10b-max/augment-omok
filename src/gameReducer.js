@@ -793,7 +793,10 @@ function cellMatchesStep(state, x, y, step) {
 export function gameReducer(state, action) {
   switch (action.type) {
     case 'SET_STATE':
-      return action.state;
+      // Firebase에 저장된 온라인 대전 상태는 업데이트 전에 만들어진 것일 수 있어요.
+      // 이번에 새로 추가된 필드(watcherActive, stoneLossLog 등)가 없을 수 있으니,
+      // 최신 초기 상태와 얕은 병합을 해서 누락된 필드는 기본값으로 채워줘요.
+      return { ...createInitialState(), ...action.state };
 
     case 'START_GAME': {
       const { aiPlayer, difficulty, timeLimitSec, cardsPerPlayer } = action;

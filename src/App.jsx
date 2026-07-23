@@ -440,6 +440,11 @@ export default function App() {
   return (
     <>
       {screen}
+      {isDevAccount(user) && (
+        <div className="dev-badge dev-badge-floating">
+          <Sparkles size={11} /> 개발자
+        </div>
+      )}
       {showWhatsNew && (
         <div className="card-use-overlay" style={{ pointerEvents: 'auto' }}>
           <div className="whats-new-modal">
@@ -2130,7 +2135,8 @@ function ChatPanel({ online, user }) {
   if (!online) return null;
 
   const colorLabel = online.role === 'spectator' ? '관전자' : PLAYER_LABEL[online.localColor];
-  const myLabel = user?.displayName ? `${user.displayName} (${colorLabel})` : colorLabel;
+  const namePart = user?.displayName ? `${user.displayName}${isDevAccount(user) ? ' ✨개발자' : ''}` : null;
+  const myLabel = namePart ? `${namePart} (${colorLabel})` : colorLabel;
 
   function send(t) {
     const trimmed = t.trim();
