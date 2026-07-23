@@ -72,16 +72,60 @@ function isUsable(board, blockedFn, x, y) {
   return board[y][x] === 0 && !blockedFn(x, y);
 }
 
+// player가 지금 바로(이 한 수로) 이길 수 있는 칸이 있으면 반환
+function findWinningCellFor(board, player, blockedFn, ruleFlags) {
+  const size = board.length;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!isUsable(board, blockedFn, x, y)) continue;
+      if (player === BLACK && isForbiddenMove(board, x, y, BLACK, ruleFlags)) continue;
+      const trial = board.map((row) => row.slice());
+      trial[y][x] = player;
+      if (checkWin(trial, x, y, player, {})) return { x, y };
+    }
+  }
+  return null;
+}
+
 // 보드에서 둘 만한 칸 하나를 골라요. 내 공격과 상대 방어를 함께 고려.
 export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'normal') {
   const cfg = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
+  const opponent = otherPlayer(me);
+
+  // 0) 내가 지금 바로 이길 수 있으면 최우선으로 그 자리를 선택 (다른 어떤 평가보다 우선)
+  const myWin = findWinningCellFor(board, me, blockedFn, ruleFlags);
+  if (myWin) return myWin;
+
+  // 1) 상대가 바로 이길 수 있는 자리가 있으면, 점수 계산과 무관하게 반드시 막아요
+  //    (난이도별 blockChance에 따라 일부러 놓칠 수도 있어요 - 쉬움/보통을 약하게 만드는 요소)
+  const oppWin = findOpponentWinningCell(board, me);
+  if (oppWin && isUsable(board, blockedFn, oppWin.x, oppWin.y) && Math.random() < cfg.blockChance) {
+    return oppWin;
+  }
+
+  // 2) 상대의 열린 삼(놔두면 어느 쪽으로도 못 막는 열린 사가 되는 자리)도 최우선으로 차단해요.
+  //    이걸 놓치면 스크린샷처럼 대각선/직선이 슬금슬금 완성되는 걸 못 막게 돼요.
+  if (Math.random() < cfg.blockChance) {
+    const flanks = findOpenThreeFlankCells(board, opponent).filter(
+      (c) => isUsable(board, blockedFn, c.x, c.y) && !(me === BLACK && isForbiddenMove(board, c.x, c.y, BLACK, ruleFlags))
+    );
+    if (flanks.length > 0) {
+      let bestFlank = flanks[0];
+      let bestFlankScore = -Infinity;
+      for (const f of flanks) {
+        const s = scoreCellFor(board, f.x, f.y, opponent) * 1.1 + scoreCellFor(board, f.x, f.y, me);
+        if (s > bestFlankScore) { bestFlankScore = s; bestFlank = f; }
+      }
+      return bestFlank;
+    }
+  }
+
   if (cfg.deepSearch) {
     const deep = chooseBestCellDeep(board, me, blockedFn, ruleFlags, cfg.searchWidth ?? 10, cfg.searchDepth ?? 2);
     if (deep) return deep;
   }
 
   const size = board.length;
-  const opponent = otherPlayer(me);
   const noise = cfg.noise ?? 14;
   let best = null;
   let bestScore = -Infinity;
@@ -199,8 +243,8 @@ export function findOpponentWinningCell(board, aiPlayer) {
   return null;
 }
 
-// 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를 찾음
-function findMostConnectedStone(board, player) {
+// 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를, 점수와 함께 찾음
+function findMostConnectedStoneWithScore(board, player) {
   const size = board.length;
   let best = null;
   let bestScore = -Infinity;
@@ -212,10 +256,16 @@ function findMostConnectedStone(board, player) {
         const { count, openEnds } = lineStrength(board, x, y, dx, dy, player);
         score += patternScore(count, openEnds);
       }
-      if (score > bestScore) { bestScore = score; best = { x, y }; }
+      if (score > bestScore) { bestScore = score; best = { x, y, score }; }
     }
   }
   return best;
+}
+
+// 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를 찾음
+function findMostConnectedStone(board, player) {
+  const result = findMostConnectedStoneWithScore(board, player);
+  return result ? { x: result.x, y: result.y } : null;
 }
 
 // AI가 자율적으로 판단할 수 있는(단일 대상 이하) 카드 목록과, 각 카드의 대상 계산기.
@@ -251,11 +301,9 @@ const AI_CARD_HANDLERS = {
   corrupt: (board, ai) => findMostConnectedStone(board, otherPlayer(ai)),
   reinforce: (board, ai) => findMostConnectedStone(board, ai),
   sealLine: (board, ai) => findMostConnectedStone(board, otherPlayer(ai)),
-  thornTrap: (board, ai, blockedFn = () => false) => chooseBestCell(board, ai, blockedFn, {}),
+  thornTrap: (board, ai, blockedFn = () => false) => chooseBestCell(board, otherPlayer(ai), blockedFn, {}),
   wildcard: (board, ai, blockedFn = () => false) => chooseBestCell(board, ai, blockedFn, {}),
 };
-
-const NO_TARGET_PRIORITY = ['fourToWin', 'bomb', 'doubleMove', 'winShield', 'silence', 'randomSummon', 'miracle'];
 
 // 상대의 열린 삼(다음에 열린 사가 될 수 있는 자리)이 있으면 그 확장 칸들을 반환
 function opponentOpenThreeFlanks(board, aiPlayer) {
@@ -315,19 +363,37 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     }
   }
 
-  // 4) 여유 있는 상황이면 카드를 섞어 사용
-  const developCandidates = NO_TARGET_PRIORITY.filter((id) => hand.includes(id));
-  const targetedCandidates = ['reinforce', 'corrupt', 'sealLine', 'thornTrap'].filter((id) => hand.includes(id));
+  // 4) 여유 있는 상황이면, 실제로 의미 있을 때만 카드를 써요 (아무 때나 쓰지 않도록 최소 조건을 둠)
+  const opponentHand = state.draft?.hands?.[otherPlayer(aiPlayer)] ?? [];
+  const developCandidates = ['fourToWin', 'bomb', 'doubleMove', 'randomSummon', 'miracle'].filter((id) => hand.includes(id));
+  // 침묵은 상대에게 아직 쓸 카드가 남아있을 때만 의미가 있어요
+  if (hand.includes('silence') && opponentHand.length > 0) developCandidates.push('silence');
 
-  if (Math.random() < cardUseChance) {
-    if (developCandidates.length > 0 && Math.random() < 0.6) {
-      return { cardId: developCandidates[0] };
-    }
-    if (targetedCandidates.length > 0) {
-      const cardId = targetedCandidates[Math.floor(Math.random() * targetedCandidates.length)];
-      const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, blockedFn);
-      if (target) return { cardId, target };
-    }
+  const targetedCandidates = [];
+  if (hand.includes('reinforce')) {
+    const t = findMostConnectedStoneWithScore(board, aiPlayer);
+    if (t && t.score >= 40) targetedCandidates.push({ cardId: 'reinforce', target: { x: t.x, y: t.y } });
+  }
+  if (hand.includes('corrupt')) {
+    const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+    if (t && t.score >= 120) targetedCandidates.push({ cardId: 'corrupt', target: { x: t.x, y: t.y } });
+  }
+  if (hand.includes('sealLine')) {
+    const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+    if (t && t.score >= 350) targetedCandidates.push({ cardId: 'sealLine', target: { x: t.x, y: t.y } });
+  }
+  if (hand.includes('thornTrap')) {
+    const t = AI_CARD_HANDLERS.thornTrap(board, aiPlayer, blockedFn);
+    if (t) targetedCandidates.push({ cardId: 'thornTrap', target: t });
+  }
+
+  // 발전용 카드는 예전보다 덜 헤프게, 대상이 뚜렷한 카드는 조금 더 적극적으로 써요
+  if (targetedCandidates.length > 0 && Math.random() < cardUseChance) {
+    const pick = targetedCandidates[Math.floor(Math.random() * targetedCandidates.length)];
+    return pick;
+  }
+  if (developCandidates.length > 0 && Math.random() < cardUseChance * 0.5) {
+    return { cardId: developCandidates[0] };
   }
 
   return null; // 카드 대신 그냥 돌을 놓기로 결정
