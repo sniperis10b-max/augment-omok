@@ -17,7 +17,7 @@ const STANDALONE = new Set([
   'freezeCell', 'corrupt', 'sealLine', 'overwrite', 'shrinkBoard', 'undoLast',
   'timeReset', 'chaosShift', 'release33',
   'thornTrap', 'comboBlock', 'randomSummon', 'provoke', 'confuse', 'steal',
-  'winShield', 'wildcard', 'silence',
+  'winShield', 'wildcard', 'silence', 'miracle',
 ]);
 const PLACEMENT_BUFF = new Set(['fourToWin', 'allow44', 'doubleMove', 'bomb']);
 
@@ -75,6 +75,7 @@ export function createInitialState() {
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
     rematchVotes: { [BLACK]: false, [WHITE]: false },
+    lastMove: null,
     message: '카드를 뽑는 중이에요.',
     draft: {
       pool: CARDS.map((c) => c.id),
@@ -254,7 +255,7 @@ function tryPlaceStone(state, clickX, clickY) {
   const nextBoard = cloneBoard(board);
   nextBoard[y][x] = player;
 
-  let nextState = { ...workingState, board: nextBoard };
+  let nextState = { ...workingState, board: nextBoard, lastMove: { x, y } };
   nextState.history = [...workingState.history, nextBoard];
 
   if (nextState.forcedZone && nextState.forcedZone.player === player) {
@@ -432,6 +433,9 @@ function resolveTargetedEffect(state, cardId, targets) {
   next.board = board;
   next = removeFromHand(next, player, cardId);
   next.activeCard = null;
+  if (cardId === 'overwrite' || cardId === 'wildcard') {
+    next.lastMove = { x: targets[0].x, y: targets[0].y };
+  }
 
   const boardChanged = ['destroy', 'alchemy', 'swap', 'overwrite', 'moveStone', 'wildcard'].includes(cardId);
   if (boardChanged) {
@@ -439,20 +443,18 @@ function resolveTargetedEffect(state, cardId, targets) {
   }
 
   if (cardId === 'overwrite') {
-    const won = checkWin(board, targets[0].x, targets[0].y, player, { sealedLines: next.sealedLines });
-    if (won) {
-      next.phase = 'over';
-      next.winner = player;
-      next.message = `${player === BLACK ? '흑' : '백'} 승리!`;
-      return next;
-    }
+    const wouldWin = checkWin(board, targets[0].x, targets[0].y, player, { sealedLines: next.sealedLines });
     if (isBoardFull(board)) {
       next.phase = 'over';
       next.winner = null;
       next.message = '무승부예요.';
       return next;
     }
-    return finishTurnAfterPlacement(next, player);
+    const res = finishTurnAfterPlacement(next, player);
+    if (wouldWin) {
+      res.message = `관통으로는 승리할 수 없어요! ${res.message}`;
+    }
+    return res;
   }
 
   if (cardId === 'wildcard') {
@@ -582,6 +584,10 @@ function resolveStandaloneNoTarget(state, cardId) {
       next.silencedTurns = { ...next.silencedTurns, [opponent]: 2 };
       break;
     }
+    case 'miracle': {
+      next.miracleResult = Math.random() < 0.01 ? 'success' : 'fail';
+      break;
+    }
     default:
       break;
   }
@@ -593,6 +599,16 @@ function resolveStandaloneNoTarget(state, cardId) {
   const boardChanged = ['undoLast', 'timeReset', 'chaosShift'].includes(cardId);
   if (boardChanged) {
     next.history = [...next.history, board];
+  }
+
+  if (cardId === 'miracle' && next.miracleResult === 'success') {
+    next.phase = 'over';
+    next.winner = player;
+    next.message = `기적이 일어났어요! ${player === BLACK ? '흑' : '백'} 즉시 승리!`;
+    return next;
+  }
+  if (cardId === 'miracle') {
+    next.message = '기적은 일어나지 않았어요... (1% 확률) 카드는 소모됐어요.';
   }
 
   if (FREE_ACTION.has(cardId)) {
@@ -728,23 +744,23 @@ export function gameReducer(state, action) {
     case 'DRAFT_PICK': {
       const { cardId } = action;
       const player = state.draft.order[state.draft.currentIndex];
-      const pool = state.draft.pool.filter((id) => id !== cardId);
       const hands = { ...state.draft.hands, [player]: [...state.draft.hands[player], cardId] };
       const currentIndex = state.draft.currentIndex + 1;
       const lastPick = { player, cardId, round: state.draft.currentIndex };
+      const fullPool = CARDS.map((c) => c.id);
 
       if (currentIndex >= state.draft.order.length) {
         return withDeadline({
           ...state,
           phase: 'play',
           message: '흑 차례예요.',
-          draft: { ...state.draft, pool, hands, currentIndex, options: [], lastPick },
+          draft: { ...state.draft, hands, currentIndex, options: [], lastPick },
         });
       }
 
       return {
         ...state,
-        draft: { ...state.draft, pool, hands, currentIndex, options: drawRandomCards(pool, 3), lastPick },
+        draft: { ...state.draft, hands, currentIndex, options: drawRandomCards(fullPool, 3), lastPick },
       };
     }
 

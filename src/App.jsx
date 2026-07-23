@@ -5,7 +5,7 @@ import {
   Unlock, KeyRound, SeparatorHorizontal, Sprout, ShieldOff, Sparkles, Target, Dices,
   HandMetal, ShieldPlus, CircleDot, VolumeX, Bot, Users, ChevronLeft, Copy, Check, Wifi,
   BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw,
-  UserCircle, LogOut, Mail, ShieldQuestion, UserPlus, Bell, Dice5, X as XIcon,
+  UserCircle, LogOut, Mail, ShieldQuestion, UserPlus, Bell, Dice5, X as XIcon, Star,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -33,7 +33,7 @@ const ICONS = {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
   Minimize2, Trophy, Repeat2, Snowflake, Biohazard, Bomb, Undo2, History, Shuffle,
   Unlock, KeyRound, SeparatorHorizontal, Sprout, ShieldOff, Sparkles, Target, Dices,
-  HandMetal, ShieldPlus, CircleDot, VolumeX,
+  HandMetal, ShieldPlus, CircleDot, VolumeX, Star,
 };
 
 function CardIcon({ name, size = 18 }) {
@@ -2263,6 +2263,7 @@ function Board({ state, dispatch, online }) {
             const protectedStone = !!state.protectedStones[`${x},${y}`];
             const disabled = gameOver || isAITurn || isOnlineWaiting;
             const inForcedZone = forcedZone && x >= forcedZone.x0 && x <= forcedZone.x1 && y >= forcedZone.y0 && y <= forcedZone.y1;
+            const isLastMove = state.lastMove && state.lastMove.x === x && state.lastMove.y === y;
 
             return (
               <button
@@ -2283,7 +2284,9 @@ function Board({ state, dispatch, online }) {
                     className={`stone ${
                       value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'
                     } ${protectedStone ? 'stone-protected' : ''}`}
-                  />
+                  >
+                    {isLastMove && <span className="last-move-dot" />}
+                  </span>
                 )}
                 {blocked && value === 0 && <span className="blocked-mark" />}
               </button>

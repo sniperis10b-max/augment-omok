@@ -255,7 +255,7 @@ const AI_CARD_HANDLERS = {
   wildcard: (board, ai, blockedFn = () => false) => chooseBestCell(board, ai, blockedFn, {}),
 };
 
-const NO_TARGET_PRIORITY = ['fourToWin', 'bomb', 'doubleMove', 'winShield', 'silence', 'randomSummon'];
+const NO_TARGET_PRIORITY = ['fourToWin', 'bomb', 'doubleMove', 'winShield', 'silence', 'randomSummon', 'miracle'];
 
 // 상대의 열린 삼(다음에 열린 사가 될 수 있는 자리)이 있으면 그 확장 칸들을 반환
 function opponentOpenThreeFlanks(board, aiPlayer) {
@@ -340,7 +340,7 @@ const DRAFT_WEIGHT = {
   wildcard: 6, winShield: 7, silence: 6, barrier: 6, thornTrap: 5,
   randomSummon: 5, swap: 4, overwrite: 4, ward: 5, allow44: 4,
   release33: 4, shrinkBoard: 3, undoLast: 4, timeReset: 3, chaosShift: 2,
-  provoke: 3, confuse: 3, steal: 4, comboBlock: 5,
+  provoke: 3, confuse: 3, steal: 4, comboBlock: 5, miracle: 2,
 };
 
 export function pickDraftCard(options) {
