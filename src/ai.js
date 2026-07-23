@@ -135,15 +135,24 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
 
   // 1) 상대가 바로 이길 수 있는 자리가 있으면, 점수 계산과 무관하게 반드시 막아요
   //    (난이도별 blockChance에 따라 일부러 놓칠 수도 있어요 - 쉬움/보통을 약하게 만드는 요소)
+  // 주의: 그 자리가 하필 나(흑)에게 금수라면 실제로는 거기 둘 수 없어요. 그런 경우 그냥
+  // 넘어가서(카드로 막거나, 안 되면 다른 자리를 찾도록) 아래로 흘려보내야 해요 - 안 그러면
+  // 매번 같은 금수 자리를 골랐다가 거부당하는 무한 반복에 빠져요.
   const oppWin = findOpponentWinningCell(board, me);
-  if (oppWin && isUsable(board, blockedFn, oppWin.x, oppWin.y) && Math.random() < cfg.blockChance) {
+  const oppWinBlockable = oppWin
+    && isUsable(board, blockedFn, oppWin.x, oppWin.y)
+    && !(me === BLACK && isForbiddenMove(board, oppWin.x, oppWin.y, BLACK, ruleFlags));
+  if (oppWinBlockable && Math.random() < cfg.blockChance) {
     return oppWin;
   }
 
   // 1.5) 상대가 그 자리에 두면 사(四)를 2개 만들거나 사+삼을 동시에 만들어서 한 수로는
-  //      절대 못 막게 되는 자리가 있으면, 열린 삼이 되기 전에 미리 막아요.
+  //      절대 못 막게 되는 자리가 있으면, 열린 삼이 되기 전에 미리 막아요. (마찬가지로 금수면 제외)
   const forcingCell = findOpponentForcingCell(board, me, ruleFlags);
-  if (forcingCell && isUsable(board, blockedFn, forcingCell.x, forcingCell.y) && Math.random() < cfg.blockChance) {
+  const forcingCellBlockable = forcingCell
+    && isUsable(board, blockedFn, forcingCell.x, forcingCell.y)
+    && !(me === BLACK && isForbiddenMove(board, forcingCell.x, forcingCell.y, BLACK, ruleFlags));
+  if (forcingCellBlockable && Math.random() < cfg.blockChance) {
     return forcingCell;
   }
 
@@ -287,14 +296,17 @@ export function findOpponentWinningCell(board, aiPlayer) {
   return null;
 }
 
-// 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를, 점수와 함께 찾음
-function findMostConnectedStoneWithScore(board, player) {
+// 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를, 점수와 함께 찾음.
+// protectedStones가 주어지면 강화(연마)로 보호된 돌은 후보에서 제외해요 - 파괴/변환
+// 대상으로 골라봤자 게임에서 거부당하기 때문이에요.
+function findMostConnectedStoneWithScore(board, player, protectedStones = {}) {
   const size = board.length;
   let best = null;
   let bestScore = -Infinity;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (board[y][x] !== player) continue;
+      if (protectedStones[`${x},${y}`]) continue;
       let score = 0;
       for (const [dx, dy] of DIRECTIONS) {
         const { count, openEnds } = lineStrength(board, x, y, dx, dy, player);
@@ -306,29 +318,31 @@ function findMostConnectedStoneWithScore(board, player) {
   return best;
 }
 
-// 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를 찾음
-function findMostConnectedStone(board, player) {
-  const result = findMostConnectedStoneWithScore(board, player);
+// 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를 찾음 (보호된 돌 제외)
+function findMostConnectedStone(board, player, protectedStones = {}) {
+  const result = findMostConnectedStoneWithScore(board, player, protectedStones);
   return result ? { x: result.x, y: result.y } : null;
 }
 
 // AI가 자율적으로 판단할 수 있는(단일 대상 이하) 카드 목록과, 각 카드의 대상 계산기.
 // blockedFn은 barrier/결계 등으로 실제 막힌 칸을 걸러내기 위해 받아요.
 const AI_CARD_HANDLERS = {
-  destroy: (board, ai) => {
+  destroy: (board, ai, blockedFn = () => false, protectedStones = {}) => {
     const threat = findOpponentWinningCell(board, ai);
     if (threat) {
-      // 위협 라인을 이루는 인접 상대 돌 하나를 제거
+      // 위협 라인을 이루는 인접 상대 돌 하나를 제거 (강화되어 보호된 돌은 건너뛰어요)
       const opp = otherPlayer(ai);
       const size = board.length;
       for (const [dx, dy] of DIRECTIONS) {
         for (let s = -4; s <= 4; s++) {
           const nx = threat.x + dx * s, ny = threat.y + dy * s;
-          if (inB(size, nx, ny) && board[ny][nx] === opp) return { x: nx, y: ny };
+          if (inB(size, nx, ny) && board[ny][nx] === opp && !protectedStones[`${nx},${ny}`]) {
+            return { x: nx, y: ny };
+          }
         }
       }
     }
-    return findMostConnectedStone(board, otherPlayer(ai));
+    return findMostConnectedStone(board, otherPlayer(ai), protectedStones);
   },
   barrier: (board, ai, blockedFn = () => false) => {
     const win = findOpponentWinningCell(board, ai);
@@ -369,6 +383,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
 
   const { blockChance, cardUseChance } = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
   const board = state.board;
+  const protectedStones = state.protectedStones ?? {};
   const opponentThreat = findOpponentWinningCell(board, aiPlayer);
   const forcingCell = opponentThreat ? null : findOpponentForcingCell(board, aiPlayer, state.ruleFlags);
   const urgentFlanks = (opponentThreat || forcingCell)
@@ -380,7 +395,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
   if (opponentThreat && Math.random() < blockChance) {
     for (const cardId of ['barrier', 'freezeCell', 'destroy']) {
       if (hand.includes(cardId)) {
-        const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, blockedFn);
+        const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, blockedFn, protectedStones);
         if (target) return { cardId, target };
       }
     }
@@ -394,7 +409,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
       if (hand.includes(cardId)) return { cardId, target: forcingCell };
     }
     if (hand.includes('destroy')) {
-      const target = findMostConnectedStone(board, otherPlayer(aiPlayer));
+      const target = findMostConnectedStone(board, otherPlayer(aiPlayer), protectedStones);
       if (target) return { cardId: 'destroy', target };
     }
   }
@@ -407,7 +422,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
       }
     }
     if (hand.includes('destroy')) {
-      const target = findMostConnectedStone(board, otherPlayer(aiPlayer));
+      const target = findMostConnectedStone(board, otherPlayer(aiPlayer), protectedStones);
       if (target) return { cardId: 'destroy', target };
     }
   }
@@ -483,10 +498,10 @@ export function pickDraftCard(options) {
   return options[options.length - 1];
 }
 
-export function computeAITarget(cardId, board, aiPlayer, blockedFn = () => false) {
+export function computeAITarget(cardId, board, aiPlayer, blockedFn = () => false, protectedStones = {}) {
   const handler = AI_CARD_HANDLERS[cardId];
   if (!handler) return null;
-  return handler(board, aiPlayer, blockedFn);
+  return handler(board, aiPlayer, blockedFn, protectedStones);
 }
 
 export { BOARD_SIZE };
