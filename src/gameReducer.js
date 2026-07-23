@@ -725,6 +725,18 @@ export function gameReducer(state, action) {
       return next;
     }
 
+    case 'RESIGN': {
+      if (state.phase !== 'play' && state.phase !== 'draft') return state;
+      const resigner = action.player ?? (state.phase === 'draft' ? state.draft.order[state.draft.currentIndex] : state.turn);
+      const winner = otherPlayer(resigner);
+      return {
+        ...state,
+        phase: 'over',
+        winner,
+        message: `${resigner === BLACK ? '흑' : '백'}이 기권했어요. ${winner === BLACK ? '흑' : '백'} 승리!`,
+      };
+    }
+
     case 'CANCEL_CARD':
       return { ...state, activeCard: null, message: `${state.turn === BLACK ? '흑' : '백'} 차례예요.` };
 

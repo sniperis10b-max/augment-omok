@@ -333,6 +333,49 @@ body {
   100% { opacity: 0; transform: scale(0.96); }
 }
 
+.confirm-modal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 26px 30px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  animation: cardEnter 0.2s ease-out;
+  max-width: 300px;
+  text-align: center;
+}
+
+.confirm-modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.confirm-modal-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.confirm-danger-btn {
+  background: #c23b3b;
+  border-color: #c23b3b;
+  color: #fff;
+}
+
+.confirm-danger-btn:hover {
+  background: #a53131;
+}
+
 .blocked-mark {
   width: 40%;
   height: 40%;
@@ -678,6 +721,30 @@ body {
   border-radius: 999px;
   padding: 2px 10px;
   margin-left: 6px;
+}
+
+.notif-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c23b3b;
+  border: 1px solid var(--surface);
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.friend-row:first-of-type {
+  border-top: none;
 }
 
 .turn-timer {

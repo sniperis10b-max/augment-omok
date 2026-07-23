@@ -5,7 +5,7 @@ import {
   Unlock, KeyRound, SeparatorHorizontal, Sprout, ShieldOff, Sparkles, Target, Dices,
   HandMetal, ShieldPlus, CircleDot, VolumeX, Bot, Users, ChevronLeft, Copy, Check, Wifi,
   BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw,
-  UserCircle, LogOut, Mail, ShieldQuestion,
+  UserCircle, LogOut, Mail, ShieldQuestion, UserPlus, Bell, Dice5, X as XIcon,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -22,6 +22,11 @@ import {
   watchAuthState, signInWithGoogle, signUpWithEmail, signInWithEmail,
   resendVerificationEmail, signOutUser, mapAuthError, updateUserProfile,
 } from './auth.js';
+import {
+  upsertUserProfile, sendFriendRequestByEmail, subscribeFriendRequests, acceptFriendRequest,
+  declineFriendRequest, subscribeFriends, inviteFriendToGame, subscribeInvites, clearInvite,
+  quickMatch, cancelQuickMatch,
+} from './social.js';
 
 const ICONS = {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
@@ -164,6 +169,13 @@ export default function App() {
     const unsub = watchAuthState(setUser);
     return unsub;
   }, []);
+
+  // 로그인한 사용자 정보를 검색 가능하도록 저장 (친구 찾기용)
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      upsertUserProfile(user).catch(() => {});
+    }
+  }, [user?.uid, user?.displayName, user?.photoURL]);
 
   // 버튼을 누를 때마다 짧은 탁 소리를 내요
   useEffect(() => {
@@ -377,8 +389,24 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileNickname, setProfileNickname] = useState('');
   const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
+  const [friendRequests, setFriendRequests] = useState([]);
+  const [friendsList, setFriendsList] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [friendEmail, setFriendEmail] = useState('');
+  const [friendNotice, setFriendNotice] = useState('');
+  const [matchmaking, setMatchmaking] = useState(false);
+  const [loginNotice, setLoginNotice] = useState('');
+
+  useEffect(() => {
+    if (!user || !isFirebaseConfigured()) return undefined;
+    const unsub1 = subscribeFriendRequests(user.uid, setFriendRequests);
+    const unsub2 = subscribeFriends(user.uid, setFriendsList);
+    const unsub3 = subscribeInvites(user.uid, setInvites);
+    return () => { unsub1(); unsub2(); unsub3(); };
+  }, [user?.uid]);
 
   async function handleCreateRoom(hostColor) {
+    if (!user) { setLoginNotice('온라인 플레이는 로그인 후에 쓸 수 있어요.'); setStep('account'); return; }
     setBusy(true);
     setErrorMsg('');
     try {
@@ -399,8 +427,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     }
   }
 
-  async function handleJoinRoom() {
-    const code = joinCode.trim().toUpperCase();
+  async function handleJoinRoom(codeArg) {
+    if (!user) { setLoginNotice('온라인 플레이는 로그인 후에 쓸 수 있어요.'); setStep('account'); return; }
+    const code = (codeArg || joinCode).trim().toUpperCase();
     if (code.length !== 6) {
       setErrorMsg('6자리 코드를 입력해주세요.');
       return;
@@ -452,12 +481,92 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     });
   }
 
+  async function handleSendFriendRequest() {
+    if (!user) return;
+    const email = friendEmail.trim();
+    if (!email) return;
+    setBusy(true);
+    setFriendNotice('');
+    try {
+      const res = await sendFriendRequestByEmail(user, email);
+      if (!res.ok) {
+        setFriendNotice(
+          res.reason === 'not-found' ? '그 이메일로 가입한 사람을 찾지 못했어요.'
+          : res.reason === 'self' ? '자기 자신은 추가할 수 없어요.'
+          : '이미 친구예요.'
+        );
+      } else {
+        setFriendNotice('친구 요청을 보냈어요!');
+        setFriendEmail('');
+      }
+    } catch {
+      setFriendNotice('요청을 보내지 못했어요.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleInviteFriend(friendUid) {
+    if (!user) return;
+    setBusy(true);
+    try {
+      await inviteFriendToGame(user, friendUid, BLACK, settings.timeLimitSec, settings.cardsPerPlayer);
+      setFriendNotice('초대를 보냈어요. 상대가 수락하길 기다려요.');
+    } catch {
+      setFriendNotice('초대를 보내지 못했어요.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAcceptInvite(invite) {
+    updateSettings({ timeLimitSec: invite.timeLimitSec || 0, cardsPerPlayer: invite.cardsPerPlayer || 3 });
+    await clearInvite(user.uid, invite.fromUid);
+    await handleJoinRoom(invite.code);
+  }
+
+  async function handleQuickMatch() {
+    if (!user) { setLoginNotice('온라인 플레이는 로그인 후에 쓸 수 있어요.'); setStep('account'); return; }
+    setMatchmaking(true);
+    setErrorMsg('');
+    try {
+      const res = await quickMatch();
+      if (res.role === 'host') {
+        setOnline({
+          code: res.code,
+          localColor: res.hostColor,
+          role: 'host',
+          viaQuickMatch: true,
+          timeLimitSec: settings.timeLimitSec,
+          cardsPerPlayer: settings.cardsPerPlayer,
+        });
+        setStep('online-waiting');
+      } else {
+        const guestColor = res.hostColor === BLACK ? WHITE : BLACK;
+        await joinRoom(res.code);
+        setOnline({ code: res.code, localColor: guestColor, role: 'guest' });
+        setStep('online-waiting');
+      }
+    } catch {
+      setErrorMsg('매칭에 실패했어요. Firebase 설정을 확인해주세요 (README 참고).');
+      setStep('online-error');
+    } finally {
+      setMatchmaking(false);
+    }
+  }
+
   if (step === 'mode') {
     return (
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
           <div className="top-toggles">
+            {user && (
+              <button className="icon-toggle-btn" onClick={() => setStep('friends')} title="친구" style={{ position: 'relative' }}>
+                <Users size={16} />
+                {(friendRequests.length + invites.length) > 0 && <span className="notif-dot" />}
+              </button>
+            )}
             <button className="icon-toggle-btn" onClick={() => setStep('account')} title="계정">
               {user?.photoURL ? (
                 <img src={user.photoURL} alt="" style={{ width: 18, height: 18, borderRadius: '50%' }} />
@@ -485,7 +594,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <div className="setup-card-desc">내가 할 색과 AI 난이도를 정해요.</div>
           </button>
 
-          <button className="setup-card" onClick={() => { setModeChoice('online'); setStep('online-menu'); }}>
+          <button
+            className="setup-card"
+            onClick={() => {
+              if (!user) { setLoginNotice('온라인 플레이는 로그인 후에 쓸 수 있어요.'); setStep('account'); return; }
+              setModeChoice('online'); setStep('online-menu');
+            }}
+          >
             <Wifi size={26} strokeWidth={1.6} />
             <div className="setup-card-title">친구와 플레이 (온라인)</div>
             <div className="setup-card-desc">방을 만들거나, 받은 코드로 참가·관전해요.</div>
@@ -502,6 +617,103 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <button className="setup-tutorial-link" onClick={() => { setRecords(loadRecords()); setStep('records'); }}>
             <History size={16} /> 기보 보기
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'friends') {
+    if (!user) {
+      return (
+        <div className="page">
+          <header className="header">
+            <h1>증강 오목</h1>
+          </header>
+          <p className="subtitle">친구</p>
+          <button className="setup-back" onClick={() => setStep('mode')}>
+            <ChevronLeft size={16} /> 설정으로 돌아가기
+          </button>
+          <p className="setup-card-desc">친구 기능은 로그인 후에 쓸 수 있어요.</p>
+          <button className="setup-card" onClick={() => setStep('account')} style={{ marginTop: 12 }}>
+            <div className="setup-card-title">로그인하러 가기</div>
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">친구</p>
+
+        <button className="setup-back" onClick={() => setStep('mode')}>
+          <ChevronLeft size={16} /> 설정으로 돌아가기
+        </button>
+
+        {invites.length > 0 && (
+          <div className="tutorial-card">
+            <div className="tutorial-title"><Bell size={15} style={{ verticalAlign: 'middle', marginRight: 4 }} />받은 대국 초대</div>
+            {invites.map((inv) => (
+              <div key={inv.fromUid} className="friend-row">
+                <span>{inv.displayName}님의 초대</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="reset-btn" disabled={busy} onClick={() => handleAcceptInvite(inv)}>참가</button>
+                  <button className="icon-toggle-btn" onClick={() => clearInvite(user.uid, inv.fromUid)} title="거절"><XIcon size={14} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {friendRequests.length > 0 && (
+          <div className="tutorial-card">
+            <div className="tutorial-title"><UserPlus size={15} style={{ verticalAlign: 'middle', marginRight: 4 }} />친구 요청</div>
+            {friendRequests.map((req) => (
+              <div key={req.fromUid} className="friend-row">
+                <span>{req.displayName}</span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="reset-btn" disabled={busy} onClick={() => acceptFriendRequest(user.uid, req.fromUid)}>수락</button>
+                  <button className="icon-toggle-btn" onClick={() => declineFriendRequest(user.uid, req.fromUid)} title="거절"><XIcon size={14} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">이메일로 친구 추가</div>
+          <div className="join-form">
+            <input
+              className="join-input"
+              style={{ letterSpacing: 0, fontSize: 14, textTransform: 'none' }}
+              value={friendEmail}
+              onChange={(e) => setFriendEmail(e.target.value)}
+              placeholder="친구의 이메일"
+              type="email"
+            />
+            <button className="reset-btn" disabled={busy} onClick={handleSendFriendRequest}>요청 보내기</button>
+          </div>
+          {friendNotice && <p className="setup-card-desc">{friendNotice}</p>}
+        </div>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">내 친구 ({friendsList.length})</div>
+          {friendsList.length === 0 && <p className="setup-card-desc">아직 친구가 없어요.</p>}
+          {friendsList.map((f) => (
+            <div key={f.uid} className="friend-row">
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {f.photoURL ? (
+                  <img src={f.photoURL} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <UserCircle size={24} />
+                )}
+                {f.displayName}
+              </span>
+              <button className="reset-btn" disabled={busy} onClick={() => handleInviteFriend(f.uid)}>대국 초대</button>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -667,6 +879,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         {!isFirebaseConfigured() && (
           <p className="setup-warning">계정 기능을 쓰려면 firebaseConfig.js 설정이 필요해요.</p>
         )}
+
+        {loginNotice && <p className="setup-warning">{loginNotice}</p>}
 
         <button className="setup-card" disabled={busy} onClick={handleGoogleLogin} style={{ marginBottom: 16 }}>
           <div className="setup-card-title">구글로 로그인</div>
@@ -1038,6 +1252,23 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   }
 
   if (step === 'online-menu') {
+    if (!user) {
+      return (
+        <div className="page">
+          <header className="header">
+            <h1>증강 오목</h1>
+          </header>
+          <p className="subtitle">친구와 온라인으로 플레이해요</p>
+          <button className="setup-back" onClick={() => setStep('mode')}>
+            <ChevronLeft size={16} /> 뒤로
+          </button>
+          <p className="setup-card-desc">온라인 플레이는 로그인 후에 쓸 수 있어요.</p>
+          <button className="setup-card" onClick={() => setStep('account')} style={{ marginTop: 12 }}>
+            <div className="setup-card-title">로그인하러 가기</div>
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="page">
         <header className="header">
@@ -1067,6 +1298,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               친구에게 받은 6자리 코드를 입력해요. 진행 중인 방이면 관전자로 들어가고,
               원래 쓰던 기기로 같은 코드를 다시 입력하면 내 색으로 재접속돼요.
             </div>
+          </button>
+
+          <button className="setup-card" disabled={matchmaking} onClick={handleQuickMatch}>
+            <Dice5 size={22} strokeWidth={1.6} />
+            <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : '온라인 대국'}</div>
+            <div className="setup-card-desc">아무나와 바로 매칭돼요. 코드 없이 즉시 시작해요.</div>
           </button>
         </div>
       </div>
@@ -1138,12 +1375,14 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <p className="subtitle">
           {online?.rejoined
             ? '재접속했어요. 곧 이어서 진행돼요'
-            : online?.role === 'host'
-              ? '친구가 들어오길 기다리는 중이에요'
-              : '호스트가 게임을 시작하길 기다리는 중이에요'}
+            : online?.viaQuickMatch
+              ? '아무나와 매칭되길 기다리는 중이에요'
+              : online?.role === 'host'
+                ? '친구가 들어오길 기다리는 중이에요'
+                : '호스트가 게임을 시작하길 기다리는 중이에요'}
         </p>
 
-        {online?.role === 'host' && (
+        {online?.role === 'host' && !online?.viaQuickMatch && (
           <div className="room-code-box">
             <div className="room-code">{online.code}</div>
             <button className="reset-btn" onClick={() => copyCode(online.code)}>
@@ -1156,6 +1395,20 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <Wifi size={20} strokeWidth={1.6} />
           <span>연결 대기 중...</span>
         </div>
+
+        {online?.viaQuickMatch && (
+          <button
+            className="reset-btn"
+            onClick={async () => {
+              await cancelQuickMatch(online.code);
+              await leaveRoom(online.code);
+              setOnline(null);
+              setStep('online-menu');
+            }}
+          >
+            취소
+          </button>
+        )}
       </div>
     );
   }
@@ -1464,6 +1717,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
   const isSpectator = online && online.role === 'spectator';
   const isOnlineWaiting = online && !isSpectator && state.turn !== online.localColor && !gameOver;
+  const [showResignConfirm, setShowResignConfirm] = useState(false);
 
   let modeLabel = '2인 대국';
   if (state.aiPlayer) modeLabel = `AI 대전 · AI는 ${PLAYER_LABEL[state.aiPlayer]} · 난이도 ${DIFFICULTIES[state.aiDifficulty]?.label ?? '보통'}`;
@@ -1471,6 +1725,17 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
     modeLabel = isSpectator
       ? `온라인 대전 · 방 ${online.code} · 관전 중`
       : `온라인 대전 · 방 ${online.code} · 나는 ${PLAYER_LABEL[online.localColor]}`;
+  }
+
+  function resignPlayer() {
+    if (online && !isSpectator) return online.localColor;
+    if (state.aiPlayer) return otherPlayer(state.aiPlayer);
+    return undefined; // 2인 대국은 현재 턴 쪽이 기권한 걸로 처리
+  }
+
+  function confirmResign() {
+    dispatch({ type: 'RESIGN', player: resignPlayer() });
+    setShowResignConfirm(false);
   }
 
   return (
@@ -1498,10 +1763,27 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
         <span key={state.message} className={`status-text ${gameOver ? 'status-win' : ''}`}>
           {isAITurn ? 'AI가 생각하는 중...' : isOnlineWaiting ? '상대의 차례를 기다리는 중...' : state.message}
         </span>
-        <button className="reset-btn" onClick={onReset}>
-          {isSpectator ? '나가기' : '다시 시작'}
-        </button>
+        {isSpectator ? (
+          <button className="reset-btn" onClick={onReset}>나가기</button>
+        ) : gameOver ? (
+          <button className="reset-btn" onClick={onReset}>다시 시작</button>
+        ) : (
+          <button className="reset-btn" onClick={() => setShowResignConfirm(true)}>기권</button>
+        )}
       </div>
+
+      {showResignConfirm && (
+        <div className="card-use-overlay" style={{ pointerEvents: 'auto' }}>
+          <div className="confirm-modal">
+            <div className="confirm-modal-title">기권하시겠습니까?</div>
+            <p className="confirm-modal-desc">기권하면 상대의 승리로 게임이 바로 끝나요.</p>
+            <div className="confirm-modal-actions">
+              <button className="reset-btn" onClick={() => setShowResignConfirm(false)}>취소</button>
+              <button className="reset-btn confirm-danger-btn" onClick={confirmResign}>기권하기</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <TurnTimer state={state} dispatch={dispatch} online={online} />
 
