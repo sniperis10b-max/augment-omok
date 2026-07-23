@@ -46,6 +46,13 @@ function CardIcon({ name, size = 18 }) {
 
 const PLAYER_LABEL = { [BLACK]: '흑', [WHITE]: '백' };
 
+// 특정 계정(개발자)에게만 프로필에 뱃지를 보여주기 위한 판별 함수.
+// 이메일 대소문자가 다를 수 있어서 소문자로 비교해요.
+const DEV_ACCOUNT_EMAIL = 'sniperis10b@gmail.com';
+function isDevAccount(user) {
+  return !!user?.email && user.email.toLowerCase() === DEV_ACCOUNT_EMAIL;
+}
+
 const TUTORIAL_PAGES = [
   {
     title: '기본 목표',
@@ -1147,7 +1154,14 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
               <UserCircle size={40} />
               <div>
-                <div className="tutorial-title" style={{ marginBottom: 2 }}>{user.displayName || '이름 없음'}</div>
+                <div className="tutorial-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {user.displayName || '이름 없음'}
+                  {isDevAccount(user) && (
+                    <span className="dev-badge">
+                      <Sparkles size={11} /> 개발자
+                    </span>
+                  )}
+                </div>
                 <div className="setup-card-desc">{user.email}</div>
               </div>
             </div>
