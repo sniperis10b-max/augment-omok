@@ -325,6 +325,28 @@ body {
   color: var(--text-secondary);
 }
 
+.card-use-result {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 4px 14px;
+  border-radius: 999px;
+}
+
+.card-use-result-success {
+  background: #e5f0e0;
+  color: #3fae52;
+}
+
+.card-use-result-fail {
+  background: #f0e0e0;
+  color: #c23b3b;
+}
+
+.card-use-success,
+.card-use-fail {
+  animation-duration: 1.5s;
+}
+
 @keyframes cardUsePop {
   0% { opacity: 0; transform: scale(0.7); }
   15% { opacity: 1; transform: scale(1.05); }

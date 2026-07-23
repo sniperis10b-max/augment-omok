@@ -211,7 +211,10 @@ export default function App() {
       const cur = state.lastUsedCard[p];
       if (cur && cur !== prev[p]) {
         const card = getCardById(cur);
-        if (card) setCardOverlay({ player: p, card, key: Date.now() });
+        if (card) {
+          const result = cur === 'fourToWin' ? (state.buffs.fourToWinActive ? 'success' : 'fail') : null;
+          setCardOverlay({ player: p, card, key: Date.now(), result });
+        }
       }
     }
     prevLastUsedRef.current = { ...state.lastUsedCard };
@@ -219,7 +222,8 @@ export default function App() {
 
   useEffect(() => {
     if (!cardOverlay) return undefined;
-    const t = setTimeout(() => setCardOverlay(null), 1000);
+    const duration = cardOverlay.result ? 1500 : 1000;
+    const t = setTimeout(() => setCardOverlay(null), duration);
     return () => clearTimeout(t);
   }, [cardOverlay]);
 
@@ -407,9 +411,19 @@ export default function App() {
       {screen}
       {cardOverlay && (
         <div className="card-use-overlay">
-          <div className="card-use-overlay-inner" key={cardOverlay.key}>
+          <div
+            className={`card-use-overlay-inner ${
+              cardOverlay.result === 'success' ? 'card-use-success' : cardOverlay.result === 'fail' ? 'card-use-fail' : ''
+            }`}
+            key={cardOverlay.key}
+          >
             <div className="card-use-overlay-icon"><CardIcon name={cardOverlay.card.icon} size={40} /></div>
             <div className="card-use-overlay-name">{cardOverlay.card.name}</div>
+            {cardOverlay.result && (
+              <div className={`card-use-result ${cardOverlay.result === 'success' ? 'card-use-result-success' : 'card-use-result-fail'}`}>
+                {cardOverlay.result === 'success' ? '발동 성공!' : '발동 실패...'}
+              </div>
+            )}
             <div className="card-use-overlay-player">{PLAYER_LABEL[cardOverlay.player]} 사용</div>
           </div>
         </div>
