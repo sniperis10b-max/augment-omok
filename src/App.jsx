@@ -670,13 +670,14 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     setMatchmaking(true);
     setErrorMsg('');
     try {
-      const res = await quickMatch();
+      const res = await quickMatch(settings.timeLimitSec, settings.cardsPerPlayer);
       if (res.role === 'host') {
         setOnline({
           code: res.code,
           localColor: res.hostColor,
           role: 'host',
           viaQuickMatch: true,
+          queueKey: res.queueKey,
           timeLimitSec: settings.timeLimitSec,
           cardsPerPlayer: settings.cardsPerPlayer,
         });
@@ -1692,7 +1693,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <button
             className="reset-btn"
             onClick={async () => {
-              await cancelQuickMatch(online.code);
+              await cancelQuickMatch(online.code, online.queueKey);
               await leaveRoom(online.code);
               setOnline(null);
               setStep('online-menu');
@@ -2031,6 +2032,10 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
   }
 
   function handleRematch() {
+    if (online && !isSpectator) {
+      dispatch({ type: 'REQUEST_REMATCH', player: online.localColor });
+      return;
+    }
     dispatch({
       type: 'START_GAME',
       aiPlayer: state.aiPlayer,
@@ -2039,6 +2044,9 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       cardsPerPlayer: state.draft.order.length / 2,
     });
   }
+
+  const myRematchVote = online && !isSpectator ? state.rematchVotes[online.localColor] : false;
+  const opponentRematchVote = online && !isSpectator ? state.rematchVotes[otherPlayer(online.localColor)] : false;
 
   return (
     <div className="page">
@@ -2070,7 +2078,9 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
             <button className="reset-btn" onClick={onReset}>나가기</button>
           ) : gameOver ? (
             <>
-              <button className="reset-btn" onClick={handleRematch}>재대국</button>
+              <button className="reset-btn" disabled={myRematchVote} onClick={handleRematch}>
+                {online ? (myRematchVote ? '상대 대기 중...' : '재대국') : '재대국'}
+              </button>
               <button className="reset-btn" onClick={onReset}>다시 시작</button>
             </>
           ) : (
@@ -2078,6 +2088,16 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
           )}
         </div>
       </div>
+
+      {online && gameOver && (myRematchVote || opponentRematchVote) && (
+        <p className="setup-card-desc" style={{ marginTop: -10, marginBottom: 12 }}>
+          {myRematchVote && opponentRematchVote
+            ? '재대국이 성사됐어요!'
+            : myRematchVote
+              ? '재대국을 신청했어요. 상대의 동의를 기다리는 중...'
+              : '상대가 재대국을 신청했어요. "재대국"을 눌러 수락하세요.'}
+        </p>
+      )}
 
       {showResignConfirm && (
         <div className="card-use-overlay" style={{ pointerEvents: 'auto' }}>

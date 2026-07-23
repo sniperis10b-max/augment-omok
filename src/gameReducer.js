@@ -74,6 +74,7 @@ export function createInitialState() {
     ruleFlags: { noDoubleThree: false, ignoreDoubleFourOnce: false },
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
+    rematchVotes: { [BLACK]: false, [WHITE]: false },
     message: '카드를 뽑는 중이에요.',
     draft: {
       pool: CARDS.map((c) => c.id),
@@ -672,8 +673,9 @@ export function gameReducer(state, action) {
     case 'START_GAME': {
       const { aiPlayer, difficulty, timeLimitSec, cardsPerPlayer } = action;
       const order = buildDraftOrder(cardsPerPlayer);
+      const fresh = createInitialState();
       return {
-        ...state,
+        ...fresh,
         phase: 'draft',
         aiPlayer: aiPlayer || null,
         aiDifficulty: difficulty || 'normal',
@@ -686,6 +688,40 @@ export function gameReducer(state, action) {
           currentIndex: 0,
           options: drawRandomCards(CARDS.map((c) => c.id), 3),
         },
+      };
+    }
+
+    case 'REQUEST_REMATCH': {
+      if (state.phase !== 'over') return state;
+      const voter = action.player;
+      if (!voter) return state;
+      const votes = { ...state.rematchVotes, [voter]: true };
+
+      if (votes[BLACK] && votes[WHITE]) {
+        const cardsPerPlayer = state.draft.order.length / 2;
+        const order = buildDraftOrder(cardsPerPlayer);
+        const fresh = createInitialState();
+        return {
+          ...fresh,
+          phase: 'draft',
+          aiPlayer: state.aiPlayer,
+          aiDifficulty: state.aiDifficulty,
+          timeLimitSec: state.timeLimitSec,
+          message: '카드를 뽑는 중이에요.',
+          draft: {
+            pool: CARDS.map((c) => c.id),
+            hands: { [BLACK]: [], [WHITE]: [] },
+            order,
+            currentIndex: 0,
+            options: drawRandomCards(CARDS.map((c) => c.id), 3),
+          },
+        };
+      }
+
+      return {
+        ...state,
+        rematchVotes: votes,
+        message: `${voter === BLACK ? '흑' : '백'}이 재대국을 신청했어요. 상대의 동의를 기다리는 중...`,
       };
     }
 
