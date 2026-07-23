@@ -20,7 +20,7 @@ import { sounds, setSoundEnabled } from './sound.js';
 import { loadRecords, saveRecord, deleteRecord } from './records.js';
 import {
   watchAuthState, signInWithGoogle, signUpWithEmail, signInWithEmail,
-  resendVerificationEmail, signOutUser, mapAuthError,
+  resendVerificationEmail, signOutUser, mapAuthError, updateUserProfile,
 } from './auth.js';
 
 const ICONS = {
@@ -273,7 +273,7 @@ export default function App() {
 
   let screen;
   if (state.phase === 'setup') {
-    screen = <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} user={user} />;
+    screen = <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} user={user} setUser={setUser} />;
   } else if (state.phase === 'draft') {
     screen = <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} />;
   } else {
@@ -356,7 +356,7 @@ function useAIDriver(state, dispatch, online) {
   }, [state, dispatch, online]);
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -374,6 +374,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [authPassword, setAuthPassword] = useState('');
   const [authNickname, setAuthNickname] = useState('');
   const [authNotice, setAuthNotice] = useState('');
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileNickname, setProfileNickname] = useState('');
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
 
   async function handleCreateRoom(hostColor) {
     setBusy(true);
@@ -518,6 +521,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     }
 
     async function handleEmailAuth() {
+      if (authMode === 'signup' && authPassword.length < 8) {
+        setErrorMsg('비밀번호는 8자 이상이어야 해요.');
+        return;
+      }
       setBusy(true);
       setErrorMsg('');
       setAuthNotice('');
@@ -547,6 +554,23 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       }
     }
 
+    async function handleSaveProfile() {
+      setBusy(true);
+      setErrorMsg('');
+      try {
+        const updated = await updateUserProfile({
+          displayName: profileNickname.trim() || null,
+          photoURL: profilePhotoUrl.trim() || null,
+        });
+        setUser(updated);
+        setEditingProfile(false);
+      } catch {
+        setErrorMsg('프로필을 저장하지 못했어요.');
+      } finally {
+        setBusy(false);
+      }
+    }
+
     if (user) {
       return (
         <div className="page">
@@ -562,7 +586,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <div className="tutorial-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
               {user.photoURL ? (
-                <img src={user.photoURL} alt="" style={{ width: 40, height: 40, borderRadius: '50%' }} />
+                <img src={user.photoURL} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 <UserCircle size={40} />
               )}
@@ -581,9 +605,49 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               </div>
             )}
 
-            <button className="reset-btn" onClick={() => signOutUser()}>
-              <LogOut size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> 로그아웃
-            </button>
+            {!editingProfile ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="reset-btn"
+                  onClick={() => {
+                    setProfileNickname(user.displayName || '');
+                    setProfilePhotoUrl(user.photoURL || '');
+                    setEditingProfile(true);
+                  }}
+                >
+                  프로필 편집
+                </button>
+                <button className="reset-btn" onClick={() => signOutUser()}>
+                  <LogOut size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> 로그아웃
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="setup-card-desc" style={{ marginBottom: 6 }}>닉네임</div>
+                <input
+                  className="join-input"
+                  style={{ letterSpacing: 0, fontSize: 14, marginBottom: 10, width: '100%', textTransform: 'none' }}
+                  value={profileNickname}
+                  onChange={(e) => setProfileNickname(e.target.value)}
+                  placeholder="닉네임"
+                />
+                <div className="setup-card-desc" style={{ marginBottom: 6 }}>프로필 사진 URL</div>
+                <input
+                  className="join-input"
+                  style={{ letterSpacing: 0, fontSize: 14, marginBottom: 4, width: '100%', textTransform: 'none' }}
+                  value={profilePhotoUrl}
+                  onChange={(e) => setProfilePhotoUrl(e.target.value)}
+                  placeholder="https://... (이미지 링크)"
+                />
+                <p className="setup-card-desc" style={{ marginBottom: 12 }}>
+                  이미지를 올리는 기능은 아직 없어서, 원하는 사진의 링크(URL)를 붙여넣어 주세요.
+                </p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="reset-btn" disabled={busy} onClick={handleSaveProfile}>저장</button>
+                  <button className="reset-btn" onClick={() => setEditingProfile(false)}>취소</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -615,7 +679,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           {authMode === 'signup' && (
             <input
               className="join-input"
-              style={{ letterSpacing: 0, fontSize: 14, marginBottom: 10, width: '100%' }}
+              style={{ letterSpacing: 0, fontSize: 14, marginBottom: 10, width: '100%', textTransform: 'none' }}
               value={authNickname}
               onChange={(e) => setAuthNickname(e.target.value)}
               placeholder="닉네임"
@@ -623,7 +687,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           )}
           <input
             className="join-input"
-            style={{ letterSpacing: 0, fontSize: 14, marginBottom: 10, width: '100%' }}
+            style={{ letterSpacing: 0, fontSize: 14, marginBottom: 10, width: '100%', textTransform: 'none' }}
             value={authEmail}
             onChange={(e) => setAuthEmail(e.target.value)}
             placeholder="이메일"
@@ -631,10 +695,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           />
           <input
             className="join-input"
-            style={{ letterSpacing: 0, fontSize: 14, marginBottom: 12, width: '100%' }}
+            style={{ letterSpacing: 0, fontSize: 14, marginBottom: 12, width: '100%', textTransform: 'none' }}
             value={authPassword}
             onChange={(e) => setAuthPassword(e.target.value)}
-            placeholder="비밀번호 (6자 이상)"
+            placeholder="비밀번호 (8자 이상)"
             type="password"
           />
           <button className="reset-btn" disabled={busy} onClick={handleEmailAuth} style={{ width: '100%', marginBottom: 10 }}>
