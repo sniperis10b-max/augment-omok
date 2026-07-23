@@ -212,7 +212,11 @@ export default function App() {
       if (cur && cur !== prev[p]) {
         const card = getCardById(cur);
         if (card) {
-          const result = cur === 'fourToWin' ? (state.buffs.fourToWinActive ? 'success' : 'fail') : null;
+          const result = cur === 'fourToWin'
+            ? (state.buffs.fourToWinActive ? 'success' : 'fail')
+            : cur === 'miracle'
+              ? (state.miracleResult === 'success' ? 'success' : 'fail')
+              : null;
           setCardOverlay({ player: p, card, key: Date.now(), result });
         }
       }
@@ -497,11 +501,7 @@ function FriendRow({ friend, busy, onInvite }) {
     <div className="friend-row">
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ position: 'relative', display: 'inline-flex' }}>
-          {friend.photoURL ? (
-            <img src={friend.photoURL} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
-          ) : (
-            <UserCircle size={24} />
-          )}
+          <UserCircle size={24} />
           <span className={`presence-dot ${isOnline ? 'presence-online' : 'presence-offline'}`} />
         </span>
         {friend.displayName}
@@ -532,7 +532,6 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [authNotice, setAuthNotice] = useState('');
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileNickname, setProfileNickname] = useState('');
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState('');
   const [friendRequests, setFriendRequests] = useState([]);
   const [friendsList, setFriendsList] = useState([]);
   const [invites, setInvites] = useState([]);
@@ -724,11 +723,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               </button>
             )}
             <button className="icon-toggle-btn" onClick={() => setStep('account')} title="계정">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="" style={{ width: 18, height: 18, borderRadius: '50%' }} />
-              ) : (
-                <UserCircle size={16} />
-              )}
+              <UserCircle size={16} />
             </button>
             <button className="icon-toggle-btn" onClick={() => setStep('settings')} title="설정">
               <Settings size={16} />
@@ -995,7 +990,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       try {
         const updated = await updateUserProfile({
           displayName: profileNickname.trim() || null,
-          photoURL: profilePhotoUrl.trim() || null,
+          photoURL: null,
         });
         setUser(updated);
         setEditingProfile(false);
@@ -1039,11 +1034,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
           <div className="tutorial-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              {user.photoURL ? (
-                <img src={user.photoURL} alt="" style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <UserCircle size={40} />
-              )}
+              <UserCircle size={40} />
               <div>
                 <div className="tutorial-title" style={{ marginBottom: 2 }}>{user.displayName || '이름 없음'}</div>
                 <div className="setup-card-desc">{user.email}</div>
@@ -1065,7 +1056,6 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   className="reset-btn"
                   onClick={() => {
                     setProfileNickname(user.displayName || '');
-                    setProfilePhotoUrl(user.photoURL || '');
                     setEditingProfile(true);
                   }}
                 >
@@ -1088,16 +1078,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   onChange={(e) => setProfileNickname(e.target.value)}
                   placeholder="닉네임"
                 />
-                <div className="setup-card-desc" style={{ marginBottom: 6 }}>프로필 사진 URL</div>
-                <input
-                  className="join-input"
-                  style={{ letterSpacing: 0, fontSize: 14, marginBottom: 4, width: '100%', textTransform: 'none' }}
-                  value={profilePhotoUrl}
-                  onChange={(e) => setProfilePhotoUrl(e.target.value)}
-                  placeholder="https://... (이미지 링크)"
-                />
                 <p className="setup-card-desc" style={{ marginBottom: 12 }}>
-                  이미지를 올리는 기능은 아직 없어서, 원하는 사진의 링크(URL)를 붙여넣어 주세요.
+                  프로필 사진은 모두 기본 아이콘으로 표시돼요.
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="reset-btn" disabled={busy} onClick={handleSaveProfile}>저장</button>
