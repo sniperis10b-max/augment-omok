@@ -114,6 +114,82 @@ const TUTORIAL_PAGES = [
   },
 ];
 
+const EFFECTIVE_DATE = '2026년 7월 23일';
+
+const TERMS_SECTIONS = [
+  { title: '제1조 (목적)', body: ['이 약관은 증강 오목(이하 "서비스")이 제공하는 모든 서비스의 이용조건 및 절차, 이용자와 서비스 운영자의 권리·의무 및 책임사항을 규정함을 목적으로 합니다.'] },
+  {
+    title: '제2조 (약관의 효력 및 변경)',
+    body: [
+      '① 이 약관은 서비스 화면에 게시하여 공지함으로써 효력이 발생합니다.',
+      '② 이용자가 서비스에 접속하여 이용하는 것으로 본 약관에 동의한 것으로 간주합니다.',
+      '③ 운영자는 필요한 경우 관련 법령을 위반하지 않는 범위에서 약관을 변경할 수 있으며, 변경된 약관은 서비스 내 공지 후 적용됩니다.',
+    ],
+  },
+  { title: '제3조 (서비스의 내용)', body: ['서비스는 카드 시스템을 결합한 온라인/오프라인 오목 게임 및 관련 부가 기능(계정, 친구, 채팅, 기보 저장 등)을 제공합니다.'] },
+  {
+    title: '제4조 (회원가입 및 계정)',
+    body: [
+      '① 이용자는 이메일 또는 구글 계정을 통해 회원가입할 수 있습니다.',
+      '② 이용자는 본인의 계정 정보를 스스로 관리할 책임이 있으며, 계정 정보의 관리 소홀로 인한 불이익에 대해 운영자는 책임을 지지 않습니다.',
+      '③ 타인의 계정을 도용하거나 허위 정보로 가입하는 행위는 금지됩니다.',
+    ],
+  },
+  {
+    title: '제5조 (이용자의 의무)',
+    body: [
+      '이용자는 다음 행위를 해서는 안 됩니다.',
+      '- 타인의 개인정보를 도용하거나 부정하게 사용하는 행위',
+      '- 서비스의 정상적인 운영을 방해하는 행위 (부정한 방법의 자동 플레이, 서버 공격 등)',
+      '- 다른 이용자에게 욕설, 도배, 혐오 표현 등을 통해 피해를 주는 행위 (채팅 기능 포함)',
+      '- 그 밖에 관련 법령에 위배되는 행위',
+    ],
+  },
+  { title: '제6조 (서비스의 변경 및 중단)', body: ['운영자는 서비스의 전부 또는 일부를 운영상, 기술상의 필요에 따라 변경하거나 중단할 수 있으며, 이 경우 사전에 공지합니다. 다만 불가피한 경우 사후에 공지할 수 있습니다.'] },
+  {
+    title: '제7조 (면책조항)',
+    body: [
+      '① 운영자는 천재지변, 서비스 제공에 사용되는 제3자(Firebase 등)의 장애 등 운영자의 고의·과실이 없는 사유로 서비스를 제공할 수 없는 경우 책임을 지지 않습니다.',
+      '② 서비스는 무료로 제공되는 개인/취미 프로젝트로, 이용자 간 온라인 대전 중 발생하는 분쟁에 대해 운영자는 개입하거나 책임지지 않습니다.',
+      '③ 이용자가 게시하거나 전송한 채팅 내용, 닉네임 등에 대한 책임은 해당 이용자 본인에게 있습니다.',
+    ],
+  },
+  { title: '제8조 (준거법 및 관할)', body: ['이 약관과 관련하여 분쟁이 발생할 경우 대한민국 법령을 준거법으로 합니다.'] },
+];
+
+const PRIVACY_SECTIONS = [
+  {
+    title: '1. 수집하는 개인정보 항목',
+    body: [
+      '필수: 이메일 주소 (이메일 가입 또는 구글 로그인 시)',
+      '선택: 닉네임, 프로필 사진(URL)',
+      '자동 생성 정보: 대국 기록(기보), 친구 목록, 대국 초대 내역',
+      '구글 로그인 이용 시, 구글 계정에서 제공하는 이름·프로필 사진 정보',
+      '서비스는 비밀번호를 직접 저장하지 않으며, 인증은 Firebase Authentication을 통해 처리됩니다.',
+    ],
+  },
+  {
+    title: '2. 개인정보의 수집 및 이용 목적',
+    body: ['회원 식별 및 로그인 유지', '친구 추가·대국 초대 등 소셜 기능 제공', '온라인 대전 시 상대방에게 닉네임 표시', '대국 기록(기보) 저장 및 조회'],
+  },
+  { title: '3. 개인정보의 보유 및 이용 기간', body: ['이용자가 계정을 삭제하거나 탈퇴를 요청할 때까지 보유합니다.'] },
+  {
+    title: '4. 개인정보의 제3자 제공 및 처리 위탁',
+    body: [
+      '수탁업체: Google LLC (Firebase) — 위탁 업무: 로그인 인증, 데이터베이스(대국 기록, 친구 정보 등) 저장 — 보관 위치: Firebase 서버(해외 포함 가능)',
+      'Firebase의 개인정보 처리에 대한 자세한 내용은 Google 개인정보처리방침(policies.google.com/privacy)에서 확인하실 수 있습니다.',
+    ],
+  },
+  { title: '5. 온라인 대전 중 공개되는 정보', body: ['온라인 대전 및 채팅 이용 시, 상대방 또는 관전자에게 닉네임(설정한 경우) 및 대국 내용이 공개될 수 있습니다.'] },
+  {
+    title: '6. 이용자의 권리',
+    body: ['본인의 개인정보 열람·수정 (프로필 편집 기능 이용)', '계정 및 관련 정보 삭제 요청', '개인정보 수집·이용에 대한 동의 철회'],
+  },
+  { title: '7. 개인정보의 안전성 확보 조치', body: ['서비스는 Firebase의 인증 및 데이터베이스 보안 기능을 이용하여 개인정보를 관리합니다. 다만 현재 개발/취미 프로젝트 단계로, 상용 서비스 수준의 보안이 완비되지 않았을 수 있음을 안내드립니다.'] },
+  { title: '8. 만 14세 미만 아동의 개인정보', body: ['서비스는 만 14세 미만 아동의 회원가입을 별도로 제한하고 있지 않으나, 만 14세 미만 이용자는 법정대리인의 동의를 받아야 합니다.'] },
+  { title: '9. 고지의 의무', body: ['이 개인정보처리방침은 관련 법령, 서비스 정책 변경에 따라 수정될 수 있으며, 변경 시 서비스 내 공지사항 등을 통해 안내합니다.'] },
+];
+
 export default function App() {
   const [state, dispatch] = useReducer(gameReducer, null, createInitialState);
   const [online, setOnline] = useState(null); // null | { code, localColor, role: 'host'|'guest'|'spectator' }
@@ -719,6 +795,35 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     );
   }
 
+  if (step === 'terms' || step === 'privacy') {
+    const sections = step === 'terms' ? TERMS_SECTIONS : PRIVACY_SECTIONS;
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">{step === 'terms' ? '이용약관' : '개인정보처리방침'}</p>
+
+        <button className="setup-back" onClick={() => setStep('account')}>
+          <ChevronLeft size={16} /> 계정으로 돌아가기
+        </button>
+
+        {sections.map((sec, i) => (
+          <div key={i} className="tutorial-card">
+            <div className="tutorial-title">{sec.title}</div>
+            <ul className="tutorial-body">
+              {sec.body.map((line, j) => (
+                <li key={j}>{line}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+
+        <p className="setup-card-desc">시행일자: {EFFECTIVE_DATE}</p>
+      </div>
+    );
+  }
+
   if (step === 'account') {
     async function handleGoogleLogin() {
       setBusy(true);
@@ -861,6 +966,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               </div>
             )}
           </div>
+
+          <div className="setup-links-row">
+            <button className="setup-tutorial-link" onClick={() => setStep('terms')}>이용약관</button>
+            <button className="setup-tutorial-link" onClick={() => setStep('privacy')}>개인정보처리방침</button>
+          </div>
         </div>
       );
     }
@@ -928,6 +1038,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
         {authNotice && <p className="setup-warning" style={{ color: 'var(--accent)' }}>{authNotice}</p>}
         {errorMsg && <p className="setup-warning">{errorMsg}</p>}
+
+        <div className="setup-links-row">
+          <button className="setup-tutorial-link" onClick={() => setStep('terms')}>이용약관</button>
+          <button className="setup-tutorial-link" onClick={() => setStep('privacy')}>개인정보처리방침</button>
+        </div>
       </div>
     );
   }
