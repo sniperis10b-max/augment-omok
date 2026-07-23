@@ -602,8 +602,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             }}
           >
             <Wifi size={26} strokeWidth={1.6} />
-            <div className="setup-card-title">친구와 플레이 (온라인)</div>
-            <div className="setup-card-desc">방을 만들거나, 받은 코드로 참가·관전해요.</div>
+            <div className="setup-card-title">온라인 대국</div>
+            <div className="setup-card-desc">친구와 플레이하거나, 랜덤으로 매칭돼요.</div>
           </button>
         </div>
 
@@ -1258,7 +1258,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <header className="header">
             <h1>증강 오목</h1>
           </header>
-          <p className="subtitle">친구와 온라인으로 플레이해요</p>
+          <p className="subtitle">온라인 대국 방식을 선택하세요</p>
           <button className="setup-back" onClick={() => setStep('mode')}>
             <ChevronLeft size={16} /> 뒤로
           </button>
@@ -1274,7 +1274,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <header className="header">
           <h1>증강 오목</h1>
         </header>
-        <p className="subtitle">친구와 온라인으로 플레이해요</p>
+        <p className="subtitle">온라인 대국 방식을 선택하세요</p>
 
         <button className="setup-back" onClick={() => setStep('mode')}>
           <ChevronLeft size={16} /> 뒤로
@@ -1285,6 +1285,41 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             온라인 기능을 쓰려면 firebaseConfig.js 설정이 필요해요. README의 "온라인 대전 설정하기"를 참고하세요.
           </p>
         )}
+
+        <div className="setup-options">
+          <button
+            className="setup-card"
+            onClick={() => {
+              if (!user) { setLoginNotice('온라인 플레이는 로그인 후에 쓸 수 있어요.'); setStep('account'); return; }
+              setStep('online-friend-menu');
+            }}
+          >
+            <Users size={22} strokeWidth={1.6} />
+            <div className="setup-card-title">친구와 플레이</div>
+            <div className="setup-card-desc">방을 만들거나, 받은 코드로 참가·관전해요.</div>
+          </button>
+
+          <button className="setup-card" disabled={matchmaking} onClick={handleQuickMatch}>
+            <Dice5 size={22} strokeWidth={1.6} />
+            <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : '랜덤 매칭'}</div>
+            <div className="setup-card-desc">아무나와 바로 매칭돼요. 코드 없이 즉시 시작해요.</div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'online-friend-menu') {
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">친구와 온라인으로 플레이해요</p>
+
+        <button className="setup-back" onClick={() => setStep('online-menu')}>
+          <ChevronLeft size={16} /> 뒤로
+        </button>
 
         <div className="setup-options">
           <button className="setup-card" onClick={() => setStep('online-host-color')}>
@@ -1299,12 +1334,6 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               원래 쓰던 기기로 같은 코드를 다시 입력하면 내 색으로 재접속돼요.
             </div>
           </button>
-
-          <button className="setup-card" disabled={matchmaking} onClick={handleQuickMatch}>
-            <Dice5 size={22} strokeWidth={1.6} />
-            <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : '온라인 대국'}</div>
-            <div className="setup-card-desc">아무나와 바로 매칭돼요. 코드 없이 즉시 시작해요.</div>
-          </button>
         </div>
       </div>
     );
@@ -1318,7 +1347,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         </header>
         <p className="subtitle">어느 색으로 플레이할까요?</p>
 
-        <button className="setup-back" onClick={() => setStep('online-menu')}>
+        <button className="setup-back" onClick={() => setStep('online-friend-menu')}>
           <ChevronLeft size={16} /> 뒤로
         </button>
 
@@ -1344,7 +1373,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         </header>
         <p className="subtitle">받은 6자리 코드를 입력하세요</p>
 
-        <button className="setup-back" onClick={() => setStep('online-menu')}>
+        <button className="setup-back" onClick={() => setStep('online-friend-menu')}>
           <ChevronLeft size={16} /> 뒤로
         </button>
 
