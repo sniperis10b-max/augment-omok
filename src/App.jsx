@@ -20,12 +20,13 @@ import { sounds, setSoundEnabled } from './sound.js';
 import { loadRecords, saveRecord, deleteRecord } from './records.js';
 import {
   watchAuthState, signInWithGoogle, signUpWithEmail, signInWithEmail,
-  resendVerificationEmail, signOutUser, mapAuthError, updateUserProfile,
+  resendVerificationEmail, signOutUser, mapAuthError, updateUserProfile, deleteAccount,
 } from './auth.js';
 import {
   upsertUserProfile, sendFriendRequestByEmail, subscribeFriendRequests, acceptFriendRequest,
   declineFriendRequest, subscribeFriends, inviteFriendToGame, subscribeInvites, clearInvite,
-  quickMatch, cancelQuickMatch,
+  quickMatch, cancelQuickMatch, setupPresence, subscribeUserStatus, recordGameResult,
+  subscribeStats, deleteUserData,
 } from './social.js';
 
 const ICONS = {
@@ -253,6 +254,18 @@ export default function App() {
     }
   }, [user?.uid, user?.displayName, user?.photoURL]);
 
+  // 로그인해있는 동안 접속 상태(온라인/오프라인)를 자동으로 관리
+  useEffect(() => {
+    if (!user || !isFirebaseConfigured()) return undefined;
+    let unsub;
+    try {
+      unsub = setupPresence(user.uid);
+    } catch {
+      unsub = () => {};
+    }
+    return unsub;
+  }, [user?.uid]);
+
   // 버튼을 누를 때마다 짧은 탁 소리를 내요
   useEffect(() => {
     const handler = (e) => {
@@ -345,10 +358,21 @@ export default function App() {
         mode: modeLabel,
         moves: state.history,
       });
+
+      // 로그인해있고 "내 색"이 분명한 경우(AI 대전, 온라인 대전) 개인 전적도 기록해요
+      if (user && isFirebaseConfigured()) {
+        let myColor = null;
+        if (online && online.role !== 'spectator') myColor = online.localColor;
+        else if (state.aiPlayer) myColor = otherPlayer(state.aiPlayer);
+        if (myColor) {
+          const result = state.winner === null ? 'draw' : state.winner === myColor ? 'win' : 'loss';
+          recordGameResult(user.uid, result).catch(() => {});
+        }
+      }
     } else if (state.phase !== 'over') {
       recordSavedRef.current = false;
     }
-  }, [state.phase, state.winner, state.aiPlayer, state.aiDifficulty, state.history, online]);
+  }, [state.phase, state.winner, state.aiPlayer, state.aiDifficulty, state.history, online, user]);
 
   function handleReset() {
     if (online) {
@@ -444,6 +468,36 @@ function useAIDriver(state, dispatch, online) {
   }, [state, dispatch, online]);
 }
 
+function FriendRow({ friend, busy, onInvite }) {
+  const [status, setStatus] = useState({ state: 'offline' });
+
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return undefined;
+    const unsub = subscribeUserStatus(friend.uid, setStatus);
+    return unsub;
+  }, [friend.uid]);
+
+  const isOnline = status.state === 'online';
+
+  return (
+    <div className="friend-row">
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          {friend.photoURL ? (
+            <img src={friend.photoURL} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+          ) : (
+            <UserCircle size={24} />
+          )}
+          <span className={`presence-dot ${isOnline ? 'presence-online' : 'presence-offline'}`} />
+        </span>
+        {friend.displayName}
+        <span className="setup-card-desc" style={{ fontSize: 11 }}>{isOnline ? '온라인' : '오프라인'}</span>
+      </span>
+      <button className="reset-btn" disabled={busy} onClick={onInvite}>대국 초대</button>
+    </div>
+  );
+}
+
 function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
@@ -471,6 +525,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [friendEmail, setFriendEmail] = useState('');
   const [friendNotice, setFriendNotice] = useState('');
   const [matchmaking, setMatchmaking] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0 });
   const [loginNotice, setLoginNotice] = useState('');
 
   useEffect(() => {
@@ -479,6 +537,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     const unsub2 = subscribeFriends(user.uid, setFriendsList);
     const unsub3 = subscribeInvites(user.uid, setInvites);
     return () => { unsub1(); unsub2(); unsub3(); };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user || !isFirebaseConfigured()) return undefined;
+    const unsub = subscribeStats(user.uid, setStats);
+    return unsub;
   }, [user?.uid]);
 
   async function handleCreateRoom(hostColor) {
@@ -778,19 +842,52 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <div className="tutorial-title">내 친구 ({friendsList.length})</div>
           {friendsList.length === 0 && <p className="setup-card-desc">아직 친구가 없어요.</p>}
           {friendsList.map((f) => (
-            <div key={f.uid} className="friend-row">
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {f.photoURL ? (
-                  <img src={f.photoURL} alt="" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <UserCircle size={24} />
-                )}
-                {f.displayName}
-              </span>
-              <button className="reset-btn" disabled={busy} onClick={() => handleInviteFriend(f.uid)}>대국 초대</button>
-            </div>
+            <FriendRow key={f.uid} friend={f} busy={busy} onInvite={() => handleInviteFriend(f.uid)} />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (step === 'stats') {
+    const total = stats.wins + stats.losses + stats.draws;
+    const winRate = total > 0 ? Math.round((stats.wins / total) * 100) : 0;
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">내 전적</p>
+
+        <button className="setup-back" onClick={() => setStep('account')}>
+          <ChevronLeft size={16} /> 계정으로 돌아가기
+        </button>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">전적 요약</div>
+          <div className="draft-options" style={{ marginBottom: 0 }}>
+            <div className="card-option" style={{ cursor: 'default' }}>
+              <div className="card-name">{stats.wins}승</div>
+            </div>
+            <div className="card-option" style={{ cursor: 'default' }}>
+              <div className="card-name">{stats.losses}패</div>
+            </div>
+            <div className="card-option" style={{ cursor: 'default' }}>
+              <div className="card-name">{stats.draws}무</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">승률</div>
+          <p className="setup-card-desc">
+            총 {total}판 중 {stats.wins}승 — 승률 {winRate}%
+          </p>
+        </div>
+
+        <p className="setup-card-desc">
+          AI 대전과 온라인 대전 결과만 기록돼요. 2인이서 대국은 "내 색"이 명확하지 않아서 전적에 포함되지 않아요.
+        </p>
       </div>
     );
   }
@@ -888,6 +985,25 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       }
     }
 
+    async function handleDeleteAccount() {
+      setBusy(true);
+      setDeleteError('');
+      try {
+        await deleteAccount(deletePassword || undefined);
+        await deleteUserData(user.uid, user.email);
+        setShowDeleteConfirm(false);
+        setStep('mode');
+      } catch (e) {
+        if (e.code === 'auth/requires-recent-login' && !user.isGoogle) {
+          setDeleteError('비밀번호를 입력해주세요.');
+        } else {
+          setDeleteError(mapAuthError(e.code));
+        }
+      } finally {
+        setBusy(false);
+      }
+    }
+
     if (user) {
       return (
         <div className="page">
@@ -923,7 +1039,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             )}
 
             {!editingProfile ? (
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button
                   className="reset-btn"
                   onClick={() => {
@@ -936,6 +1052,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 </button>
                 <button className="reset-btn" onClick={() => signOutUser()}>
                   <LogOut size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> 로그아웃
+                </button>
+                <button className="reset-btn confirm-danger-btn" onClick={() => { setDeleteError(''); setDeletePassword(''); setShowDeleteConfirm(true); }}>
+                  회원 탈퇴
                 </button>
               </div>
             ) : (
@@ -968,9 +1087,38 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           </div>
 
           <div className="setup-links-row">
+            <button className="setup-tutorial-link" onClick={() => setStep('stats')}>
+              <Trophy size={16} /> 내 전적 보기
+            </button>
             <button className="setup-tutorial-link" onClick={() => setStep('terms')}>이용약관</button>
             <button className="setup-tutorial-link" onClick={() => setStep('privacy')}>개인정보처리방침</button>
           </div>
+
+          {showDeleteConfirm && (
+            <div className="card-use-overlay" style={{ pointerEvents: 'auto' }}>
+              <div className="confirm-modal">
+                <div className="confirm-modal-title">정말 탈퇴하시겠습니까?</div>
+                <p className="confirm-modal-desc">
+                  탈퇴하면 프로필, 친구 목록, 전적이 모두 삭제되고 되돌릴 수 없어요.
+                </p>
+                {!user.isGoogle && (
+                  <input
+                    className="join-input"
+                    style={{ letterSpacing: 0, fontSize: 14, textTransform: 'none', width: '100%' }}
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="확인을 위해 비밀번호 입력"
+                  />
+                )}
+                {deleteError && <p className="setup-warning" style={{ marginTop: 8 }}>{deleteError}</p>}
+                <div className="confirm-modal-actions">
+                  <button className="reset-btn" onClick={() => setShowDeleteConfirm(false)}>취소</button>
+                  <button className="reset-btn confirm-danger-btn" disabled={busy} onClick={handleDeleteAccount}>탈퇴하기</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -1882,6 +2030,16 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
     setShowResignConfirm(false);
   }
 
+  function handleRematch() {
+    dispatch({
+      type: 'START_GAME',
+      aiPlayer: state.aiPlayer,
+      difficulty: state.aiDifficulty,
+      timeLimitSec: state.timeLimitSec,
+      cardsPerPlayer: state.draft.order.length / 2,
+    });
+  }
+
   return (
     <div className="page">
       <header className="header">
@@ -1907,13 +2065,18 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
         <span key={state.message} className={`status-text ${gameOver ? 'status-win' : ''}`}>
           {isAITurn ? 'AI가 생각하는 중...' : isOnlineWaiting ? '상대의 차례를 기다리는 중...' : state.message}
         </span>
-        {isSpectator ? (
-          <button className="reset-btn" onClick={onReset}>나가기</button>
-        ) : gameOver ? (
-          <button className="reset-btn" onClick={onReset}>다시 시작</button>
-        ) : (
-          <button className="reset-btn" onClick={() => setShowResignConfirm(true)}>기권</button>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {isSpectator ? (
+            <button className="reset-btn" onClick={onReset}>나가기</button>
+          ) : gameOver ? (
+            <>
+              <button className="reset-btn" onClick={handleRematch}>재대국</button>
+              <button className="reset-btn" onClick={onReset}>다시 시작</button>
+            </>
+          ) : (
+            <button className="reset-btn" onClick={() => setShowResignConfirm(true)}>기권</button>
+          )}
+        </div>
       </div>
 
       {showResignConfirm && (

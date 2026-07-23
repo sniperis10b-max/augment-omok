@@ -3,7 +3,7 @@
 
 import { initializeApp, getApps } from 'firebase/app';
 import {
-  getDatabase, ref, set, get, update, remove, onValue, off, runTransaction, serverTimestamp,
+  getDatabase, ref, set, get, update, remove, onValue, off, runTransaction, onDisconnect, serverTimestamp,
 } from 'firebase/database';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
 import { createRoom } from './network.js';
@@ -197,4 +197,58 @@ export async function cancelQuickMatch(code) {
   const db = getDb();
   const waitingRef = ref(db, 'matchmaking/waiting');
   await runTransaction(waitingRef, (current) => (current && current.code === code ? null : current));
+}
+
+// ---------- 접속 상태(온라인/오프라인) ----------
+// Firebase의 .info/connected + onDisconnect를 이용해, 연결이 끊기면(창을 닫는 등)
+// 자동으로 "오프라인"으로 바뀌게 해요.
+export function setupPresence(uid) {
+  const db = getDb();
+  const statusRef = ref(db, `users/${uid}/status`);
+  const connectedRef = ref(db, '.info/connected');
+  const handler = onValue(connectedRef, (snap) => {
+    if (snap.val() === false) return;
+    onDisconnect(statusRef)
+      .set({ state: 'offline', lastActive: serverTimestamp() })
+      .then(() => set(statusRef, { state: 'online', lastActive: serverTimestamp() }));
+  });
+  return () => off(connectedRef, 'value', handler);
+}
+
+export function subscribeUserStatus(uid, onChange) {
+  const db = getDb();
+  const r = ref(db, `users/${uid}/status`);
+  const handler = (snap) => onChange(snap.val() || { state: 'offline' });
+  onValue(r, handler);
+  return () => off(r, 'value', handler);
+}
+
+// ---------- 개인 전적 ----------
+export async function recordGameResult(uid, result) {
+  // result: 'win' | 'loss' | 'draw'
+  const db = getDb();
+  const field = result === 'win' ? 'wins' : result === 'loss' ? 'losses' : 'draws';
+  await runTransaction(ref(db, `users/${uid}/stats/${field}`), (cur) => (cur || 0) + 1);
+}
+
+export function subscribeStats(uid, onChange) {
+  const db = getDb();
+  const r = ref(db, `users/${uid}/stats`);
+  const handler = (snap) => onChange(snap.val() || { wins: 0, losses: 0, draws: 0 });
+  onValue(r, handler);
+  return () => off(r, 'value', handler);
+}
+
+// ---------- 회원 탈퇴 시 데이터 정리 ----------
+export async function deleteUserData(uid, email) {
+  const db = getDb();
+  const friendsSnap = await get(ref(db, `users/${uid}/friends`));
+  const friends = friendsSnap.val() || {};
+  const updates = {};
+  for (const fuid of Object.keys(friends)) {
+    updates[`users/${fuid}/friends/${uid}`] = null;
+  }
+  updates[`users/${uid}`] = null;
+  if (email) updates[`usersByEmail/${emailKey(email)}`] = null;
+  await update(ref(db), updates);
 }

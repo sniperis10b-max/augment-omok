@@ -12,6 +12,10 @@ import {
   updateProfile,
   onAuthStateChanged,
   signOut as firebaseSignOut,
+  deleteUser,
+  reauthenticateWithPopup,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
 } from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
 
@@ -98,6 +102,29 @@ export async function updateUserProfile({ displayName, photoURL }) {
 export async function signOutUser() {
   const auth = getAuthInstance();
   await firebaseSignOut(auth);
+}
+
+// 회원 탈퇴. 보안상 최근에 로그인하지 않았으면 Firebase가 재인증을 요구해요 —
+// 구글 계정은 팝업으로, 이메일 계정은 비밀번호로 재인증한 뒤 삭제를 재시도해요.
+export async function deleteAccount(password) {
+  const auth = getAuthInstance();
+  const user = auth.currentUser;
+  if (!user) throw new Error('로그인이 필요해요.');
+  const isGoogle = user.providerData.some((p) => p.providerId === 'google.com');
+
+  try {
+    await deleteUser(user);
+  } catch (e) {
+    if (e.code !== 'auth/requires-recent-login') throw e;
+    if (isGoogle) {
+      await reauthenticateWithPopup(user, new GoogleAuthProvider());
+    } else {
+      if (!password) throw e;
+      const cred = EmailAuthProvider.credential(user.email, password);
+      await reauthenticateWithCredential(user, cred);
+    }
+    await deleteUser(user);
+  }
 }
 
 function mapAuthError(code) {

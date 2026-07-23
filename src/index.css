@@ -747,6 +747,24 @@ body {
   border-top: none;
 }
 
+.presence-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+}
+
+.presence-online {
+  background: #3fae52;
+}
+
+.presence-offline {
+  background: #a3a196;
+}
+
 .turn-timer {
   font-size: 13px;
   color: var(--text-secondary);
