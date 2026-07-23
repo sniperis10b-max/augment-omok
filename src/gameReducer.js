@@ -72,7 +72,7 @@ export function createInitialState() {
     lastUsedCard: { [BLACK]: null, [WHITE]: null },
     history: [],
     ruleFlags: { noDoubleThree: false, ignoreDoubleFourOnce: false },
-    buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false },
+    buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
     message: '카드를 뽑는 중이에요.',
     draft: {
@@ -183,11 +183,17 @@ function finishTurnAfterPlacement(state, placingPlayer) {
   }
 
   if (next.buffs.doubleMoveRemaining > 0) {
-    next.buffs = { ...next.buffs, doubleMoveRemaining: next.buffs.doubleMoveRemaining - 1, fourToWinActive: false, bombArmed: false };
-    next.message = '한 번 더 놓을 수 있어요.';
+    next.buffs = {
+      ...next.buffs,
+      doubleMoveRemaining: next.buffs.doubleMoveRemaining - 1,
+      fourToWinActive: false,
+      bombArmed: false,
+      doubleMoveBonusPending: true,
+    };
+    next.message = '한 번 더 놓을 수 있어요. (이번 수로는 승리할 수 없어요)';
     next = withDeadline(endIfStalemated(next));
   } else {
-    next.buffs = { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false };
+    next.buffs = { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false };
     next = advanceTurn(next, placingPlayer);
   }
 
@@ -271,7 +277,8 @@ function tryPlaceStone(state, clickX, clickY) {
   }
 
   const winLength = workingState.buffs.fourToWinActive ? 4 : 5;
-  const won = checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines });
+  const isBonusMove = !!workingState.buffs.doubleMoveBonusPending;
+  const won = !isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines });
 
   if (won) {
     const shieldHolder = otherPlayer(player);
@@ -293,6 +300,12 @@ function tryPlaceStone(state, clickX, clickY) {
     nextState.winner = null;
     nextState.message = '무승부예요.';
     return nextState;
+  }
+
+  if (isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines })) {
+    const res = finishTurnAfterPlacement(nextState, player);
+    res.message = `연속 두기의 두 번째 수로는 승리할 수 없어요! ${res.message}`;
+    return res;
   }
 
   return finishTurnAfterPlacement(nextState, player);
@@ -601,8 +614,13 @@ function activatePlacementBuff(state, cardId) {
   next.activeCard = null;
 
   if (cardId === 'fourToWin') {
-    next.buffs = { ...next.buffs, fourToWinActive: true };
-    next.message = '이번에 4목만 완성해도 승리해요. 돌을 놓으세요.';
+    const success = Math.random() < 0.3;
+    if (success) {
+      next.buffs = { ...next.buffs, fourToWinActive: true };
+      next.message = '카드가 발동했어요! 이번에 4목만 완성해도 승리해요. 돌을 놓으세요.';
+    } else {
+      next.message = '카드가 발동하지 않았어요... (30% 확률) 카드는 소모됐어요.';
+    }
   } else if (cardId === 'allow44') {
     next.ruleFlags = { ...next.ruleFlags, ignoreDoubleFourOnce: true };
     next.message = '이번 수는 4-4 금수가 적용되지 않아요. 돌을 놓으세요.';
@@ -718,7 +736,7 @@ export function gameReducer(state, action) {
       let next = {
         ...state,
         activeCard: null,
-        buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false },
+        buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
       };
       next = advanceTurn(next, player);
       next.message = `${player === BLACK ? '흑' : '백'}이 시간 초과로 턴을 넘겼어요. ${next.message}`;

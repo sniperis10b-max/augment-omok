@@ -9,16 +9,17 @@ import {
   otherPlayer,
   isForbiddenMove,
   checkWin,
+  findOpenThreeFlankCells,
 } from './gameLogic.js';
 
 // 난이도별 조절값. blockChance: 상대 위협을 알아채고 막을 확률.
 // cardUseChance: 여유 있을 때 카드를 섞어 쓸 확률. noise: 수 선택에 섞는 무작위성.
 export const DIFFICULTIES = {
-  easy: { label: '쉬움', blockChance: 0.45, cardUseChance: 0.15, noise: 45 },
-  normal: { label: '보통', blockChance: 0.85, cardUseChance: 0.35, noise: 14 },
-  hard: { label: '어려움', blockChance: 1, cardUseChance: 0.55, noise: 0 },
-  hell: { label: '지옥', blockChance: 1, cardUseChance: 0.6, noise: 0, deepSearch: true, searchWidth: 8, searchDepth: 2 },
-  impossible: { label: '불가능', blockChance: 1, cardUseChance: 0.7, noise: 0, deepSearch: true, searchWidth: 16, searchDepth: 3 },
+  easy: { label: '쉬움', blockChance: 0.6, cardUseChance: 0.25, noise: 30 },
+  normal: { label: '보통', blockChance: 0.95, cardUseChance: 0.5, noise: 8 },
+  hard: { label: '어려움', blockChance: 1, cardUseChance: 0.65, noise: 0, deepSearch: true, searchWidth: 6, searchDepth: 1 },
+  hell: { label: '지옥', blockChance: 1, cardUseChance: 0.75, noise: 0, deepSearch: true, searchWidth: 10, searchDepth: 2 },
+  impossible: { label: '불가능', blockChance: 1, cardUseChance: 0.85, noise: 0, deepSearch: true, searchWidth: 18, searchDepth: 3 },
 };
 
 function inB(size, x, y) {
@@ -92,7 +93,7 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
       if (me === BLACK && isForbiddenMove(board, x, y, BLACK, ruleFlags)) continue;
 
       const attack = scoreCellFor(board, x, y, me);
-      const defense = scoreCellFor(board, x, y, opponent) * 1.05;
+      const defense = scoreCellFor(board, x, y, opponent) * 1.1;
       const centerBias = (1 - (Math.abs(x - center) + Math.abs(y - center)) / size) * 8;
       const randomness = (Math.random() - 0.5) * noise;
       const total = attack + defense + centerBias + randomness;
@@ -217,7 +218,8 @@ function findMostConnectedStone(board, player) {
   return best;
 }
 
-// AI가 자율적으로 판단할 수 있는(단일 대상 이하) 카드 목록과, 각 카드의 대상 계산기
+// AI가 자율적으로 판단할 수 있는(단일 대상 이하) 카드 목록과, 각 카드의 대상 계산기.
+// blockedFn은 barrier/결계 등으로 실제 막힌 칸을 걸러내기 위해 받아요.
 const AI_CARD_HANDLERS = {
   destroy: (board, ai) => {
     const threat = findOpponentWinningCell(board, ai);
@@ -234,16 +236,36 @@ const AI_CARD_HANDLERS = {
     }
     return findMostConnectedStone(board, otherPlayer(ai));
   },
-  barrier: (board, ai) => findOpponentWinningCell(board, ai),
-  freezeCell: (board, ai) => findOpponentWinningCell(board, ai),
+  barrier: (board, ai, blockedFn = () => false) => {
+    const win = findOpponentWinningCell(board, ai);
+    if (win && !blockedFn(win.x, win.y)) return win;
+    const flanks = opponentOpenThreeFlanks(board, ai).filter((c) => board[c.y][c.x] === 0 && !blockedFn(c.x, c.y));
+    return flanks[0] || null;
+  },
+  freezeCell: (board, ai, blockedFn = () => false) => {
+    const win = findOpponentWinningCell(board, ai);
+    if (win && !blockedFn(win.x, win.y)) return win;
+    const flanks = opponentOpenThreeFlanks(board, ai).filter((c) => board[c.y][c.x] === 0 && !blockedFn(c.x, c.y));
+    return flanks[0] || null;
+  },
   corrupt: (board, ai) => findMostConnectedStone(board, otherPlayer(ai)),
   reinforce: (board, ai) => findMostConnectedStone(board, ai),
   sealLine: (board, ai) => findMostConnectedStone(board, otherPlayer(ai)),
-  thornTrap: (board, ai) => chooseBestCell(board, ai, () => false, {}),
-  wildcard: (board, ai) => chooseBestCell(board, ai, () => false, {}),
+  thornTrap: (board, ai, blockedFn = () => false) => chooseBestCell(board, ai, blockedFn, {}),
+  wildcard: (board, ai, blockedFn = () => false) => chooseBestCell(board, ai, blockedFn, {}),
 };
 
 const NO_TARGET_PRIORITY = ['fourToWin', 'bomb', 'doubleMove', 'winShield', 'silence', 'randomSummon'];
+
+// 상대의 열린 삼(다음에 열린 사가 될 수 있는 자리)이 있으면 그 확장 칸들을 반환
+function opponentOpenThreeFlanks(board, aiPlayer) {
+  return findOpenThreeFlankCells(board, otherPlayer(aiPlayer));
+}
+
+// 내 열린 삼이 있으면 그 확장 칸들을 반환 (공격 타이밍 판단용)
+function myOpenThreeFlanks(board, aiPlayer) {
+  return findOpenThreeFlankCells(board, aiPlayer);
+}
 
 // state는 gameReducer의 state 형태를 그대로 받아요 (board, hand, ruleFlags 등)
 export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'normal') {
@@ -257,14 +279,43 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
   if (opponentThreat && Math.random() < blockChance) {
     for (const cardId of ['barrier', 'freezeCell', 'destroy']) {
       if (hand.includes(cardId)) {
-        const target = AI_CARD_HANDLERS[cardId](board, aiPlayer);
+        const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, blockedFn);
         if (target) return { cardId, target };
       }
     }
     if (hand.includes('winShield')) return { cardId: 'winShield' };
   }
 
-  // 2) 여유 있는 상황이면 낮은 확률로 발전 카드를 사용
+  // 2) 상대가 열린 삼(다음다음 수에 못 막는 위협이 될 수 있는 자리)을 만들었으면 미리 막아요
+  if (!opponentThreat) {
+    const flanks = opponentOpenThreeFlanks(board, aiPlayer).filter(
+      (c) => board[c.y][c.x] === 0 && !blockedFn(c.x, c.y)
+    );
+    if (flanks.length > 0 && Math.random() < blockChance) {
+      for (const cardId of ['barrier', 'freezeCell']) {
+        if (hand.includes(cardId)) {
+          return { cardId, target: flanks[0] };
+        }
+      }
+      if (hand.includes('destroy')) {
+        const target = findMostConnectedStone(board, otherPlayer(aiPlayer));
+        if (target) return { cardId: 'destroy', target };
+      }
+    }
+  }
+
+  // 3) 내가 열린 삼을 갖고 있으면(곧 강한 공격 찬스), 공격형 카드를 적극적으로 써요
+  if (!opponentThreat) {
+    const myFlanks = myOpenThreeFlanks(board, aiPlayer);
+    if (myFlanks.length > 0) {
+      const attackCandidates = ['fourToWin', 'doubleMove', 'bomb'].filter((id) => hand.includes(id));
+      if (attackCandidates.length > 0 && Math.random() < Math.min(1, cardUseChance + 0.25)) {
+        return { cardId: attackCandidates[0] };
+      }
+    }
+  }
+
+  // 4) 여유 있는 상황이면 카드를 섞어 사용
   const developCandidates = NO_TARGET_PRIORITY.filter((id) => hand.includes(id));
   const targetedCandidates = ['reinforce', 'corrupt', 'sealLine', 'thornTrap'].filter((id) => hand.includes(id));
 
@@ -274,7 +325,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     }
     if (targetedCandidates.length > 0) {
       const cardId = targetedCandidates[Math.floor(Math.random() * targetedCandidates.length)];
-      const target = AI_CARD_HANDLERS[cardId](board, aiPlayer);
+      const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, blockedFn);
       if (target) return { cardId, target };
     }
   }
@@ -303,10 +354,10 @@ export function pickDraftCard(options) {
   return options[options.length - 1];
 }
 
-export function computeAITarget(cardId, board, aiPlayer) {
+export function computeAITarget(cardId, board, aiPlayer, blockedFn = () => false) {
   const handler = AI_CARD_HANDLERS[cardId];
   if (!handler) return null;
-  return handler(board, aiPlayer);
+  return handler(board, aiPlayer, blockedFn);
 }
 
 export { BOARD_SIZE };
