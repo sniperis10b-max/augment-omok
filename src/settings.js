@@ -3,11 +3,24 @@
 
 const KEY = 'augment-omok-settings';
 
+// "업데이트 소식" 팝업 관련. version을 올릴 때마다 새 소식이 다시 한 번 노출돼요.
+// (사용자가 "다시 보지 않기"를 눌렀어도, 새 버전이 나오면 다시 보여줘요)
+export const LATEST_UPDATE = {
+  version: 2,
+  title: '새로운 업데이트가 있어요!',
+  items: [
+    '새 카드 5종 추가: 연쇄 파괴, 복구, 감시자, 복제, 소용돌이',
+    'AI가 금수(3-3/4-4/장목) 자리를 막으려다 반복해서 실패하던 문제 수정',
+    '파괴 카드가 강화된(보호된) 돌만 계속 노리다 실패하던 문제 수정',
+  ],
+};
+
 const DEFAULTS = {
   theme: 'light', // 'light' | 'dark'
   soundEnabled: true,
   timeLimitSec: 0, // 0 = 제한 없음
   cardsPerPlayer: 3,
+  whatsNewSeenVersion: 0, // 사용자가 "다시 보지 않기"를 누른 마지막 업데이트 버전
 };
 
 export function loadSettings() {

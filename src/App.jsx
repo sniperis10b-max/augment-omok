@@ -6,6 +6,7 @@ import {
   HandMetal, ShieldPlus, CircleDot, VolumeX, Bot, Users, ChevronLeft, Copy, Check, Wifi,
   BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw,
   UserCircle, LogOut, Mail, ShieldQuestion, UserPlus, Bell, Dice5, X as XIcon, Star,
+  Zap, Tornado,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -15,7 +16,7 @@ import {
   createRoom, joinRoom, peekRoom, subscribeRoom, pushGameState, leaveRoom, isFirebaseConfigured,
   sendChatMessage, subscribeChat,
 } from './network.js';
-import { loadSettings, saveSettings } from './settings.js';
+import { loadSettings, saveSettings, LATEST_UPDATE } from './settings.js';
 import { sounds, setSoundEnabled } from './sound.js';
 import { loadRecords, saveRecord, deleteRecord } from './records.js';
 import {
@@ -34,6 +35,7 @@ const ICONS = {
   Minimize2, Trophy, Repeat2, Snowflake, Biohazard, Bomb, Undo2, History, Shuffle,
   Unlock, KeyRound, SeparatorHorizontal, Sprout, ShieldOff, Sparkles, Target, Dices,
   HandMetal, ShieldPlus, CircleDot, VolumeX, Star,
+  Zap, RotateCcw, Eye, Copy, Tornado,
 };
 
 function CardIcon({ name, size = 18 }) {
@@ -195,6 +197,7 @@ export default function App() {
   const [state, dispatch] = useReducer(gameReducer, null, createInitialState);
   const [online, setOnline] = useState(null); // null | { code, localColor, role: 'host'|'guest'|'spectator' }
   const [settings, setSettingsState] = useState(() => loadSettings());
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [user, setUser] = useState(null); // null | { uid, displayName, email, photoURL, emailVerified, isGoogle }
   const pendingLocalRef = useRef(false);
   const gameStartedRef = useRef(false);
@@ -238,6 +241,23 @@ export default function App() {
       return next;
     });
   }, []);
+
+  // 처음 화면(설정/메인 메뉴)에 들어왔고, 아직 이번 업데이트 소식을 안 봤다면 팝업을 띄워요.
+  useEffect(() => {
+    if (state.phase === 'setup' && settings.whatsNewSeenVersion < LATEST_UPDATE.version) {
+      setShowWhatsNew(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function dismissWhatsNew() {
+    setShowWhatsNew(false);
+  }
+
+  function dismissWhatsNewForever() {
+    updateSettings({ whatsNewSeenVersion: LATEST_UPDATE.version });
+    setShowWhatsNew(false);
+  }
 
   // 테마 적용
   useEffect(() => {
@@ -413,6 +433,25 @@ export default function App() {
   return (
     <>
       {screen}
+      {showWhatsNew && (
+        <div className="card-use-overlay" style={{ pointerEvents: 'auto' }}>
+          <div className="whats-new-modal">
+            <button className="whats-new-close" onClick={dismissWhatsNew} aria-label="닫기">
+              <XIcon size={18} />
+            </button>
+            <div className="whats-new-title">{LATEST_UPDATE.title}</div>
+            <ul className="whats-new-list">
+              {LATEST_UPDATE.items.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+            <div className="whats-new-actions">
+              <button className="reset-btn" onClick={dismissWhatsNewForever}>다시 보지 않기</button>
+              <button className="reset-btn whats-new-confirm-btn" onClick={dismissWhatsNew}>확인</button>
+            </div>
+          </div>
+        </div>
+      )}
       {cardOverlay && (
         <div className="card-use-overlay">
           <div
@@ -525,6 +564,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [tutorialPage, setTutorialPage] = useState(0);
   const [records, setRecords] = useState([]);
   const [selectedRecord, setSelectedRecord] = useState(null);
+  const [contactMessage, setContactMessage] = useState('');
+  const [contactSent, setContactSent] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'signup'
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -768,6 +810,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <button className="setup-tutorial-link" onClick={() => { setRecords(loadRecords()); setStep('records'); }}>
             <History size={16} /> 기보 보기
           </button>
+          <button className="setup-tutorial-link" onClick={() => setStep('contact')}>
+            <Mail size={16} /> 문의하기
+          </button>
         </div>
       </div>
     );
@@ -904,6 +949,72 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <p className="setup-card-desc">
           AI 대전과 온라인 대전 결과만 기록돼요. 2인이서 대국은 "내 색"이 명확하지 않아서 전적에 포함되지 않아요.
         </p>
+      </div>
+    );
+  }
+
+  if (step === 'contact') {
+    const CONTACT_EMAIL = 'uniqueleru12@naver.com';
+
+    function handleSendContact() {
+      const subject = encodeURIComponent('[증강 오목] 문의');
+      const body = encodeURIComponent(contactMessage || '(내용을 입력하지 않았어요)');
+      window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+      setContactSent(true);
+    }
+
+    function handleCopyEmail() {
+      navigator.clipboard?.writeText(CONTACT_EMAIL).then(() => {
+        setEmailCopied(true);
+        setTimeout(() => setEmailCopied(false), 1500);
+      });
+    }
+
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">문의하기</p>
+
+        <button className="setup-back" onClick={() => { setStep('mode'); setContactSent(false); }}>
+          <ChevronLeft size={16} /> 메인으로 돌아가기
+        </button>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">궁금한 점이나 버그, 건의사항을 남겨주세요</div>
+          <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+            아래에 내용을 적고 "메일로 보내기"를 누르면, 이 기기에 설정된 메일 앱이 열리면서
+            <b> {CONTACT_EMAIL}</b> 주소로 보낼 준비가 돼요. 메일 앱이 안 열리면 주소를 복사해서
+            직접 보내주셔도 돼요.
+          </p>
+          <textarea
+            className="join-input"
+            style={{
+              width: '100%', minHeight: 120, letterSpacing: 0, fontSize: 14,
+              textTransform: 'none', resize: 'vertical', fontFamily: 'inherit',
+              textAlign: 'left', fontWeight: 400, lineHeight: 1.5,
+            }}
+            value={contactMessage}
+            onChange={(e) => setContactMessage(e.target.value)}
+            placeholder="예) 특정 카드 사용 시 화면이 멈춰요, 이런 기능이 있었으면 좋겠어요 등"
+          />
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+            <button className="reset-btn whats-new-confirm-btn" onClick={handleSendContact}>
+              <Mail size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> 메일로 보내기
+            </button>
+            <button className="reset-btn" onClick={handleCopyEmail}>
+              {emailCopied ? '복사됨!' : `${CONTACT_EMAIL} 복사`}
+            </button>
+          </div>
+
+          {contactSent && (
+            <p className="setup-card-desc" style={{ marginTop: 10 }}>
+              메일 앱을 열었어요. 만약 안 열렸다면 위 주소를 복사해서 직접 메일을 보내주세요.
+            </p>
+          )}
+        </div>
       </div>
     );
   }

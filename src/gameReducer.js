@@ -18,6 +18,7 @@ const STANDALONE = new Set([
   'timeReset', 'chaosShift', 'release33',
   'thornTrap', 'comboBlock', 'randomSummon', 'provoke', 'confuse', 'steal',
   'winShield', 'wildcard', 'silence', 'miracle',
+  'destroyChain', 'restore', 'watcher', 'duplicate', 'vortex',
 ]);
 const PLACEMENT_BUFF = new Set(['fourToWin', 'allow44', 'doubleMove', 'bomb']);
 
@@ -28,6 +29,7 @@ const FREE_ACTION = new Set([
   'destroy', 'corrupt', 'moveStone', 'freezeCell', 'ward', 'sealLine',
   'thornTrap', 'comboBlock', 'randomSummon', 'provoke', 'confuse', 'steal',
   'winShield', 'wildcard', 'silence',
+  'watcher', 'duplicate',
 ]);
 
 const key = (x, y) => `${x},${y}`;
@@ -67,6 +69,8 @@ export function createInitialState() {
     forcedZone: null,
     confusion: null,
     winShield: { [BLACK]: false, [WHITE]: false },
+    watcherActive: { [BLACK]: false, [WHITE]: false },
+    stoneLossLog: [],
     silencedTurns: { [BLACK]: 0, [WHITE]: 0 },
     skipNextTurn: { [BLACK]: false, [WHITE]: false },
     lastUsedCard: { [BLACK]: null, [WHITE]: null },
@@ -330,12 +334,78 @@ function resolveTargetedEffect(state, cardId, targets) {
     case 'destroy': {
       const [t] = targets;
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
+      const defender = otherPlayer(player);
+      if (next.watcherActive[defender]) {
+        next.watcherActive = { ...next.watcherActive, [defender]: false };
+        next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 파괴 효과를 무효화했어요!`;
+        break;
+      }
+      next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = 0;
+      break;
+    }
+    case 'destroyChain': {
+      const [t] = targets;
+      if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
+      const defender = otherPlayer(player);
+      if (next.watcherActive[defender]) {
+        next.watcherActive = { ...next.watcherActive, [defender]: false };
+        next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 연쇄 파괴를 무효화했어요!`;
+        break;
+      }
+      const removed = [{ x: t.x, y: t.y }];
+      next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
+      board[t.y][t.x] = 0;
+      const size = board.length;
+      outer: for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = t.x + dx, ny = t.y + dy;
+          if (!inBounds(board, nx, ny)) continue;
+          if (board[ny][nx] !== defender) continue;
+          if (next.protectedStones[key(nx, ny)]) continue;
+          next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: nx, y: ny, ply: next.ply }];
+          board[ny][nx] = 0;
+          removed.push({ x: nx, y: ny });
+          break outer;
+        }
+      }
+      if (removed.length > 1) {
+        next.message = '연쇄 파괴로 상대 돌 2개가 사라졌어요!';
+      } else {
+        next.message = '인접한 상대 돌이 없어서 1개만 파괴됐어요.';
+      }
+      break;
+    }
+    case 'vortex': {
+      const [t] = targets;
+      const cells = [];
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = t.x + dx, ny = t.y + dy;
+          if (!inBounds(board, nx, ny)) continue;
+          if (board[ny][nx] !== 0) cells.push({ x: nx, y: ny });
+        }
+      }
+      const values = cells.map((c) => board[c.y][c.x]);
+      for (let i = values.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [values[i], values[j]] = [values[j], values[i]];
+      }
+      cells.forEach((c, i) => { board[c.y][c.x] = values[i]; });
+      next.message = '소용돌이가 돌들을 뒤섞었어요!';
       break;
     }
     case 'alchemy': {
       const [t] = targets;
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 변환할 수 없어요.'; return next; }
+      const defender = otherPlayer(player);
+      if (next.watcherActive[defender]) {
+        next.watcherActive = { ...next.watcherActive, [defender]: false };
+        next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 연금술 효과를 무효화했어요!`;
+        break;
+      }
+      next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = player;
       break;
     }
@@ -437,7 +507,7 @@ function resolveTargetedEffect(state, cardId, targets) {
     next.lastMove = { x: targets[0].x, y: targets[0].y };
   }
 
-  const boardChanged = ['destroy', 'alchemy', 'swap', 'overwrite', 'moveStone', 'wildcard'].includes(cardId);
+  const boardChanged = ['destroy', 'destroyChain', 'alchemy', 'swap', 'overwrite', 'moveStone', 'wildcard', 'vortex'].includes(cardId);
   if (boardChanged) {
     next.history = [...next.history, board];
   }
@@ -588,6 +658,43 @@ function resolveStandaloneNoTarget(state, cardId) {
       next.miracleResult = Math.random() < 0.01 ? 'success' : 'fail';
       break;
     }
+    case 'restore': {
+      const RECENT_PLY_WINDOW = 5;
+      const candidates = next.stoneLossLog.filter(
+        (entry) => entry.owner === player
+          && next.ply - entry.ply <= RECENT_PLY_WINDOW
+          && board[entry.y][entry.x] === 0
+      );
+      if (candidates.length > 0) {
+        const pick = candidates[candidates.length - 1]; // 가장 최근 것
+        board[pick.y][pick.x] = player;
+        next.stoneLossLog = next.stoneLossLog.filter((e) => e !== pick);
+        next.message = '잃어버렸던 돌 1개를 되돌렸어요.';
+      } else {
+        next.message = '최근 5수 안에 되돌릴 수 있는 돌이 없어요. 카드는 소모됐어요.';
+      }
+      break;
+    }
+    case 'watcher': {
+      next.watcherActive = { ...next.watcherActive, [player]: true };
+      next.message = '감시자를 발동했어요. 다음에 상대가 파괴/연금술을 쓰면 무효화돼요.';
+      break;
+    }
+    case 'duplicate': {
+      const otherCards = next.draft.hands[player].filter((id) => id !== 'duplicate');
+      if (otherCards.length > 0) {
+        const pick = otherCards[Math.floor(Math.random() * otherCards.length)];
+        next.draft = {
+          ...next.draft,
+          hands: { ...next.draft.hands, [player]: [...next.draft.hands[player], pick] },
+        };
+        const picked = CARDS.find((c) => c.id === pick);
+        next.message = `'${picked ? picked.name : pick}' 카드를 복제했어요!`;
+      } else {
+        next.message = '복제할 다른 카드가 손에 없어요.';
+      }
+      break;
+    }
     default:
       break;
   }
@@ -596,7 +703,7 @@ function resolveStandaloneNoTarget(state, cardId) {
   next = removeFromHand(next, player, cardId);
   next.activeCard = null;
 
-  const boardChanged = ['undoLast', 'timeReset', 'chaosShift'].includes(cardId);
+  const boardChanged = ['undoLast', 'timeReset', 'chaosShift', 'restore'].includes(cardId);
   if (boardChanged) {
     next.history = [...next.history, board];
   }
@@ -654,6 +761,7 @@ function activatePlacementBuff(state, cardId) {
 
 const TARGET_STEPS = {
   destroy: ['enemyStone'],
+  destroyChain: ['enemyStone'],
   alchemy: ['enemyStone'],
   swap: ['ownStone', 'enemyStone'],
   overwrite: ['anyStoneCell'],
@@ -668,6 +776,7 @@ const TARGET_STEPS = {
   provoke: ['emptyOrAnyCell'],
   confuse: ['emptyOrAnyCell'],
   wildcard: ['emptyCell'],
+  vortex: ['emptyOrAnyCell'],
 };
 
 function cellMatchesStep(state, x, y, step) {

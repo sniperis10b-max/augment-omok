@@ -424,6 +424,83 @@ body {
   animation: stonePop 0.2s ease-out;
 }
 
+.whats-new-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 26px 22px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  animation: cardEnter 0.2s ease-out;
+  max-width: 340px;
+  width: 90%;
+}
+
+.whats-new-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.whats-new-close:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.whats-new-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  padding-right: 20px;
+}
+
+.whats-new-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.whats-new-list li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.whats-new-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.whats-new-actions .reset-btn {
+  flex: 1;
+}
+
+.whats-new-confirm-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.whats-new-confirm-btn:hover {
+  filter: brightness(1.05);
+}
+
 /* 드래프트 화면 */
 .draft-status {
   display: flex;

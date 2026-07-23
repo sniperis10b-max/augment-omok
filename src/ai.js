@@ -366,6 +366,8 @@ const AI_CARD_HANDLERS = {
   thornTrap: (board, ai, blockedFn = () => false) => chooseBestCell(board, otherPlayer(ai), blockedFn, {}),
   wildcard: (board, ai, blockedFn = () => false) => chooseBestCell(board, ai, blockedFn, {}),
 };
+// 연쇄 파괴는 첫 타겟 선정 방식이 파괴와 동일해요 (인접 돌 제거는 게임 로직이 자동으로 처리).
+AI_CARD_HANDLERS.destroyChain = AI_CARD_HANDLERS.destroy;
 
 // 상대의 열린 삼(다음에 열린 사가 될 수 있는 자리)이 있으면 그 확장 칸들을 반환
 function opponentOpenThreeFlanks(board, aiPlayer) {
@@ -393,7 +395,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
 
   // 1) 상대가 바로 이길 수 있는 상황이면, 막을 수 있는 카드부터 우선 사용 (난이도에 따라 놓칠 수도 있음)
   if (opponentThreat && Math.random() < blockChance) {
-    for (const cardId of ['barrier', 'freezeCell', 'destroy']) {
+    for (const cardId of ['barrier', 'freezeCell', 'destroy', 'destroyChain']) {
       if (hand.includes(cardId)) {
         const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, blockedFn, protectedStones);
         if (target) return { cardId, target };
@@ -408,9 +410,9 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     for (const cardId of ['barrier', 'freezeCell']) {
       if (hand.includes(cardId)) return { cardId, target: forcingCell };
     }
-    if (hand.includes('destroy')) {
+    if (hand.includes('destroy') || hand.includes('destroyChain')) {
       const target = findMostConnectedStone(board, otherPlayer(aiPlayer), protectedStones);
-      if (target) return { cardId: 'destroy', target };
+      if (target) return { cardId: hand.includes('destroy') ? 'destroy' : 'destroyChain', target };
     }
   }
 
@@ -421,9 +423,9 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
         return { cardId, target: urgentFlanks[0] };
       }
     }
-    if (hand.includes('destroy')) {
+    if (hand.includes('destroy') || hand.includes('destroyChain')) {
       const target = findMostConnectedStone(board, otherPlayer(aiPlayer), protectedStones);
-      if (target) return { cardId: 'destroy', target };
+      if (target) return { cardId: hand.includes('destroy') ? 'destroy' : 'destroyChain', target };
     }
   }
 
@@ -485,6 +487,7 @@ const DRAFT_WEIGHT = {
   randomSummon: 5, swap: 4, overwrite: 4, ward: 5, allow44: 4,
   release33: 4, shrinkBoard: 3, undoLast: 4, timeReset: 3, chaosShift: 2,
   provoke: 3, confuse: 3, steal: 4, comboBlock: 5, miracle: 2,
+  destroyChain: 6, restore: 5, watcher: 6, duplicate: 5, vortex: 3,
 };
 
 export function pickDraftCard(options) {

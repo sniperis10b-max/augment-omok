@@ -39,6 +39,11 @@ export const CARDS = [
   { id: 'wildcard', name: '와일드카드', desc: '흑과 백 모두로 인정되는 중립 돌을 빈 칸 1개에 설치해요.', targetType: 'emptyCell', icon: 'CircleDot' },
   { id: 'silence', name: '침묵', desc: '상대는 다음 2번의 턴 동안 카드를 사용할 수 없어요.', targetType: 'none', icon: 'VolumeX' },
   { id: 'miracle', name: '기적', desc: '1% 확률로 즉시 승리해요. 실패해도 카드는 소모되고 턴이 넘어가요.', targetType: 'none', icon: 'Star' },
+  { id: 'destroyChain', name: '연쇄 파괴', desc: '지정한 상대 돌 1개와, 그 돌에 바로 붙어있는 상대 돌 1개까지 최대 2개를 함께 제거해요. 강화된 돌은 대상이 되지 않아요.', targetType: 'enemyStone', icon: 'Zap' },
+  { id: 'restore', name: '복구', desc: '최근 5수 안에 파괴되거나 상대 돌로 바뀐 내 돌 1개를, 그 자리가 비어있다면 원래대로 되돌려요.', targetType: 'none', icon: 'RotateCcw' },
+  { id: 'watcher', name: '감시자', desc: '발동해두면, 상대가 다음에 나에게 파괴나 연금술 카드를 쓸 때 그 효과를 1회 무효화해요.', targetType: 'none', icon: 'Eye' },
+  { id: 'duplicate', name: '복제', desc: '지금 내 손에 있는 카드 중 하나를 무작위로 복제해서 1장 더 얻어요.', targetType: 'none', icon: 'Copy' },
+  { id: 'vortex', name: '소용돌이', desc: '지정한 칸을 중심으로 3x3 범위 안의 모든 돌(내 것, 상대 것 상관없이)의 위치를 무작위로 뒤섞어요.', targetType: 'emptyOrAnyCell', icon: 'Tornado' },
 ];
 
 export function getCardById(id) {
