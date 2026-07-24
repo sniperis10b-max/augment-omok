@@ -55,6 +55,14 @@ function bumpProbTally(next, player, success) {
   };
 }
 
+// 업적 집계용: defender(감시자를 발동해둔 쪽)가 상대의 파괴/연금술을 몇 번 무효화했는지 누적해요.
+function bumpWatcherBlock(next, defender) {
+  next.watcherBlockCount = {
+    ...next.watcherBlockCount,
+    [defender]: (next.watcherBlockCount?.[defender] || 0) + 1,
+  };
+}
+
 function isBlocked(state, x, y) {
   const k = key(x, y);
   const expire = state.blockedCells[k];
@@ -99,6 +107,7 @@ export function createInitialState() {
     markedStones: {},
     stoneLossLog: [],
     stoneDestroyCount: { [BLACK]: 0, [WHITE]: 0 },
+    watcherBlockCount: { [BLACK]: 0, [WHITE]: 0 },
     probCardTally: {
       [BLACK]: { success: 0, fail: 0 },
       [WHITE]: { success: 0, fail: 0 },
@@ -416,6 +425,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       if (success) {
         if (next.watcherActive[defender]) {
           next.watcherActive = { ...next.watcherActive, [defender]: false };
+          bumpWatcherBlock(next, defender);
           next.message = `동전 던지기 성공! 하지만 ${defender === BLACK ? '흑' : '백'}의 감시자가 무효화했어요.`;
         } else {
           board[t.y][t.x] = 0;
@@ -433,6 +443,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       const defender = otherPlayer(player);
       if (next.watcherActive[defender]) {
         next.watcherActive = { ...next.watcherActive, [defender]: false };
+        bumpWatcherBlock(next, defender);
         next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 파괴 효과를 무효화했어요!`;
         break;
       }
@@ -447,6 +458,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       const defender = otherPlayer(player);
       if (next.watcherActive[defender]) {
         next.watcherActive = { ...next.watcherActive, [defender]: false };
+        bumpWatcherBlock(next, defender);
         next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 연쇄 파괴를 무효화했어요!`;
         break;
       }
@@ -501,6 +513,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       const defender = otherPlayer(player);
       if (next.watcherActive[defender]) {
         next.watcherActive = { ...next.watcherActive, [defender]: false };
+        bumpWatcherBlock(next, defender);
         next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 연금술 효과를 무효화했어요!`;
         break;
       }

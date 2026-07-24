@@ -54,17 +54,30 @@ export const TITLES = [
   { id: 'miracleWorker', name: '기적의 주인공', desc: "'기적' 카드(1%) 성공", category: '카드' },
   { id: 'gambler', name: '도박사', desc: "'동전 던지기' 카드 100회 사용", category: '카드' },
   { id: 'penniless', name: '무일푼', desc: '손패가 0장인 상태로 게임을 마침 (2인 대국은 포함되지 않아요)', category: '카드' },
+  { id: 'watcherEye', name: '감시의 눈', desc: "'감시자' 카드로 상대 효과를 5번 무효화", category: '카드' },
+  { id: 'purifier', name: '정화자', desc: "'정화' 카드를 10회 사용", category: '카드' },
+  { id: 'tradeMaster', name: '거래의 달인', desc: "'거래' 카드를 20회 사용", category: '카드' },
 
   // 온라인/소셜
   { id: 'beginner', name: '입문자', desc: '온라인 대전 첫 판 완료', category: '소셜' },
   { id: 'socialite', name: '인맥왕', desc: '친구 10명 추가', category: '소셜' },
   { id: 'backseat', name: '훈수충', desc: '관전 중 채팅 10회 전송', category: '소셜' },
   { id: 'contributor', name: '기여자', desc: '문의하기로 피드백 전달', category: '소셜' },
+  { id: 'inviter', name: '초대장', desc: '친구를 대국에 5번 초대', category: '소셜' },
+  { id: 'streakLogin', name: '연속 접속', desc: '7일 연속으로 접속', category: '소셜' },
 
   // 스타일
   { id: 'pacifist', name: '평화주의자', desc: '무승부 제안으로 게임을 5번 성사 (온라인 대전 전용)', category: '스타일' },
   { id: 'blackMaster', name: '선공의 달인', desc: '흑으로 20승 (2인 대국은 포함되지 않아요)', category: '스타일' },
   { id: 'whiteMaster', name: '후공의 달인', desc: '백으로 20승 (2인 대국은 포함되지 않아요)', category: '스타일' },
+  { id: 'stormStreak', name: '폭풍 연승', desc: '온라인 대전 5연승', category: '스타일' },
+  { id: 'eternalStreak', name: '불멸의 연승', desc: '온라인 대전 10연승', category: '스타일' },
+  { id: 'flawlessVictory', name: '완벽한 승부', desc: '온라인 대전에서 카드를 하나도 안 쓰고 승리', category: '스타일' },
+  { id: 'longGameMaster', name: '장기전의 신', desc: '100수 이상 진행된 대국에서 승리 (2인 대국은 포함되지 않아요)', category: '스타일' },
+  { id: 'fullHouse', name: '풀 하우스', desc: '판이 90% 이상 찬 뒤에 승리 (2인 대국은 포함되지 않아요)', category: '스타일' },
+
+  // 승리
+  { id: 'aiSlayer', name: 'AI 학살자', desc: "최고 난이도('불가능') AI를 10번 이김", category: '승리' },
 
   // 특별 (자동 해금)
   { id: 'developer', name: '개발자', desc: '이 게임을 만든 사람에게 자동으로 주어지는 칭호', category: '특별' },
@@ -98,6 +111,14 @@ const SIMPLE_THRESHOLDS = {
   pacifist: 5,
   blackMaster: 20,
   whiteMaster: 20,
+  watcherEye: 5,
+  purifier: 10,
+  tradeMaster: 20,
+  inviter: 5,
+  streakLogin: 7,
+  stormStreak: 5,
+  eternalStreak: 10,
+  aiSlayer: 10,
 };
 
 export function checkSimpleThreshold(titleId, value) {
@@ -126,6 +147,31 @@ export async function bumpCounter(uid, field, amount = 1) {
   const db = getDb();
   const result = await runTransaction(ref(db, `users/${uid}/achievementStats/${field}`), (cur) => (cur || 0) + amount);
   return result.snapshot.val() || 0;
+}
+
+// 이겼으면 연승 카운터를 1 늘리고, 졌거나 비겼으면 0으로 끊어요. (폭풍 연승/불멸의 연승용)
+export async function updateWinStreak(uid, won) {
+  const db = getDb();
+  const result = await runTransaction(
+    ref(db, `users/${uid}/achievementStats/onlineWinStreak`),
+    (cur) => (won ? (cur || 0) + 1 : 0)
+  );
+  return result.snapshot.val() || 0;
+}
+
+// 하루에 한 번, 로그인할 때마다 호출해요. 어제 접속했으면 연속 기록에 1을 더하고,
+// 오늘 이미 기록했으면 그대로, 그 외(하루 이상 건너뜀)엔 1로 리셋해요. (연속 접속용)
+export async function updateLoginStreak(uid) {
+  const db = getDb();
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const result = await runTransaction(ref(db, `users/${uid}/achievementStats/loginStreak`), (cur) => {
+    if (!cur) return { streak: 1, lastDate: today };
+    if (cur.lastDate === today) return cur;
+    if (cur.lastDate === yesterday) return { streak: (cur.streak || 0) + 1, lastDate: today };
+    return { streak: 1, lastDate: today };
+  });
+  return result.snapshot.val() || { streak: 1, lastDate: today };
 }
 
 // 카드 id를 "사용한 적 있는 카드" 집합에 추가하고, 지금까지 몇 종류를 써봤는지 돌려줘요.

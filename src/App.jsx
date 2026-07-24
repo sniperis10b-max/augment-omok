@@ -37,7 +37,7 @@ import {
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
-  getTitleHolders, revokeAllTitlesByEmail,
+  getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak,
 } from './achievements.js';
 
 const ICONS = {
@@ -283,6 +283,17 @@ export default function App() {
 
   // 카드 사용 기반 업적 집계 (로그인 + AI/온라인 대전에서만 - 2인 대국은 "내 색"이 불분명해서 제외돼요)
   const prevCardTrackRef = useRef({ lastCard: null, destroyCount: 0, probSuccess: 0, probFail: 0 });
+  const prevWatcherBlockRef = useRef(0);
+
+  // 새 대국(드래프트 시작)이 열릴 때마다, 게임별로 누적되는 카운터들의 "이전 값" 기준을 리셋해요.
+  // 안 그러면 직전 판에서 쌓인 값 때문에 이번 판의 증가분이 음수로 계산돼서 누락될 수 있어요.
+  useEffect(() => {
+    if (state.phase === 'draft' && state.draft.currentIndex === 0) {
+      prevCardTrackRef.current = { lastCard: null, destroyCount: 0, probSuccess: 0, probFail: 0 };
+      prevWatcherBlockRef.current = 0;
+    }
+  }, [state.phase, state.draft?.currentIndex]);
+
   useEffect(() => {
     if (!user || !isFirebaseConfigured() || !state.lastUsedCard) return;
     const myColor = online && online.role !== 'spectator'
@@ -312,6 +323,14 @@ export default function App() {
           const newCount = await bumpCounter(user.uid, 'coinFlipUses', 1);
           if (checkSimpleThreshold('gambler', newCount)) unlockAndNotify('gambler');
         }
+        if (cur === 'purify') {
+          const newCount = await bumpCounter(user.uid, 'purifyUses', 1);
+          if (checkSimpleThreshold('purifier', newCount)) unlockAndNotify('purifier');
+        }
+        if (cur === 'trade') {
+          const newCount = await bumpCounter(user.uid, 'tradeUses', 1);
+          if (checkSimpleThreshold('tradeMaster', newCount)) unlockAndNotify('tradeMaster');
+        }
 
         if (destroyDelta > 0) {
           const newTotal = await bumpCounter(user.uid, 'destroyKills', destroyDelta);
@@ -333,6 +352,24 @@ export default function App() {
       }
     })();
   }, [state.lastUsedCard, state.stoneDestroyCount, state.probCardTally, user, online, state.aiPlayer]);
+
+  // 감시자로 상대 효과를 무효화한 횟수 집계 (내 카드를 쓴 시점이 아니라, 상대가 막힌 시점에 반영돼요)
+  useEffect(() => {
+    if (!user || !isFirebaseConfigured()) return;
+    const myColor = online && online.role !== 'spectator'
+      ? online.localColor
+      : state.aiPlayer ? otherPlayer(state.aiPlayer) : null;
+    if (!myColor) return;
+
+    const cur = state.watcherBlockCount?.[myColor] || 0;
+    const delta = cur - prevWatcherBlockRef.current;
+    prevWatcherBlockRef.current = cur;
+    if (delta <= 0) return;
+
+    bumpCounter(user.uid, 'watcherBlocks', delta)
+      .then((newTotal) => { if (checkSimpleThreshold('watcherEye', newTotal)) unlockAndNotify('watcherEye'); })
+      .catch(() => {});
+  }, [state.watcherBlockCount, user, online, state.aiPlayer]);
 
   useEffect(() => {
     if (!cardOverlay) return undefined;
@@ -397,6 +434,15 @@ export default function App() {
       setMyRating(null);
     }
   }, [user?.uid, user?.displayName]);
+
+  // 로그인할 때마다 연속 접속일을 갱신해요 (오늘 이미 기록했으면 그대로예요)
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      updateLoginStreak(user.uid)
+        .then((res) => { if (checkSimpleThreshold('streakLogin', res.streak)) unlockAndNotify('streakLogin'); })
+        .catch(() => {});
+    }
+  }, [user?.uid]);
 
   // 로그인하면 지금까지 해금한 칭호와 장착 중인 칭호를 불러와요.
   // 개발자 계정은 모든 칭호(개발자 칭호 포함)를, 보너스 계정은 개발자 칭호를 제외한
@@ -594,6 +640,21 @@ export default function App() {
                   const colorField = myColor === BLACK ? 'blackWins' : 'whiteWins';
                   const newColorWins = await bumpCounter(user.uid, colorField, 1);
                   if (checkSimpleThreshold(colorTitle, newColorWins)) unlockAndNotify(colorTitle);
+
+                  // 장기전의 신: 100수 이상 진행된 대국에서 승리
+                  if (state.ply >= 100) unlockAndNotify('longGameMaster');
+
+                  // 풀 하우스: 판이 90% 이상 찬 뒤 승리
+                  const size = state.board.length;
+                  let stoneCount = 0;
+                  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (state.board[y][x] !== 0) stoneCount++;
+                  if (stoneCount / (size * size) >= 0.9) unlockAndNotify('fullHouse');
+
+                  // AI 학살자: 최고 난이도(불가능) AI를 이김
+                  if (state.aiPlayer && state.aiDifficulty === 'impossible') {
+                    const newAiWins = await bumpCounter(user.uid, 'aiImpossibleWins', 1);
+                    if (checkSimpleThreshold('aiSlayer', newAiWins)) unlockAndNotify('aiSlayer');
+                  }
                 }
 
                 // 손패 0장으로 게임을 마침 (무일푼)
@@ -609,6 +670,16 @@ export default function App() {
                   if (result === 'draw' && state.drawByOffer) {
                     const newPacifist = await bumpCounter(user.uid, 'drawOfferSuccesses', 1);
                     if (checkSimpleThreshold('pacifist', newPacifist)) unlockAndNotify('pacifist');
+                  }
+
+                  // 폭풍 연승 / 불멸의 연승
+                  const newStreak = await updateWinStreak(user.uid, result === 'win');
+                  if (checkSimpleThreshold('eternalStreak', newStreak)) unlockAndNotify('eternalStreak');
+                  else if (checkSimpleThreshold('stormStreak', newStreak)) unlockAndNotify('stormStreak');
+
+                  // 완벽한 승부: 온라인 대전에서 카드를 하나도 안 쓰고 승리
+                  if (result === 'win' && !state.lastUsedCard[myColor]) {
+                    unlockAndNotify('flawlessVictory');
                   }
                 }
               } catch {
@@ -1010,6 +1081,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     try {
       await inviteFriendToGame(user, friendUid, BLACK, settings.timeLimitSec, settings.cardsPerPlayer);
       setFriendNotice('초대를 보냈어요. 상대가 수락하길 기다려요.');
+      if (isFirebaseConfigured()) {
+        bumpCounter(user.uid, 'invitesSent', 1)
+          .then((count) => { if (checkSimpleThreshold('inviter', count)) unlockAndNotify('inviter'); })
+          .catch(() => {});
+      }
     } catch {
       setFriendNotice('초대를 보내지 못했어요.');
     } finally {
