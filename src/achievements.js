@@ -129,6 +129,46 @@ export function checkSimpleThreshold(titleId, value) {
 
 export const DESTROYER_THRESHOLD = 100;
 
+const DESTROYER_FIELD_MAP = {
+  luckyOne: 'probSuccess',
+  unlucky: 'probFail',
+  gambler: 'coinFlipUses',
+  backseat: 'spectatorChats',
+  pacifist: 'drawOfferSuccesses',
+  blackMaster: 'blackWins',
+  whiteMaster: 'whiteWins',
+  watcherEye: 'watcherBlocks',
+  purifier: 'purifyUses',
+  tradeMaster: 'tradeUses',
+  inviter: 'invitesSent',
+  stormStreak: 'onlineWinStreak',
+  eternalStreak: 'onlineWinStreak',
+  aiSlayer: 'aiImpossibleWins',
+};
+
+function clampProgress(current, target) {
+  const safeCurrent = Math.max(0, current || 0);
+  const pct = target > 0 ? Math.min(100, Math.round((safeCurrent / target) * 100)) : 0;
+  return { current: Math.min(safeCurrent, target), target, pct };
+}
+
+// 칭호 하나의 달성 진행률을 계산해요. stats는 users/{uid}/achievementStats,
+// extra.friendsCount는 친구 목록 길이(인맥왕 전용, 별도 경로에 있어서 따로 넘겨줘요).
+// 숫자로 진행률을 매길 수 없는(달성/미달성만 있는) 칭호는 null을 돌려줘요.
+export function getTitleProgress(titleId, stats = {}, extra = {}) {
+  const winTier = WIN_TIERS.find((t) => t.id === titleId);
+  if (winTier) return clampProgress(stats.wins, winTier.threshold);
+
+  if (titleId === 'socialite') return clampProgress(extra.friendsCount, SIMPLE_THRESHOLDS.socialite);
+  if (titleId === 'streakLogin') return clampProgress(stats.loginStreak?.streak, SIMPLE_THRESHOLDS.streakLogin);
+  if (titleId === 'destroyer') return clampProgress(stats.destroyKills, DESTROYER_THRESHOLD);
+
+  const field = DESTROYER_FIELD_MAP[titleId];
+  if (field) return clampProgress(stats[field], SIMPLE_THRESHOLDS[titleId]);
+
+  return null;
+}
+
 // -------- Firebase 연동 --------
 
 export async function getAchievementData(uid) {

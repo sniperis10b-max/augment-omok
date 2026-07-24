@@ -37,7 +37,7 @@ import {
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
-  getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak,
+  getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak, getTitleProgress,
 } from './achievements.js';
 
 const ICONS = {
@@ -949,11 +949,20 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [expandedTitle, setExpandedTitle] = useState(null);
   const [revokeEmail, setRevokeEmail] = useState('');
   const [revokeStatus, setRevokeStatus] = useState('');
+  const [myStats, setMyStats] = useState({});
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
     getTitleCounts().then(setTitleCounts).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      getAchievementData(user.uid).then(({ stats }) => setMyStats(stats)).catch(() => {});
+    } else {
+      setMyStats({});
+    }
+  }, [user?.uid, myTitles]);
 
   useEffect(() => {
     if (!user || !isFirebaseConfigured()) return undefined;
@@ -1827,6 +1836,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   {TITLES.filter((t) => t.category === category).map((t) => {
                     const unlocked = !!myTitles[t.id];
                     const equipped = equippedTitle === t.id;
+                    const progress = unlocked
+                      ? null
+                      : getTitleProgress(t.id, myStats, { friendsCount: friendsList.length });
                     return (
                       <button
                         key={t.id}
@@ -1839,9 +1851,17 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                       >
                         <span className="title-pick-name">
                           {unlocked ? <Medal size={13} /> : <ShieldQuestion size={13} />} {t.name}
-                          <span className="title-pick-count">{titleCounts[t.id] || 0}명 보유</span>
+                          <span className="title-pick-count">
+                            {unlocked ? '달성 완료' : progress ? `${progress.pct}%` : ''} · {titleCounts[t.id] || 0}명 보유
+                          </span>
                         </span>
                         <span className="title-pick-desc">{t.desc}</span>
+                        {!unlocked && progress && (
+                          <div className="title-progress-track">
+                            <div className="title-progress-fill" style={{ width: `${progress.pct}%` }} />
+                            <span className="title-progress-label">{progress.current} / {progress.target}</span>
+                          </div>
+                        )}
                       </button>
                     );
                   })}
