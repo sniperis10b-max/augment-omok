@@ -17,9 +17,9 @@ import {
 export const DIFFICULTIES = {
   easy: { label: '쉬움', blockChance: 0.6, cardUseChance: 0.25, noise: 30 },
   normal: { label: '보통', blockChance: 0.95, cardUseChance: 0.5, noise: 8 },
-  hard: { label: '어려움', blockChance: 1, cardUseChance: 0.65, noise: 0, deepSearch: true, searchWidth: 6, searchDepth: 1 },
-  hell: { label: '지옥', blockChance: 1, cardUseChance: 0.75, noise: 0, deepSearch: true, searchWidth: 10, searchDepth: 2 },
-  impossible: { label: '불가능', blockChance: 1, cardUseChance: 0.85, noise: 0, deepSearch: true, searchWidth: 18, searchDepth: 3 },
+  hard: { label: '어려움', blockChance: 1, cardUseChance: 0.65, noise: 0, deepSearch: true, searchWidth: 10, searchDepth: 2 },
+  hell: { label: '지옥', blockChance: 1, cardUseChance: 0.75, noise: 0, deepSearch: true, searchWidth: 16, searchDepth: 3 },
+  impossible: { label: '불가능', blockChance: 1, cardUseChance: 0.85, noise: 0, deepSearch: true, searchWidth: 24, searchDepth: 3 },
 };
 
 function inB(size, x, y) {
@@ -75,8 +75,7 @@ function isUsable(board, blockedFn, x, y) {
 // opponent가 이 칸에 두면 동시에 여러 개의 강한 위협(사 또는 사+삼)을 만들어서,
 // 다음 내 한 수로는 전부 막을 수 없게 되는 자리를 찾아요. 이런 자리는 열린 삼이
 // 되기도 전에 미리 막아야 해요 - 안 그러면 뒤늦게 열린 삼을 막아도 이미 늦어요.
-function findOpponentForcingCell(board, aiPlayer, ruleFlags) {
-  const opponent = otherPlayer(aiPlayer);
+function findForcingCellForPlayer(board, subject, ruleFlags) {
   const size = board.length;
   let best = null;
   let bestSeverity = 0;
@@ -84,15 +83,15 @@ function findOpponentForcingCell(board, aiPlayer, ruleFlags) {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (board[y][x] !== 0) continue;
-      if (opponent === BLACK && isForbiddenMove(board, x, y, BLACK, ruleFlags)) continue;
+      if (subject === BLACK && isForbiddenMove(board, x, y, BLACK, ruleFlags)) continue;
 
       const trial = board.map((row) => row.slice());
-      trial[y][x] = opponent;
+      trial[y][x] = subject;
 
       let fours = 0;
       let openThrees = 0;
       for (const [dx, dy] of DIRECTIONS) {
-        const { count, openEnds } = lineStrength(trial, x, y, dx, dy, opponent);
+        const { count, openEnds } = lineStrength(trial, x, y, dx, dy, subject);
         if (count >= 4 && openEnds >= 1) fours++;
         else if (count === 3 && openEnds === 2) openThrees++;
       }
@@ -107,6 +106,10 @@ function findOpponentForcingCell(board, aiPlayer, ruleFlags) {
   }
 
   return best;
+}
+
+function findOpponentForcingCell(board, aiPlayer, ruleFlags) {
+  return findForcingCellForPlayer(board, otherPlayer(aiPlayer), ruleFlags);
 }
 
 // player가 지금 바로(이 한 수로) 이길 수 있는 칸이 있으면 반환
@@ -132,6 +135,13 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
   // 0) 내가 지금 바로 이길 수 있으면 최우선으로 그 자리를 선택 (다른 어떤 평가보다 우선)
   const myWin = findWinningCellFor(board, me, blockedFn, ruleFlags);
   if (myWin) return myWin;
+
+  // 0.5) 내가 이 한 수로 더블포(사 2개)나 사+삼 조합을 만들 수 있으면, 상대가 한 수로는
+  //      절대 못 막는 강제 승리 찬스예요. 방어보다도 이게 있으면 이걸 최우선으로 둬요.
+  const myForcingCell = findForcingCellForPlayer(board, me, ruleFlags);
+  if (myForcingCell && isUsable(board, blockedFn, myForcingCell.x, myForcingCell.y)) {
+    return myForcingCell;
+  }
 
   // 1) 상대가 바로 이길 수 있는 자리가 있으면, 점수 계산과 무관하게 반드시 막아요
   //    (난이도별 blockChance에 따라 일부러 놓칠 수도 있어요 - 쉬움/보통을 약하게 만드는 요소)
