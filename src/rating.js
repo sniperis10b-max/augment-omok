@@ -90,6 +90,7 @@ export async function fetchLeaderboard(limit = 100) {
       rating: v.rating ?? DEFAULT_RATING,
       isDev: !!v.isDev,
       titleName: v.titleName || null,
+      tierBadgeId: v.tierBadgeId || null,
     }))
     .sort((a, b) => b.rating - a.rating);
 }

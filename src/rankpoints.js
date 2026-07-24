@@ -13,7 +13,7 @@ import {
   getDatabase, ref, get, update, runTransaction, query, orderByChild, limitToLast,
 } from 'firebase/database';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
-import { getLossAmount } from './tiers.js';
+import { getLossAmount, getTierForRating, TIERS } from './tiers.js';
 
 export const DEFAULT_RANK_POINTS = 0;
 const WIN_POINTS = 100;
@@ -80,8 +80,52 @@ export async function fetchRankLeaderboard(limit = 100) {
       points: v.points ?? DEFAULT_RANK_POINTS,
       isDev: !!v.isDev,
       titleName: v.titleName || null,
+      tierBadgeId: v.tierBadgeId || null,
     }))
     .sort((a, b) => b.points - a.points);
+}
+
+// 랭크 포인트가 바뀔 때마다 호출해서, "지금까지 도달한 가장 높은 티어"를 갱신해요.
+// (점수가 떨어져도 한 번 도달한 티어는 기록에 남아요 - 나중에 칭호처럼 골라 달 수 있게)
+export async function updatePeakTier(uid, currentPoints) {
+  const db = getDb();
+  const currentIndex = TIERS.findIndex((t) => t.id === getTierForRating(currentPoints).id);
+  const result = await runTransaction(ref(db, `users/${uid}/peakTierIndex`), (cur) => Math.max(cur || 0, currentIndex));
+  return result.snapshot.val() || 0;
+}
+
+export async function getPeakTierIndex(uid) {
+  const db = getDb();
+  const snap = await get(ref(db, `users/${uid}/peakTierIndex`));
+  return snap.exists() ? snap.val() : 0;
+}
+
+// 관리자(개발자) 전용: 실제로 점수를 안 올려도 최고 티어를 강제로 지정해줘요.
+export async function forceSetPeakTierIndex(uid, index) {
+  const db = getDb();
+  await update(ref(db, `users/${uid}`), { peakTierIndex: index });
+  return index;
+}
+
+// 지금까지 도달한 티어 중 하나를 골라 "티어 뱃지"로 장착해요 (칭호와는 별개, 동시에 달 수 있어요).
+// 순위표/채팅 등 다른 사람도 볼 수 있는 곳에 이름만 별도로 복사해둬요.
+export async function equipTierBadge(uid, tierId, displayName) {
+  const db = getDb();
+  const tier = tierId ? TIERS.find((t) => t.id === tierId) : null;
+  await update(ref(db), {
+    [`users/${uid}/equippedTierId`]: tierId || null,
+    [`leaderboard/${uid}/tierBadgeId`]: tierId || null,
+    [`leaderboard/${uid}/displayName`]: displayName || '이름 없음',
+    [`rankLeaderboard/${uid}/tierBadgeId`]: tierId || null,
+    [`rankLeaderboard/${uid}/displayName`]: displayName || '이름 없음',
+  });
+  return tier;
+}
+
+export async function getEquippedTierId(uid) {
+  const db = getDb();
+  const snap = await get(ref(db, `users/${uid}/equippedTierId`));
+  return snap.exists() ? snap.val() : null;
 }
 
 export { isFirebaseConfigured };

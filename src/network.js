@@ -150,9 +150,9 @@ export async function leaveRoom(code) {
 }
 
 // 채팅 메시지 하나를 방에 추가해요.
-export async function sendChatMessage(code, sender, text, isDev = false, titleName = null) {
+export async function sendChatMessage(code, sender, text, isDev = false, titleName = null, tierBadgeId = null) {
   const db = getDb();
-  await push(ref(db, `rooms/${code}/chat`), { sender, text, at: Date.now(), isDev, titleName });
+  await push(ref(db, `rooms/${code}/chat`), { sender, text, at: Date.now(), isDev, titleName, tierBadgeId });
 }
 
 // 채팅 메시지가 새로 추가될 때마다 호출돼요.

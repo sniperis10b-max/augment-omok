@@ -37,9 +37,10 @@ import {
 } from './rating.js';
 import {
   ensureRankPointsInitialized, getRankPoints, computeRankPointsDelta, applyRankPointsChange,
-  fetchRankLeaderboard, DEFAULT_RANK_POINTS,
+  fetchRankLeaderboard, DEFAULT_RANK_POINTS, updatePeakTier, getPeakTierIndex, equipTierBadge, getEquippedTierId,
+  forceSetPeakTierIndex,
 } from './rankpoints.js';
-import { getTierForRating, getNextTierInfo, TIERS } from './tiers.js';
+import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -89,6 +90,19 @@ function TitleBadge({ titleId, style }) {
   return (
     <span className="dev-badge title-badge" style={style}>
       <Medal size={10} /> {title.name}
+    </span>
+  );
+}
+
+// 지금까지 도달한 티어 중 골라 장착한 "티어 뱃지"를, 칭호와 같은 캡슐 모양으로 보여줘요.
+// tierId가 없거나 존재하지 않는 id면 아무것도 렌더링하지 않아요.
+function TierIconBadge({ tierId, style }) {
+  const tier = tierId ? getTierById(tierId) : null;
+  if (!tier) return null;
+  const Icon = TIER_ICON_COMPONENTS[tier.icon] || Shield;
+  return (
+    <span className="dev-badge tier-icon-badge" style={{ background: tier.color2, ...style }}>
+      <Icon size={10} /> {tier.name}
     </span>
   );
 }
@@ -283,6 +297,8 @@ export default function App() {
   const [lastRatingChange, setLastRatingChange] = useState(null);
   const [myRankPoints, setMyRankPoints] = useState(null);
   const [lastRankChange, setLastRankChange] = useState(null);
+  const [peakTierIndex, setPeakTierIndex] = useState(0);
+  const [equippedTierId, setEquippedTierId] = useState(null);
   const [myTitles, setMyTitles] = useState({}); // { [titleId]: true }
   const [equippedTitle, setEquippedTitle] = useState(null);
   const [titleUnlockToast, setTitleUnlockToast] = useState(null); // { name } | null
@@ -479,9 +495,25 @@ export default function App() {
   // 랭크 포인트(레이팅과는 별개인 랭크전 전용 점수)도 로그인 시 초기화해요.
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
-      ensureRankPointsInitialized(user.uid, user.displayName, isDevAccount(user)).then(setMyRankPoints).catch(() => {});
+      ensureRankPointsInitialized(user.uid, user.displayName, isDevAccount(user))
+        .then(async (points) => {
+          setMyRankPoints(points);
+          if (isDevAccount(user)) {
+            // 개발자 계정은 실제 점수와 무관하게 마스터까지 전부 열어줘요.
+            const peak = await forceSetPeakTierIndex(user.uid, TIERS.length - 1).catch(() => 0);
+            setPeakTierIndex(peak);
+          } else {
+            // 예전부터 랭크 포인트가 있던 계정이면, 최고 도달 티어 기록을 현재 점수 기준으로 한 번 맞춰둬요.
+            const peak = await updatePeakTier(user.uid, points).catch(() => 0);
+            setPeakTierIndex(peak);
+          }
+        })
+        .catch(() => {});
+      getEquippedTierId(user.uid).then(setEquippedTierId).catch(() => {});
     } else {
       setMyRankPoints(null);
+      setPeakTierIndex(0);
+      setEquippedTierId(null);
     }
   }, [user?.uid, user?.displayName]);
 
@@ -784,6 +816,8 @@ export default function App() {
                   const newPoints = await applyRankPointsChange(user.uid, myPointsBefore, delta, user.displayName, isDevAccount(user));
                   setMyRankPoints(newPoints);
                   setLastRankChange({ delta, newPoints });
+                  const peak = await updatePeakTier(user.uid, newPoints).catch(() => null);
+                  if (peak !== null) setPeakTierIndex(peak);
                 }
               } catch {
                 // 랭크 포인트 반영 실패해도 게임 결과 자체엔 영향 없어요
@@ -822,6 +856,9 @@ export default function App() {
         myRating={myRating}
         setMyRating={setMyRating}
         myRankPoints={myRankPoints}
+        peakTierIndex={peakTierIndex}
+        equippedTierId={equippedTierId}
+        setEquippedTierId={setEquippedTierId}
         myTitles={myTitles}
         equippedTitle={equippedTitle}
         setEquippedTitle={setEquippedTitle}
@@ -844,6 +881,7 @@ export default function App() {
         lastRankChange={lastRankChange}
         unlockAndNotify={unlockAndNotify}
         equippedTitle={equippedTitle}
+        equippedTierId={equippedTierId}
       />
     );
   }
@@ -980,7 +1018,7 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -1618,6 +1656,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                       {entry.titleName && (
                         <span className="dev-badge title-badge" style={{ marginLeft: 6 }}><Medal size={10} /> {entry.titleName}</span>
                       )}
+                      <TierIconBadge tierId={entry.tierBadgeId} style={{ marginLeft: 6 }} />
                     </span>
                     <span className="leaderboard-score">{entry.rating}</span>
                   </div>
@@ -1637,6 +1676,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   <span className="leaderboard-name">
                     {user.displayName || '이름 없음'}
                     <TitleBadge titleId={equippedTitle} style={{ marginLeft: 6 }} />
+                    <TierIconBadge tierId={equippedTierId} style={{ marginLeft: 6 }} />
                   </span>
                   <span className="leaderboard-score">{myRating}</span>
                 </div>
@@ -1671,6 +1711,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                       {entry.titleName && (
                         <span className="dev-badge title-badge" style={{ marginLeft: 6 }}><Medal size={10} /> {entry.titleName}</span>
                       )}
+                      <TierIconBadge tierId={entry.tierBadgeId} style={{ marginLeft: 6 }} />
                     </span>
                     <span className="leaderboard-score">{entry.points}</span>
                   </div>
@@ -1691,6 +1732,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   <span className="leaderboard-name">
                     {user.displayName || '이름 없음'}
                     <TitleBadge titleId={equippedTitle} style={{ marginLeft: 6 }} />
+                    <TierIconBadge tierId={equippedTierId} style={{ marginLeft: 6 }} />
                   </span>
                   <span className="leaderboard-score">{myRankPoints}</span>
                 </div>
@@ -1931,6 +1973,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <div className="tutorial-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {user.displayName || '이름 없음'}
                   <TitleBadge titleId={equippedTitle} />
+                  <TierIconBadge tierId={equippedTierId} />
                 </div>
                 <div className="setup-card-desc">{user.email}</div>
               </div>
@@ -2060,6 +2103,44 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="tutorial-card">
+            <div className="tutorial-title" style={{ marginBottom: 4 }}>티어 뱃지</div>
+            <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+              랭크전에서 지금까지 도달했던 티어 중 하나를 골라 칭호처럼 이름 옆에 달 수 있어요.
+              지금 점수가 떨어져도, 한 번 도달한 티어는 계속 고를 수 있어요.
+            </p>
+            <button
+              className={`title-pick ${!equippedTierId ? 'title-pick-active' : ''}`}
+              onClick={async () => {
+                setEquippedTierId(null);
+                await equipTierBadge(user.uid, null, user.displayName).catch(() => {});
+              }}
+            >
+              장착 안 함
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+              {TIERS.map((t, i) => {
+                const reached = i <= peakTierIndex;
+                const equipped = equippedTierId === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    className={`title-pick ${equipped ? 'title-pick-active' : ''} ${!reached ? 'title-pick-locked' : ''}`}
+                    disabled={!reached}
+                    onClick={async () => {
+                      setEquippedTierId(t.id);
+                      await equipTierBadge(user.uid, t.id, user.displayName).catch(() => {});
+                    }}
+                  >
+                    <span className="title-pick-name">
+                      <TierIconBadge tierId={t.id} style={{ opacity: reached ? 1 : 0.5 }} /> {t.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="setup-links-row">
@@ -2963,7 +3044,7 @@ function TurnTimer({ state, dispatch, online }) {
   );
 }
 
-function ChatPanel({ online, user, unlockAndNotify, equippedTitle }) {
+function ChatPanel({ online, user, unlockAndNotify, equippedTitle, equippedTierId }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const listRef = useRef(null);
@@ -2989,7 +3070,14 @@ function ChatPanel({ online, user, unlockAndNotify, equippedTitle }) {
   function send(t) {
     const trimmed = t.trim();
     if (!trimmed) return;
-    sendChatMessage(online.code, myLabel, trimmed, isDevAccount(user), equippedTitle ? getTitleById(equippedTitle)?.name : null).catch(() => {});
+    sendChatMessage(
+      online.code,
+      myLabel,
+      trimmed,
+      isDevAccount(user),
+      equippedTitle ? getTitleById(equippedTitle)?.name : null,
+      equippedTierId || null,
+    ).catch(() => {});
     setText('');
 
     // 훈수충: 관전 중에 채팅을 10번 보내면 해금
@@ -3013,6 +3101,7 @@ function ChatPanel({ online, user, unlockAndNotify, equippedTitle }) {
                 <Medal size={9} /> {m.titleName}
               </span>
             )}
+            <TierIconBadge tierId={m.tierBadgeId} style={{ marginRight: 6 }} />
             {m.text}
           </div>
         ))}
@@ -3039,7 +3128,7 @@ function ChatPanel({ online, user, unlockAndNotify, equippedTitle }) {
   );
 }
 
-function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user, lastRatingChange, lastRankChange, unlockAndNotify, equippedTitle }) {
+function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user, lastRatingChange, lastRankChange, unlockAndNotify, equippedTitle, equippedTierId }) {
   const gameOver = state.phase === 'over';
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
   const isSpectator = online && online.role === 'spectator';
@@ -3221,7 +3310,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
         ))}
       </div>
 
-      {online && <ChatPanel online={online} user={user} unlockAndNotify={unlockAndNotify} equippedTitle={equippedTitle} />}
+      {online && <ChatPanel online={online} user={user} unlockAndNotify={unlockAndNotify} equippedTitle={equippedTitle} equippedTierId={equippedTierId} />}
     </div>
   );
 }
