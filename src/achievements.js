@@ -194,4 +194,45 @@ export async function recomputeTitleCounts() {
   return counts;
 }
 
+// 관리자(개발자) 전용: 칭호별로 누가 갖고 있는지 전체 목록을 만들어요.
+// { [titleId]: [{ uid, displayName, email }] }
+export async function getTitleHolders() {
+  const db = getDb();
+  const snap = await get(ref(db, 'users'));
+  const users = snap.val() || {};
+  const holders = {};
+  for (const uid of Object.keys(users)) {
+    const u = users[uid] || {};
+    const titles = u.titles || {};
+    const displayName = u.profile?.displayName || '(이름 없음)';
+    const email = u.profile?.email || null;
+    for (const titleId of Object.keys(titles)) {
+      if (!titles[titleId]) continue;
+      if (!holders[titleId]) holders[titleId] = [];
+      holders[titleId].push({ uid, displayName, email });
+    }
+  }
+  return holders;
+}
+
+// Realtime Database 키 규칙(., #, $, [, ] 금지)에 맞게 이메일을 안전한 키로 바꿔요.
+function emailToKey(email) {
+  return email.trim().toLowerCase().replace(/[.#$[\]]/g, '_');
+}
+
+// 관리자(개발자) 전용: 특정 이메일 계정의 칭호를 전부 회수하고 장착도 해제해요.
+export async function revokeAllTitlesByEmail(email) {
+  const db = getDb();
+  const uidSnap = await get(ref(db, `usersByEmail/${emailToKey(email)}`));
+  if (!uidSnap.exists()) return { ok: false, reason: 'not-found' };
+  const uid = uidSnap.val();
+  await update(ref(db), {
+    [`users/${uid}/titles`]: null,
+    [`users/${uid}/equippedTitle`]: null,
+    [`leaderboard/${uid}/titleName`]: null,
+  });
+  await recomputeTitleCounts();
+  return { ok: true, uid };
+}
+
 export { isFirebaseConfigured };

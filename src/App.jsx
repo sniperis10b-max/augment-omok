@@ -37,6 +37,7 @@ import {
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
+  getTitleHolders, revokeAllTitlesByEmail,
 } from './achievements.js';
 
 const ICONS = {
@@ -69,7 +70,7 @@ function isDevAccount(user) {
 }
 
 // 개발자는 아니지만, 모든 칭호를 특별히 받는 계정들 ('개발자' 칭호 자체는 안 줘요).
-const BONUS_ALL_TITLES_EMAILS = ['goodlucktoyoul@naver.com'];
+const BONUS_ALL_TITLES_EMAILS = [];
 function hasAllTitlesBonus(user) {
   return !!user?.email && BONUS_ALL_TITLES_EMAILS.includes(user.email.toLowerCase());
 }
@@ -872,6 +873,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState('');
   const [titleCounts, setTitleCounts] = useState({});
+  const [titleHolders, setTitleHolders] = useState(null);
+  const [titleHoldersLoading, setTitleHoldersLoading] = useState(false);
+  const [expandedTitle, setExpandedTitle] = useState(null);
+  const [revokeEmail, setRevokeEmail] = useState('');
+  const [revokeStatus, setRevokeStatus] = useState('');
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
@@ -1271,6 +1277,117 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     );
   }
 
+  if (step === 'admin-titles') {
+    if (!isDevAccount(user)) {
+      return (
+        <div className="page">
+          <header className="header"><h1>증강 오목</h1></header>
+          <p className="subtitle">관리자 화면</p>
+          <p className="setup-card-desc">이 화면은 개발자 계정만 볼 수 있어요.</p>
+          <button className="setup-back" onClick={() => setStep('mode')}>
+            <ChevronLeft size={16} /> 메인으로 돌아가기
+          </button>
+        </div>
+      );
+    }
+
+    async function handleRevoke() {
+      if (!revokeEmail.trim()) return;
+      setRevokeStatus('처리 중...');
+      const res = await revokeAllTitlesByEmail(revokeEmail.trim()).catch(() => ({ ok: false, reason: 'error' }));
+      if (res.ok) {
+        setRevokeStatus(`'${revokeEmail}' 계정의 칭호를 전부 회수했어요.`);
+        setRevokeEmail('');
+        getTitleCounts().then(setTitleCounts).catch(() => {});
+        if (titleHolders) {
+          getTitleHolders().then(setTitleHolders).catch(() => {});
+        }
+      } else if (res.reason === 'not-found') {
+        setRevokeStatus('그 이메일로 가입한 계정을 찾을 수 없어요.');
+      } else {
+        setRevokeStatus('회수하지 못했어요. 다시 시도해주세요.');
+      }
+    }
+
+    return (
+      <div className="page">
+        <header className="header"><h1>증강 오목</h1></header>
+        <p className="subtitle">관리자 화면 (개발자 전용)</p>
+
+        <button className="setup-back" onClick={() => setStep('account')}>
+          <ChevronLeft size={16} /> 계정 화면으로 돌아가기
+        </button>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title" style={{ marginBottom: 6 }}>특정 계정 칭호 전체 회수</div>
+          <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+            이메일을 입력하면 그 계정이 가진 칭호를 전부 지우고, 장착 중인 칭호도 해제해요. 되돌릴 수 없어요.
+          </p>
+          <input
+            className="join-input"
+            style={{ width: '100%', letterSpacing: 0, fontSize: 14, textTransform: 'none', marginBottom: 8 }}
+            value={revokeEmail}
+            onChange={(e) => setRevokeEmail(e.target.value)}
+            placeholder="example@email.com"
+          />
+          <button className="reset-btn confirm-danger-btn" onClick={handleRevoke}>칭호 전체 회수</button>
+          {revokeStatus && <p className="setup-card-desc" style={{ marginTop: 8 }}>{revokeStatus}</p>}
+        </div>
+
+        <div className="tutorial-card" style={{ marginTop: 14 }}>
+          <div className="tutorial-title" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>칭호별 보유자 확인</span>
+            <button
+              className="reset-btn"
+              style={{ fontSize: 11, padding: '4px 8px' }}
+              onClick={() => {
+                setTitleHoldersLoading(true);
+                getTitleHolders()
+                  .then(setTitleHolders)
+                  .catch(() => setTitleHolders({}))
+                  .finally(() => setTitleHoldersLoading(false));
+              }}
+            >
+              불러오기
+            </button>
+          </div>
+          {titleHoldersLoading && <p className="setup-card-desc">불러오는 중...</p>}
+          {!titleHoldersLoading && titleHolders === null && (
+            <p className="setup-card-desc">"불러오기"를 눌러서 확인하세요.</p>
+          )}
+          {!titleHoldersLoading && titleHolders && TITLES.map((t) => {
+            const list = titleHolders[t.id] || [];
+            const open = expandedTitle === t.id;
+            return (
+              <div key={t.id} style={{ borderBottom: '1px solid var(--border)', padding: '8px 0' }}>
+                <button
+                  className="title-pick"
+                  style={{ margin: 0, border: 'none', padding: 0, background: 'transparent' }}
+                  onClick={() => setExpandedTitle(open ? null : t.id)}
+                >
+                  <span className="title-pick-name">
+                    <Medal size={13} /> {t.name}
+                    <span className="title-pick-count">{list.length}명</span>
+                  </span>
+                </button>
+                {open && (
+                  <div style={{ marginTop: 6, paddingLeft: 8 }}>
+                    {list.length === 0 && <p className="setup-card-desc">아직 아무도 없어요.</p>}
+                    {list.map((h) => (
+                      <p key={h.uid} className="setup-card-desc" style={{ margin: '2px 0' }}>
+                        {h.displayName} {h.email ? `(${h.email})` : ''}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   if (step === 'leaderboard') {
     const myEntry = leaderboard.find((e) => user && e.uid === user.uid);
     return (
@@ -1594,16 +1711,25 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <div className="tutorial-title" style={{ marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>칭호 ({Object.keys(myTitles).length} / {TITLES.length})</span>
               {isDevAccount(user) && (
-                <button
-                  className="reset-btn"
-                  style={{ fontSize: 11, padding: '4px 8px' }}
-                  onClick={async () => {
-                    const fresh = await recomputeTitleCounts().catch(() => null);
-                    if (fresh) setTitleCounts(fresh);
-                  }}
-                >
-                  보유자 수 다시 계산
-                </button>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="reset-btn"
+                    style={{ fontSize: 11, padding: '4px 8px' }}
+                    onClick={async () => {
+                      const fresh = await recomputeTitleCounts().catch(() => null);
+                      if (fresh) setTitleCounts(fresh);
+                    }}
+                  >
+                    보유자 수 다시 계산
+                  </button>
+                  <button
+                    className="reset-btn"
+                    style={{ fontSize: 11, padding: '4px 8px' }}
+                    onClick={() => setStep('admin-titles')}
+                  >
+                    관리자 화면
+                  </button>
+                </div>
               )}
             </div>
             <p className="setup-card-desc" style={{ marginBottom: 10 }}>
