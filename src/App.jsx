@@ -42,6 +42,7 @@ import {
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
 import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked } from './skins.js';
+import { PLACEMENT_EFFECTS, getPlacementEffectById } from './effects.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, addToStatSet, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -2415,6 +2416,30 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         })()}
 
         <div className="tutorial-card">
+          <div className="tutorial-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>착수 이펙트</span>
+            {!isDevAccount(user) && <span className="setup-card-desc">개발자 전용 (준비 중)</span>}
+          </div>
+          <p className="setup-card-desc" style={{ marginBottom: 8 }}>돌을 놓을 때 나오는 효과예요.</p>
+          <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
+            {PLACEMENT_EFFECTS.map((fx) => (
+              <button
+                key={fx.id}
+                className="card-option"
+                disabled={!isDevAccount(user)}
+                style={{
+                  borderColor: settings.placementEffect === fx.id ? 'var(--accent)' : undefined,
+                  opacity: isDevAccount(user) ? 1 : 0.5,
+                }}
+                onClick={() => updateSettings({ placementEffect: fx.id })}
+              >
+                <div className="card-name">{fx.name}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="tutorial-card">
           <div className="tutorial-title">효과음</div>
           <div className="setup-options" style={{ gridTemplateColumns: '1fr 1fr', display: 'grid' }}>
             <button
@@ -3418,7 +3443,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       <TurnTimer state={state} dispatch={dispatch} online={online} />
 
       <div className="board-scroll">
-        <Board state={state} dispatch={dispatch} online={online} />
+        <Board state={state} dispatch={dispatch} online={online} settings={settings} />
       </div>
 
       {showMoveLog && <MoveLogPanel state={state} onClose={() => setShowMoveLog(false)} />}
@@ -3623,7 +3648,7 @@ function HandPanel({ player, state, dispatch, disabled, online }) {
   );
 }
 
-function Board({ state, dispatch, online }) {
+function Board({ state, dispatch, online, settings }) {
   const size = BOARD_SIZE;
   const gapPct = 100 / (size - 1);
   const gameOver = state.phase === 'over';
@@ -3632,6 +3657,7 @@ function Board({ state, dispatch, online }) {
   const isOnlineWaiting = online && (isSpectator || state.turn !== online.localColor) && !gameOver;
   const forcedZone = state.forcedZone && state.forcedZone.player === state.turn ? state.forcedZone : null;
   const confusionZone = state.confusion && state.confusion.player === state.turn ? state.confusion.anchor : null;
+  const placementEffect = getPlacementEffectById(settings?.placementEffect);
 
   return (
     <div className="board">
@@ -3675,7 +3701,7 @@ function Board({ state, dispatch, online }) {
                   <span
                     className={`stone ${
                       value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'
-                    } ${protectedStone ? 'stone-protected' : ''} ${markedStone ? 'stone-marked' : ''}`}
+                    } ${protectedStone ? 'stone-protected' : ''} ${markedStone ? 'stone-marked' : ''} ${isLastMove ? placementEffect.className : ''}`}
                   >
                     {isLastMove && <span className="last-move-dot" />}
                     {markedStone && <Stamp size={11} className="marked-badge" />}
