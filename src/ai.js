@@ -136,13 +136,6 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
   const myWin = findWinningCellFor(board, me, blockedFn, ruleFlags);
   if (myWin) return myWin;
 
-  // 0.5) 내가 이 한 수로 더블포(사 2개)나 사+삼 조합을 만들 수 있으면, 상대가 한 수로는
-  //      절대 못 막는 강제 승리 찬스예요. 방어보다도 이게 있으면 이걸 최우선으로 둬요.
-  const myForcingCell = findForcingCellForPlayer(board, me, ruleFlags);
-  if (myForcingCell && isUsable(board, blockedFn, myForcingCell.x, myForcingCell.y)) {
-    return myForcingCell;
-  }
-
   // 1) 상대가 바로 이길 수 있는 자리가 있으면, 점수 계산과 무관하게 반드시 막아요
   //    (난이도별 blockChance에 따라 일부러 놓칠 수도 있어요 - 쉬움/보통을 약하게 만드는 요소)
   // 주의: 그 자리가 하필 나(흑)에게 금수라면 실제로는 거기 둘 수 없어요. 그런 경우 그냥
@@ -156,7 +149,21 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
     return oppWin;
   }
 
-  // 1.5) 상대가 그 자리에 두면 사(四)를 2개 만들거나 사+삼을 동시에 만들어서 한 수로는
+  // 1.2) 상대가 다음 수에 바로 이길 수 있는 상황(막을 수 없는 경우 포함)이면, 내가 아무리
+  //      좋은 공격 기회가 있어도 그건 다음다음 수라 늦어요 - 절대 내 공격을 우선하면 안 돼요.
+  const opponentHasImmediateWin = !!oppWin;
+
+  // 1.5) 내가 이 한 수로 더블포(사 2개)나 사+삼 조합을 만들 수 있으면, 상대가 한 수로는
+  //      절대 못 막는 강제 승리 찬스예요. 단, 상대가 나보다 먼저 이길 수 있는 상황이면
+  //      의미가 없으니(상대가 먼저 이겨버려요) 그럴 땐 이 공격을 쓰지 않아요.
+  if (!opponentHasImmediateWin) {
+    const myForcingCell = findForcingCellForPlayer(board, me, ruleFlags);
+    if (myForcingCell && isUsable(board, blockedFn, myForcingCell.x, myForcingCell.y)) {
+      return myForcingCell;
+    }
+  }
+
+  // 1.7) 상대가 그 자리에 두면 사(四)를 2개 만들거나 사+삼을 동시에 만들어서 한 수로는
   //      절대 못 막게 되는 자리가 있으면, 열린 삼이 되기 전에 미리 막아요. (마찬가지로 금수면 제외)
   const forcingCell = findOpponentForcingCell(board, me, ruleFlags);
   const forcingCellBlockable = forcingCell
@@ -209,6 +216,18 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
         bestScore = total;
         best = { x, y };
       }
+    }
+  }
+
+  // 안전장치: 판이 봉쇄 카드들로 심하게 좁아져서 "금수가 아닌 빈 칸"이 하나도 안 남는
+  // 극단적인 경우, best가 null인 채로 끝나면 AI가 그대로 아무 수도 안 두고 멈춰버려요.
+  // 그런 최악의 상황에서도 일단 둘 수 있는 칸(금수 여부는 무시)이라도 찾아서 시도해요.
+  if (!best) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (isUsable(board, blockedFn, x, y)) { best = { x, y }; break; }
+      }
+      if (best) break;
     }
   }
 
