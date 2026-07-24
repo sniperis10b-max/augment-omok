@@ -7,7 +7,7 @@ import {
   BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw,
   UserCircle, LogOut, Mail, ShieldQuestion, UserPlus, Bell, Dice5, X as XIcon, Star,
   Zap, Tornado, Repeat, Stamp, Sparkle, AudioLines,
-  Landmark, Infinity as InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins,
+  Landmark, Infinity as InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins, Medal,
   ListOrdered,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer, isCellInSealedLine } from './gameLogic.js';
@@ -34,6 +34,10 @@ import {
 import {
   ensureRatingInitialized, getRating, computeRatingDelta, applyRatingChange, fetchLeaderboard, DEFAULT_RATING,
 } from './rating.js';
+import {
+  TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
+  getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle,
+} from './achievements.js';
 
 const ICONS = {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
@@ -62,6 +66,18 @@ function cellLabel(x, y) {
 const DEV_ACCOUNT_EMAIL = 'sniperis10b@gmail.com';
 function isDevAccount(user) {
   return !!user?.email && user.email.toLowerCase() === DEV_ACCOUNT_EMAIL;
+}
+
+// 장착한 칭호를 개발자 뱃지와 같은 캡슐 모양으로 보여주는 배지.
+// titleId가 없거나 존재하지 않는 id면 아무것도 렌더링하지 않아요.
+function TitleBadge({ titleId, style }) {
+  const title = titleId ? getTitleById(titleId) : null;
+  if (!title) return null;
+  return (
+    <span className="dev-badge title-badge" style={style}>
+      <Medal size={10} /> {title.name}
+    </span>
+  );
 }
 
 const TUTORIAL_PAGES = [
@@ -219,6 +235,9 @@ export default function App() {
   const [user, setUser] = useState(null); // null | { uid, displayName, email, photoURL, emailVerified, isGoogle }
   const [myRating, setMyRating] = useState(null);
   const [lastRatingChange, setLastRatingChange] = useState(null);
+  const [myTitles, setMyTitles] = useState({}); // { [titleId]: true }
+  const [equippedTitle, setEquippedTitle] = useState(null);
+  const [titleUnlockToast, setTitleUnlockToast] = useState(null); // { name } | null
   const pendingLocalRef = useRef(false);
   const gameStartedRef = useRef(false);
   const recordSavedRef = useRef(false);
@@ -254,6 +273,59 @@ export default function App() {
     }
     prevLastUsedRef.current = { ...state.lastUsedCard };
   }, [state.lastUsedCard]);
+
+  // 카드 사용 기반 업적 집계 (로그인 + AI/온라인 대전에서만 - 2인 대국은 "내 색"이 불분명해서 제외돼요)
+  const prevCardTrackRef = useRef({ lastCard: null, destroyCount: 0, probSuccess: 0, probFail: 0 });
+  useEffect(() => {
+    if (!user || !isFirebaseConfigured() || !state.lastUsedCard) return;
+    const myColor = online && online.role !== 'spectator'
+      ? online.localColor
+      : state.aiPlayer ? otherPlayer(state.aiPlayer) : null;
+    if (!myColor) return;
+
+    const prev = prevCardTrackRef.current;
+    const cur = state.lastUsedCard[myColor];
+    if (!cur || cur === prev.lastCard) return;
+
+    const curDestroy = state.stoneDestroyCount?.[myColor] || 0;
+    const curTally = state.probCardTally?.[myColor] || { success: 0, fail: 0 };
+    const destroyDelta = curDestroy - prev.destroyCount;
+    const successDelta = curTally.success - prev.probSuccess;
+    const failDelta = curTally.fail - prev.probFail;
+    prevCardTrackRef.current = {
+      lastCard: cur, destroyCount: curDestroy, probSuccess: curTally.success, probFail: curTally.fail,
+    };
+
+    (async () => {
+      try {
+        const usedCount = await markCardUsed(user.uid, cur);
+        if (usedCount >= CARDS.length) unlockAndNotify('allRounder');
+
+        if (cur === 'coinFlip') {
+          const newCount = await bumpCounter(user.uid, 'coinFlipUses', 1);
+          if (checkSimpleThreshold('gambler', newCount)) unlockAndNotify('gambler');
+        }
+
+        if (destroyDelta > 0) {
+          const newTotal = await bumpCounter(user.uid, 'destroyKills', destroyDelta);
+          if (newTotal >= DESTROYER_THRESHOLD) unlockAndNotify('destroyer');
+        }
+        if (successDelta > 0) {
+          const newSuccess = await bumpCounter(user.uid, 'probSuccess', successDelta);
+          if (checkSimpleThreshold('luckyOne', newSuccess)) unlockAndNotify('luckyOne');
+        }
+        if (failDelta > 0) {
+          const newFail = await bumpCounter(user.uid, 'probFail', failDelta);
+          if (checkSimpleThreshold('unlucky', newFail)) unlockAndNotify('unlucky');
+        }
+        if (cur === 'miracle' && state.miracleResult === 'success') {
+          unlockAndNotify('miracleWorker');
+        }
+      } catch {
+        // 업적 집계 실패는 게임 진행에 영향 없어야 해요
+      }
+    })();
+  }, [state.lastUsedCard, state.stoneDestroyCount, state.probCardTally, user, online, state.aiPlayer]);
 
   useEffect(() => {
     if (!cardOverlay) return undefined;
@@ -318,6 +390,61 @@ export default function App() {
       setMyRating(null);
     }
   }, [user?.uid, user?.displayName]);
+
+  // 로그인하면 지금까지 해금한 칭호와 장착 중인 칭호를 불러와요.
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      getAchievementData(user.uid)
+        .then(({ titles, equippedTitle: eq }) => {
+          setMyTitles(titles);
+          setEquippedTitle(eq);
+        })
+        .catch(() => {});
+    } else {
+      setMyTitles({});
+      setEquippedTitle(null);
+    }
+  }, [user?.uid]);
+
+  // 아직 해금 안 한 칭호면 Firebase에 기록하고, 화면에 알림을 띄워요.
+  async function unlockAndNotify(titleId) {
+    if (!user || !isFirebaseConfigured()) return;
+    if (myTitles[titleId]) return; // 이미 해금됨
+    try {
+      const committed = await unlockTitle(user.uid, titleId);
+      if (committed) {
+        setMyTitles((prev) => ({ ...prev, [titleId]: true }));
+        const title = getTitleById(titleId);
+        if (title) setTitleUnlockToast({ name: title.name });
+      }
+    } catch {
+      // 조용히 무시 (업적은 부가 기능이라 실패해도 게임 진행엔 지장 없어야 해요)
+    }
+  }
+
+  async function unlockManyAndNotify(titleIds) {
+    if (!user || !isFirebaseConfigured() || !titleIds || titleIds.length === 0) return;
+    const fresh = titleIds.filter((id) => !myTitles[id]);
+    if (fresh.length === 0) return;
+    try {
+      await unlockTitles(user.uid, fresh);
+      setMyTitles((prev) => {
+        const next = { ...prev };
+        fresh.forEach((id) => { next[id] = true; });
+        return next;
+      });
+      const last = getTitleById(fresh[fresh.length - 1]);
+      if (last) setTitleUnlockToast({ name: last.name, count: fresh.length });
+    } catch {
+      // 무시
+    }
+  }
+
+  useEffect(() => {
+    if (!titleUnlockToast) return undefined;
+    const t = setTimeout(() => setTitleUnlockToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [titleUnlockToast]);
 
   // 로그인해있는 동안 접속 상태(온라인/오프라인)를 자동으로 관리
   useEffect(() => {
@@ -433,6 +560,41 @@ export default function App() {
           const result = state.winner === null ? 'draw' : state.winner === myColor ? 'win' : 'loss';
           recordGameResult(user.uid, result).catch(() => {});
 
+          // ---- 업적 집계 (2인 대국은 myColor가 null이라 이 블록 자체가 실행 안 돼요) ----
+          if (isFirebaseConfigured()) {
+            (async () => {
+              try {
+                if (result === 'win') {
+                  const newWins = await bumpCounter(user.uid, 'wins', 1);
+                  unlockManyAndNotify(computeNewlyUnlockedWinTiers(newWins, myTitles));
+
+                  const colorTitle = myColor === BLACK ? 'blackMaster' : 'whiteMaster';
+                  const colorField = myColor === BLACK ? 'blackWins' : 'whiteWins';
+                  const newColorWins = await bumpCounter(user.uid, colorField, 1);
+                  if (checkSimpleThreshold(colorTitle, newColorWins)) unlockAndNotify(colorTitle);
+                }
+
+                // 손패 0장으로 게임을 마침 (무일푼)
+                if ((state.draft.hands[myColor] || []).length === 0) {
+                  unlockAndNotify('penniless');
+                }
+
+                // 온라인 대전 전용 업적
+                if (online && online.role !== 'spectator') {
+                  const newOnlineGames = await bumpCounter(user.uid, 'onlineGames', 1);
+                  if (newOnlineGames >= 1) unlockAndNotify('beginner');
+
+                  if (result === 'draw' && state.drawByOffer) {
+                    const newPacifist = await bumpCounter(user.uid, 'drawOfferSuccesses', 1);
+                    if (checkSimpleThreshold('pacifist', newPacifist)) unlockAndNotify('pacifist');
+                  }
+                }
+              } catch {
+                // 업적 집계는 부가 기능이라 실패해도 게임 결과엔 영향 없어야 해요
+              }
+            })();
+          }
+
           // 레이팅은 온라인 대전에서만 변동돼요.
           if (online && online.role !== 'spectator') {
             (async () => {
@@ -448,6 +610,15 @@ export default function App() {
                   const newRating = await applyRatingChange(user.uid, myRatingBefore, delta, user.displayName, isDevAccount(user));
                   setMyRating(newRating);
                   setLastRatingChange({ delta, newRating });
+
+                  // 언더독: 나보다 300점 이상 높은 상대에게 승리
+                  if (result === 'win' && opponentRating - myRatingBefore >= 300) {
+                    unlockAndNotify('underdog');
+                  }
+                  // 재활 치료 시급: 레이팅이 1000 밑으로 떨어짐
+                  if (newRating < 1000) {
+                    unlockAndNotify('rehab');
+                  }
                 }
               } catch {
                 // 레이팅 반영 실패해도 게임 결과 자체엔 영향 없어요
@@ -473,7 +644,23 @@ export default function App() {
 
   let screen;
   if (state.phase === 'setup') {
-    screen = <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} user={user} setUser={setUser} myRating={myRating} setMyRating={setMyRating} />;
+    screen = (
+      <SetupScreen
+        dispatch={dispatch}
+        online={online}
+        setOnline={setOnline}
+        settings={settings}
+        updateSettings={updateSettings}
+        user={user}
+        setUser={setUser}
+        myRating={myRating}
+        setMyRating={setMyRating}
+        myTitles={myTitles}
+        equippedTitle={equippedTitle}
+        setEquippedTitle={setEquippedTitle}
+        unlockAndNotify={unlockAndNotify}
+      />
+    );
   } else if (state.phase === 'draft') {
     screen = <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} />;
   } else {
@@ -487,6 +674,8 @@ export default function App() {
         updateSettings={updateSettings}
         user={user}
         lastRatingChange={lastRatingChange}
+        unlockAndNotify={unlockAndNotify}
+        equippedTitle={equippedTitle}
       />
     );
   }
@@ -494,9 +683,15 @@ export default function App() {
   return (
     <>
       {screen}
-      {isDevAccount(user) && (
-        <div className="dev-badge dev-badge-floating">
-          <Sparkles size={11} /> 개발자
+      {titleUnlockToast && (
+        <div className="title-toast">
+          <Medal size={16} />
+          <div>
+            <div className="title-toast-title">새 칭호 획득!</div>
+            <div className="title-toast-name">
+              '{titleUnlockToast.name}'{titleUnlockToast.count > 1 ? ` 외 ${titleUnlockToast.count - 1}개` : ''}
+            </div>
+          </div>
         </div>
       )}
       {showWhatsNew && (
@@ -617,7 +812,7 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -663,6 +858,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     const unsub3 = subscribeInvites(user.uid, setInvites);
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user || !isFirebaseConfigured()) return;
+    if (checkSimpleThreshold('socialite', friendsList.length)) unlockAndNotify('socialite');
+  }, [friendsList.length, user]);
 
   useEffect(() => {
     if (!user || !isFirebaseConfigured()) return undefined;
@@ -886,7 +1086,15 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               setLeaderboardLoading(true);
               setLeaderboardError('');
               fetchLeaderboard(100)
-                .then(setLeaderboard)
+                .then((list) => {
+                  setLeaderboard(list);
+                  if (user) {
+                    const myIndex = list.findIndex((e) => e.uid === user.uid);
+                    if (myIndex === 0) unlockAndNotify('omokKing');
+                    else if (myIndex >= 0 && myIndex < 10) unlockAndNotify('topTier');
+                    else if (myIndex >= 0 && myIndex < 100) unlockAndNotify('hallOfFame');
+                  }
+                })
                 .catch(() => setLeaderboardError('순위표를 불러오지 못했어요. Firebase 설정을 확인해주세요.'))
                 .finally(() => setLeaderboardLoading(false));
             }}
@@ -1074,6 +1282,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   {entry.isDev && (
                     <span className="dev-badge" style={{ marginLeft: 6 }}><Sparkles size={10} /> 개발자</span>
                   )}
+                  {entry.titleName && (
+                    <span className="dev-badge title-badge" style={{ marginLeft: 6 }}><Medal size={10} /> {entry.titleName}</span>
+                  )}
                 </span>
                 <span className="leaderboard-score">{entry.rating}</span>
               </div>
@@ -1095,6 +1306,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 {isDevAccount(user) && (
                   <span className="dev-badge" style={{ marginLeft: 6 }}><Sparkles size={10} /> 개발자</span>
                 )}
+                <TitleBadge titleId={equippedTitle} style={{ marginLeft: 6 }} />
               </span>
               <span className="leaderboard-score">{myRating}</span>
             </div>
@@ -1112,6 +1324,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       const body = encodeURIComponent(contactMessage || '(내용을 입력하지 않았어요)');
       window.location.href = `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
       setContactSent(true);
+      if (contactMessage.trim() && user && isFirebaseConfigured()) {
+        unlockAndNotify('contributor');
+      }
     }
 
     function handleCopyEmail() {
@@ -1305,6 +1520,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                       <Sparkles size={11} /> 개발자
                     </span>
                   )}
+                  <TitleBadge titleId={equippedTitle} />
                 </div>
                 <div className="setup-card-desc">{user.email}</div>
               </div>
@@ -1356,6 +1572,51 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="tutorial-card">
+            <div className="tutorial-title" style={{ marginBottom: 4 }}>
+              칭호 ({Object.keys(myTitles).length} / {TITLES.length})
+            </div>
+            <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+              업적을 달성하면 칭호를 얻어요. 하나를 골라 장착하면 채팅·순위표·계정 화면에 닉네임 옆으로 떠요.
+            </p>
+            <button
+              className={`title-pick ${!equippedTitle ? 'title-pick-active' : ''}`}
+              onClick={async () => {
+                setEquippedTitle(null);
+                await equipTitle(user.uid, null, user.displayName).catch(() => {});
+              }}
+            >
+              장착 안 함
+            </button>
+            {['승리', '랭크', '카드', '소셜', '스타일'].map((category) => (
+              <div key={category} style={{ marginTop: 10 }}>
+                <div className="setup-card-desc" style={{ fontWeight: 700, marginBottom: 6 }}>{category}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {TITLES.filter((t) => t.category === category).map((t) => {
+                    const unlocked = !!myTitles[t.id];
+                    const equipped = equippedTitle === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        className={`title-pick ${equipped ? 'title-pick-active' : ''} ${!unlocked ? 'title-pick-locked' : ''}`}
+                        disabled={!unlocked}
+                        onClick={async () => {
+                          setEquippedTitle(t.id);
+                          await equipTitle(user.uid, t.id, user.displayName).catch(() => {});
+                        }}
+                      >
+                        <span className="title-pick-name">
+                          {unlocked ? <Medal size={13} /> : <ShieldQuestion size={13} />} {t.name}
+                        </span>
+                        <span className="title-pick-desc">{t.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="setup-links-row">
@@ -2253,7 +2514,7 @@ function TurnTimer({ state, dispatch, online }) {
   );
 }
 
-function ChatPanel({ online, user }) {
+function ChatPanel({ online, user, unlockAndNotify, equippedTitle }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const listRef = useRef(null);
@@ -2279,8 +2540,15 @@ function ChatPanel({ online, user }) {
   function send(t) {
     const trimmed = t.trim();
     if (!trimmed) return;
-    sendChatMessage(online.code, myLabel, trimmed, isDevAccount(user)).catch(() => {});
+    sendChatMessage(online.code, myLabel, trimmed, isDevAccount(user), equippedTitle ? getTitleById(equippedTitle)?.name : null).catch(() => {});
     setText('');
+
+    // 훈수충: 관전 중에 채팅을 10번 보내면 해금
+    if (online.role === 'spectator' && user && isFirebaseConfigured()) {
+      bumpCounter(user.uid, 'spectatorChats', 1)
+        .then((count) => { if (checkSimpleThreshold('backseat', count)) unlockAndNotify?.('backseat'); })
+        .catch(() => {});
+    }
   }
 
   return (
@@ -2294,6 +2562,11 @@ function ChatPanel({ online, user }) {
             {m.isDev && (
               <span className="dev-badge chat-dev-badge">
                 <Sparkles size={9} /> 개발자
+              </span>
+            )}
+            {m.titleName && (
+              <span className="dev-badge title-badge chat-dev-badge">
+                <Medal size={9} /> {m.titleName}
               </span>
             )}
             {m.text}
@@ -2322,7 +2595,7 @@ function ChatPanel({ online, user }) {
   );
 }
 
-function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user, lastRatingChange }) {
+function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user, lastRatingChange, unlockAndNotify, equippedTitle }) {
   const gameOver = state.phase === 'over';
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
   const isSpectator = online && online.role === 'spectator';
@@ -2482,7 +2755,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
         ))}
       </div>
 
-      {online && <ChatPanel online={online} user={user} />}
+      {online && <ChatPanel online={online} user={user} unlockAndNotify={unlockAndNotify} equippedTitle={equippedTitle} />}
     </div>
   );
 }

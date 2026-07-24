@@ -543,6 +543,79 @@ body {
   white-space: nowrap;
 }
 
+.title-badge {
+  background: linear-gradient(135deg, #5b6fd8, #8f6fe0);
+}
+
+.title-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.title-pick-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.title-pick-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.title-pick-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.title-pick-locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.title-toast {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid #5b6fd8;
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  animation: cardEnter 0.25s ease-out;
+  color: #5b6fd8;
+}
+
+.title-toast-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.title-toast-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
 .dev-badge-floating {
   position: fixed;
   top: 10px;

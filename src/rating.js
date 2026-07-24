@@ -84,7 +84,13 @@ export async function fetchLeaderboard(limit = 100) {
   const snap = await get(q);
   const val = snap.val() || {};
   return Object.entries(val)
-    .map(([uid, v]) => ({ uid, displayName: v.displayName || '이름 없음', rating: v.rating ?? DEFAULT_RATING, isDev: !!v.isDev }))
+    .map(([uid, v]) => ({
+      uid,
+      displayName: v.displayName || '이름 없음',
+      rating: v.rating ?? DEFAULT_RATING,
+      isDev: !!v.isDev,
+      titleName: v.titleName || null,
+    }))
     .sort((a, b) => b.rating - a.rating);
 }
 

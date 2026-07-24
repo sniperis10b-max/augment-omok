@@ -38,6 +38,23 @@ const FREE_ACTION = new Set([
 
 const key = (x, y) => `${x},${y}`;
 
+// 업적 집계용: player가 파괴 계열 카드로 실제로 없앤 상대 돌 개수를 누적해요.
+function bumpDestroyCount(next, player, amount = 1) {
+  next.stoneDestroyCount = {
+    ...next.stoneDestroyCount,
+    [player]: (next.stoneDestroyCount?.[player] || 0) + amount,
+  };
+}
+
+// 업적 집계용: player가 사용한 확률형 카드의 성공/실패를 누적해요.
+function bumpProbTally(next, player, success) {
+  const cur = next.probCardTally?.[player] || { success: 0, fail: 0 };
+  next.probCardTally = {
+    ...next.probCardTally,
+    [player]: { success: cur.success + (success ? 1 : 0), fail: cur.fail + (success ? 0 : 1) },
+  };
+}
+
 function isBlocked(state, x, y) {
   const k = key(x, y);
   const expire = state.blockedCells[k];
@@ -81,6 +98,11 @@ export function createInitialState() {
     coinFlipResult: null,
     markedStones: {},
     stoneLossLog: [],
+    stoneDestroyCount: { [BLACK]: 0, [WHITE]: 0 },
+    probCardTally: {
+      [BLACK]: { success: 0, fail: 0 },
+      [WHITE]: { success: 0, fail: 0 },
+    },
     silencedTurns: { [BLACK]: 0, [WHITE]: 0 },
     skipNextTurn: { [BLACK]: false, [WHITE]: false },
     lastUsedCard: { [BLACK]: null, [WHITE]: null },
@@ -92,6 +114,7 @@ export function createInitialState() {
     winner: null,
     rematchVotes: { [BLACK]: false, [WHITE]: false },
     drawOffer: null,
+    drawByOffer: false,
     lastMove: null,
     message: '카드를 뽑는 중이에요.',
     draft: {
@@ -389,12 +412,14 @@ function resolveTargetedEffect(state, cardId, targets) {
       const defender = otherPlayer(player);
       const success = Math.random() < 0.5;
       next.coinFlipResult = success ? 'success' : 'fail';
+      bumpProbTally(next, player, success);
       if (success) {
         if (next.watcherActive[defender]) {
           next.watcherActive = { ...next.watcherActive, [defender]: false };
           next.message = `동전 던지기 성공! 하지만 ${defender === BLACK ? '흑' : '백'}의 감시자가 무효화했어요.`;
         } else {
           board[t.y][t.x] = 0;
+          bumpDestroyCount(next, player, 1);
           next.message = '동전 던지기 성공! 상대 돌이 파괴됐어요.';
         }
       } else {
@@ -413,6 +438,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       }
       next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = 0;
+      bumpDestroyCount(next, player, 1);
       break;
     }
     case 'destroyChain': {
@@ -427,6 +453,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       const removed = [{ x: t.x, y: t.y }];
       next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = 0;
+      bumpDestroyCount(next, player, 1);
       const size = board.length;
       outer: for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
@@ -437,6 +464,7 @@ function resolveTargetedEffect(state, cardId, targets) {
           if (next.protectedStones[key(nx, ny)]) continue;
           next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: nx, y: ny, ply: next.ply }];
           board[ny][nx] = 0;
+          bumpDestroyCount(next, player, 1);
           removed.push({ x: nx, y: ny });
           break outer;
         }
@@ -685,6 +713,7 @@ function resolveStandaloneNoTarget(state, cardId) {
     case 'echo': {
       const success = Math.random() < 0.5;
       next.echoResult = success ? 'success' : 'fail';
+      bumpProbTally(next, player, success);
       if (success) {
         next.echoActive = { ...next.echoActive, [player]: true };
         next.message = '메아리가 발동했어요! 다음에 쓰는 카드(대상 선택 없는 카드)가 한 번 더 발동돼요.';
@@ -737,6 +766,7 @@ function resolveStandaloneNoTarget(state, cardId) {
     case 'shortWin': {
       const success = Math.random() < 0.3;
       next.shortWinResult = success ? 'success' : 'fail';
+      bumpProbTally(next, player, success);
       if (success) {
         next.winLengthOverride = { [BLACK]: 4, [WHITE]: 4 };
         next.message = '카드가 발동했어요! 이번 판 끝까지 승리 조건이 4목으로 낮아졌어요.';
@@ -748,6 +778,7 @@ function resolveStandaloneNoTarget(state, cardId) {
     case 'longWin': {
       const success = Math.random() < 0.3;
       next.longWinResult = success ? 'success' : 'fail';
+      bumpProbTally(next, player, success);
       if (success) {
         const opponent = otherPlayer(player);
         next.winLengthOverride = { ...next.winLengthOverride, [opponent]: 6 };
@@ -849,7 +880,9 @@ function resolveStandaloneNoTarget(state, cardId) {
       break;
     }
     case 'miracle': {
-      next.miracleResult = Math.random() < 0.01 ? 'success' : 'fail';
+      const success = Math.random() < 0.01;
+      next.miracleResult = success ? 'success' : 'fail';
+      bumpProbTally(next, player, success);
       break;
     }
     case 'restore': {
@@ -941,6 +974,7 @@ function activatePlacementBuff(state, cardId) {
 
   if (cardId === 'fourToWin') {
     const success = Math.random() < 0.3;
+    bumpProbTally(next, player, success);
     if (success) {
       next.buffs = { ...next.buffs, fourToWinActive: true };
       next.message = '카드가 발동했어요! 이번에 4목만 완성해도 승리해요. 돌을 놓으세요.';
@@ -1145,6 +1179,7 @@ export function gameReducer(state, action) {
           phase: 'over',
           winner: null,
           drawOffer: null,
+          drawByOffer: true,
           message: '무승부에 합의했어요.',
         };
       }
