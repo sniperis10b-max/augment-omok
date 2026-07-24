@@ -34,7 +34,8 @@ export function generateRoomCode() {
 }
 
 // 방을 만들고 코드를 반환해요. hostColor: 방장이 플레이할 색(BLACK|WHITE 숫자값)
-export async function createRoom(hostColor, timeLimitSec, cardsPerPlayer) {
+// hostUid: 로그인한 방장의 계정 uid (레이팅 반영을 위해 저장해요. 없으면 null)
+export async function createRoom(hostColor, timeLimitSec, cardsPerPlayer, hostUid) {
   const db = getDb();
   const code = generateRoomCode();
   await set(ref(db, `rooms/${code}`), {
@@ -43,7 +44,9 @@ export async function createRoom(hostColor, timeLimitSec, cardsPerPlayer) {
     timeLimitSec: timeLimitSec || 0,
     cardsPerPlayer: cardsPerPlayer || 3,
     hostClientId: getClientId(),
+    hostUid: hostUid || null,
     guestClientId: null,
+    guestUid: null,
     createdAt: serverTimestamp(),
     state: null,
   });
@@ -70,7 +73,8 @@ export async function peekRoom(code) {
 //   원래 자기 색을 그대로 돌려줘요.
 // - 처음 보는 기기인데 방이 대기 중이면 게스트로 참가해요.
 // - 처음 보는 기기인데 이미 대국 중이면 관전자로 참가해요.
-export async function joinRoom(code) {
+// myUid: 로그인한 참가자의 계정 uid (레이팅 반영을 위해 저장해요. 없으면 null)
+export async function joinRoom(code, myUid) {
   const db = getDb();
   const roomRef = ref(db, `rooms/${code}`);
   const snap = await get(roomRef);
@@ -87,11 +91,20 @@ export async function joinRoom(code) {
   }
 
   if (data.status === 'waiting') {
-    await update(roomRef, { status: 'active', guestClientId: myId });
+    await update(roomRef, { status: 'active', guestClientId: myId, guestUid: myUid || null });
     return { ok: true, hostColor: data.hostColor, asSpectator: false };
   }
 
   return { ok: true, hostColor: data.hostColor, asSpectator: true };
+}
+
+// 대국이 끝났을 때 레이팅 반영을 위해, 방에 저장된 상대의 계정 uid를 조회해요.
+export async function getRoomPlayers(code) {
+  const db = getDb();
+  const snap = await get(ref(db, `rooms/${code}`));
+  if (!snap.exists()) return { hostUid: null, guestUid: null };
+  const data = snap.val();
+  return { hostUid: data.hostUid || null, guestUid: data.guestUid || null };
 }
 
 // 방 전체(상태 포함)를 구독해요. onUpdate(roomData)가 변경마다 호출돼요.

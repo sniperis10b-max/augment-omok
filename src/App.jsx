@@ -14,7 +14,7 @@ import { getCardById, CARDS } from './cards.js';
 import { decideAIAction, pickDraftCard, chooseBestCell, computeAITarget, DIFFICULTIES } from './ai.js';
 import {
   createRoom, joinRoom, peekRoom, subscribeRoom, pushGameState, leaveRoom, isFirebaseConfigured,
-  sendChatMessage, subscribeChat,
+  sendChatMessage, subscribeChat, getRoomPlayers,
 } from './network.js';
 import { loadSettings, saveSettings, LATEST_UPDATE } from './settings.js';
 import { sounds, setSoundEnabled } from './sound.js';
@@ -29,6 +29,9 @@ import {
   quickMatch, cancelQuickMatch, setupPresence, subscribeUserStatus, recordGameResult,
   subscribeStats, deleteUserData,
 } from './social.js';
+import {
+  ensureRatingInitialized, getRating, computeRatingDelta, applyRatingChange, fetchLeaderboard, DEFAULT_RATING,
+} from './rating.js';
 
 const ICONS = {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
@@ -206,6 +209,8 @@ export default function App() {
   const [settings, setSettingsState] = useState(() => loadSettings());
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [user, setUser] = useState(null); // null | { uid, displayName, email, photoURL, emailVerified, isGoogle }
+  const [myRating, setMyRating] = useState(null);
+  const [lastRatingChange, setLastRatingChange] = useState(null);
   const pendingLocalRef = useRef(false);
   const gameStartedRef = useRef(false);
   const recordSavedRef = useRef(false);
@@ -290,6 +295,15 @@ export default function App() {
       upsertUserProfile(user).catch(() => {});
     }
   }, [user?.uid, user?.displayName, user?.photoURL]);
+
+  // 로그인하면 레이팅이 없는 계정은 1000점으로 초기화하고, 순위표용 닉네임도 최신화해요.
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      ensureRatingInitialized(user.uid, user.displayName).then(setMyRating).catch(() => {});
+    } else {
+      setMyRating(null);
+    }
+  }, [user?.uid, user?.displayName]);
 
   // 로그인해있는 동안 접속 상태(온라인/오프라인)를 자동으로 관리
   useEffect(() => {
@@ -404,10 +418,33 @@ export default function App() {
         if (myColor) {
           const result = state.winner === null ? 'draw' : state.winner === myColor ? 'win' : 'loss';
           recordGameResult(user.uid, result).catch(() => {});
+
+          // 레이팅은 온라인 대전에서만 변동돼요.
+          if (online && online.role !== 'spectator') {
+            (async () => {
+              try {
+                const { hostUid, guestUid } = await getRoomPlayers(online.code);
+                const opponentUid = online.role === 'host' ? guestUid : hostUid;
+                if (opponentUid && opponentUid !== user.uid) {
+                  const [myRatingBefore, opponentRating] = await Promise.all([
+                    getRating(user.uid),
+                    getRating(opponentUid),
+                  ]);
+                  const delta = computeRatingDelta(myRatingBefore, opponentRating, result);
+                  const newRating = await applyRatingChange(user.uid, myRatingBefore, delta, user.displayName);
+                  setMyRating(newRating);
+                  setLastRatingChange({ delta, newRating });
+                }
+              } catch {
+                // 레이팅 반영 실패해도 게임 결과 자체엔 영향 없어요
+              }
+            })();
+          }
         }
       }
     } else if (state.phase !== 'over') {
       recordSavedRef.current = false;
+      if (lastRatingChange) setLastRatingChange(null);
     }
   }, [state.phase, state.winner, state.aiPlayer, state.aiDifficulty, state.history, online, user]);
 
@@ -422,7 +459,7 @@ export default function App() {
 
   let screen;
   if (state.phase === 'setup') {
-    screen = <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} user={user} setUser={setUser} />;
+    screen = <SetupScreen dispatch={dispatch} online={online} setOnline={setOnline} settings={settings} updateSettings={updateSettings} user={user} setUser={setUser} myRating={myRating} setMyRating={setMyRating} />;
   } else if (state.phase === 'draft') {
     screen = <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} />;
   } else {
@@ -435,6 +472,7 @@ export default function App() {
         settings={settings}
         updateSettings={updateSettings}
         user={user}
+        lastRatingChange={lastRatingChange}
       />
     );
   }
@@ -565,7 +603,7 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -600,6 +638,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0 });
   const [joinPreview, setJoinPreview] = useState(null);
   const [loginNotice, setLoginNotice] = useState('');
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState('');
 
   useEffect(() => {
     if (!user || !isFirebaseConfigured()) return undefined;
@@ -620,7 +661,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     setBusy(true);
     setErrorMsg('');
     try {
-      const code = await createRoom(hostColor, settings.timeLimitSec, settings.cardsPerPlayer);
+      const code = await createRoom(hostColor, settings.timeLimitSec, settings.cardsPerPlayer, user.uid);
       setOnline({
         code,
         localColor: hostColor,
@@ -647,7 +688,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     setBusy(true);
     setErrorMsg('');
     try {
-      const res = await joinRoom(code);
+      const res = await joinRoom(code, user.uid);
       if (!res.ok) {
         setErrorMsg('존재하지 않는 코드예요.');
         setBusy(false);
@@ -754,7 +795,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         setStep('online-waiting');
       } else {
         const guestColor = res.hostColor === BLACK ? WHITE : BLACK;
-        await joinRoom(res.code);
+        await joinRoom(res.code, user.uid);
         setOnline({ code: res.code, localColor: guestColor, role: 'guest' });
         setStep('online-waiting');
       }
@@ -823,6 +864,20 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           </button>
           <button className="setup-tutorial-link" onClick={() => { setRecords(loadRecords()); setStep('records'); }}>
             <History size={16} /> 기보 보기
+          </button>
+          <button
+            className="setup-tutorial-link"
+            onClick={() => {
+              setStep('leaderboard');
+              setLeaderboardLoading(true);
+              setLeaderboardError('');
+              fetchLeaderboard(100)
+                .then(setLeaderboard)
+                .catch(() => setLeaderboardError('순위표를 불러오지 못했어요. Firebase 설정을 확인해주세요.'))
+                .finally(() => setLeaderboardLoading(false));
+            }}
+          >
+            <Trophy size={16} /> 순위표 보기
           </button>
           <button className="setup-tutorial-link" onClick={() => setStep('contact')}>
             <Mail size={16} /> 문의하기
@@ -963,6 +1018,69 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <p className="setup-card-desc">
           AI 대전과 온라인 대전 결과만 기록돼요. 2인이서 대국은 "내 색"이 명확하지 않아서 전적에 포함되지 않아요.
         </p>
+      </div>
+    );
+  }
+
+  if (step === 'leaderboard') {
+    const myEntry = leaderboard.find((e) => user && e.uid === user.uid);
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">순위표</p>
+
+        <button className="setup-back" onClick={() => setStep('mode')}>
+          <ChevronLeft size={16} /> 메인으로 돌아가기
+        </button>
+
+        <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+          온라인 대전 결과만 레이팅에 반영돼요. 기본 1000점에서 시작하고, 상대와 점수 차이가
+          클수록 낮은 쪽이 이겼을 때 더 많이 얻고, 졌을 때 더 적게 잃어요.
+        </p>
+
+        {leaderboardLoading && <p className="setup-card-desc">불러오는 중...</p>}
+        {leaderboardError && <p className="setup-warning">{leaderboardError}</p>}
+
+        {!leaderboardLoading && !leaderboardError && (
+          <div className="tutorial-card" style={{ padding: 0, overflow: 'hidden' }}>
+            {leaderboard.length === 0 && (
+              <p className="setup-card-desc" style={{ padding: 16 }}>아직 순위표에 아무도 없어요.</p>
+            )}
+            {leaderboard.map((entry, i) => (
+              <div
+                key={entry.uid}
+                className="leaderboard-row"
+                style={user && entry.uid === user.uid ? { background: 'var(--accent-soft)' } : undefined}
+              >
+                <span className="leaderboard-rank">{i + 1}</span>
+                <span className="leaderboard-name">
+                  {entry.displayName}
+                  {isDevAccount(user) && user && entry.uid === user.uid && (
+                    <span className="dev-badge" style={{ marginLeft: 6 }}><Sparkles size={10} /> 개발자</span>
+                  )}
+                </span>
+                <span className="leaderboard-score">{entry.rating}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="tutorial-card" style={{ marginTop: 14 }}>
+          <div className="tutorial-title" style={{ marginBottom: 6 }}>내 순위</div>
+          {!user ? (
+            <p className="setup-card-desc">로그인하면 내 점수를 볼 수 있어요.</p>
+          ) : myRating === null ? (
+            <p className="setup-card-desc">불러오는 중...</p>
+          ) : (
+            <div className="leaderboard-row" style={{ background: 'var(--accent-soft)', borderRadius: 10 }}>
+              <span className="leaderboard-rank">{myEntry ? leaderboard.indexOf(myEntry) + 1 : '100위 밖'}</span>
+              <span className="leaderboard-name">{user.displayName || '이름 없음'}</span>
+              <span className="leaderboard-score">{myRating}</span>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -2185,7 +2303,7 @@ function ChatPanel({ online, user }) {
   );
 }
 
-function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user }) {
+function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user, lastRatingChange }) {
   const gameOver = state.phase === 'over';
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
   const isSpectator = online && online.role === 'spectator';
@@ -2290,6 +2408,14 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
             </>
           )}
         </div>
+      )}
+
+      {online && gameOver && lastRatingChange && (
+        <p className="setup-card-desc" style={{ marginTop: -10, marginBottom: 12 }}>
+          레이팅 변동: <b style={{ color: lastRatingChange.delta > 0 ? '#3fae52' : lastRatingChange.delta < 0 ? '#c23b3b' : 'inherit' }}>
+            {lastRatingChange.delta > 0 ? `+${lastRatingChange.delta}` : lastRatingChange.delta}
+          </b> (현재 {lastRatingChange.newRating}점)
+        </p>
       )}
 
       {online && gameOver && (myRematchVote || opponentRematchVote) && (

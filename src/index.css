@@ -530,6 +530,45 @@ body {
   transform: translateY(-1px);
 }
 
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.leaderboard-row:last-child {
+  border-bottom: none;
+}
+
+.leaderboard-rank {
+  width: 32px;
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.leaderboard-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-score {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
 /* 드래프트 화면 */
 .draft-status {
   display: flex;

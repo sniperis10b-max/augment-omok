@@ -73,11 +73,16 @@ npm run dev
        "matchmaking": {
          ".read": true,
          ".write": true
+       },
+       "leaderboard": {
+         ".read": true,
+         ".write": true,
+         ".indexOn": ["rating"]
        }
      }
    }
    ```
-   (`users`, `usersByEmail`, `matchmaking` 경로는 친구 추가와 랜덤 매칭 기능에 쓰여요)
+   (`users`, `usersByEmail`, `matchmaking` 경로는 친구 추가와 랜덤 매칭 기능에, `leaderboard`는 순위표 기능에 쓰여요. `leaderboard`엔 닉네임과 점수만 저장되고 이메일은 절대 저장되지 않아요)
 7. `npm run dev`로 실행 후 "친구와 플레이"를 눌러 방을 만들고, 다른 브라우저 탭(또는 다른 사람)이 코드를 입력해서 참가하면 돼요.
 
 설정을 안 해도 로컬 2인 대국과 AI 대국은 그대로 잘 작동해요. "친구와 플레이"만 이 설정이 필요해요.
