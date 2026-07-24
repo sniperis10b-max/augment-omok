@@ -226,14 +226,17 @@ export function findOpenThreeFlankCells(board, player) {
     return { x, y };
   });
 }
+// 렌주 금수는 원래 흑에게만 적용돼요. ruleFlags.forceForbiddenFor가 player와 같으면
+// (역금수 카드로) 백에게도 일시적으로 같은 규칙을 적용해요.
 export function isForbiddenMove(board, x, y, player, ruleFlags = {}) {
-  if (player !== BLACK) return false;
+  const applies = player === BLACK || ruleFlags.forceForbiddenFor === player;
+  if (!applies) return false;
   if (board[y][x] !== EMPTY) return false;
 
   const trial = board.map((row) => row.slice());
   trial[y][x] = player;
 
-  if (isOverline(trial, x, y, player)) return 'overline';
+  if (!ruleFlags.allowOverline && isOverline(trial, x, y, player)) return 'overline';
   if (!ruleFlags.noDoubleThree && isDoubleThree(trial, x, y, player)) return 'double-three';
   if (!ruleFlags.ignoreDoubleFourOnce && isDoubleFour(trial, x, y, player)) return 'double-four';
 

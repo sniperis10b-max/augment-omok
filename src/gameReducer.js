@@ -10,7 +10,7 @@ import {
   inBounds,
   findOpenThreeFlankCells,
 } from './gameLogic.js';
-import { CARDS, drawRandomCards } from './cards.js';
+import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
 
 const STANDALONE = new Set([
   'destroy', 'alchemy', 'swap', 'moveStone', 'reinforce', 'barrier', 'ward',
@@ -20,6 +20,7 @@ const STANDALONE = new Set([
   'winShield', 'wildcard', 'silence', 'miracle',
   'destroyChain', 'restore', 'watcher', 'duplicate', 'vortex',
   'trade', 'mark', 'purify', 'echo',
+  'sanctuary', 'headcount', 'reroll', 'allowOverline', 'reverseForbidden', 'shortWin', 'longWin', 'coinFlip',
 ]);
 const PLACEMENT_BUFF = new Set(['fourToWin', 'allow44', 'doubleMove', 'bomb']);
 
@@ -32,6 +33,7 @@ const FREE_ACTION = new Set([
   'winShield', 'wildcard', 'silence',
   'watcher', 'duplicate',
   'trade', 'mark',
+  'headcount', 'coinFlip',
 ]);
 
 const key = (x, y) => `${x},${y}`;
@@ -74,13 +76,16 @@ export function createInitialState() {
     watcherActive: { [BLACK]: false, [WHITE]: false },
     echoActive: { [BLACK]: false, [WHITE]: false },
     echoResult: null,
+    shortWinResult: null,
+    longWinResult: null,
     markedStones: {},
     stoneLossLog: [],
     silencedTurns: { [BLACK]: 0, [WHITE]: 0 },
     skipNextTurn: { [BLACK]: false, [WHITE]: false },
     lastUsedCard: { [BLACK]: null, [WHITE]: null },
     history: [],
-    ruleFlags: { noDoubleThree: false, ignoreDoubleFourOnce: false },
+    ruleFlags: { noDoubleThree: false, ignoreDoubleFourOnce: false, allowOverline: false, forceForbiddenFor: null },
+    winLengthOverride: { [BLACK]: null, [WHITE]: null },
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
     rematchVotes: { [BLACK]: false, [WHITE]: false },
@@ -88,11 +93,11 @@ export function createInitialState() {
     lastMove: null,
     message: '카드를 뽑는 중이에요.',
     draft: {
-      pool: CARDS.map((c) => c.id),
+      pool: poolForPlayer(order[0]),
       hands: { [BLACK]: [], [WHITE]: [] },
       order,
       currentIndex: 0,
-      options: drawRandomCards(CARDS.map((c) => c.id), 3),
+      options: drawRandomCards(poolForPlayer(order[0]), 3),
     },
     activeCard: null,
   };
@@ -193,6 +198,9 @@ function finishTurnAfterPlacement(state, placingPlayer) {
   if (placingPlayer === BLACK) {
     next.ruleFlags = { ...next.ruleFlags, ignoreDoubleFourOnce: false };
   }
+  if (next.ruleFlags.forceForbiddenFor === placingPlayer) {
+    next.ruleFlags = { ...next.ruleFlags, forceForbiddenFor: null };
+  }
 
   if (next.buffs.doubleMoveRemaining > 0) {
     next.buffs = {
@@ -288,7 +296,7 @@ function tryPlaceStone(state, clickX, clickY) {
     }
   }
 
-  const winLength = workingState.buffs.fourToWinActive ? 4 : 5;
+  const winLength = workingState.buffs.fourToWinActive ? 4 : (workingState.winLengthOverride?.[player] ?? 5);
   const isBonusMove = !!workingState.buffs.doubleMoveBonusPending;
   const won = !isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones });
 
@@ -346,6 +354,36 @@ function resolveTargetedEffect(state, cardId, targets) {
       const [t] = targets;
       next.markedStones = { ...next.markedStones, [key(t.x, t.y)]: true };
       next.message = '상대 돌 하나에 낙인을 찍었어요. 그 돌이 포함된 5목은 승리로 인정되지 않아요.';
+      break;
+    }
+    case 'sanctuary': {
+      const [t] = targets;
+      const updates = {};
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const nx = t.x + dx, ny = t.y + dy;
+          if (inBounds(board, nx, ny)) updates[key(nx, ny)] = next.ply + 3;
+        }
+      }
+      next.blockedCells = { ...next.blockedCells, ...updates };
+      next.message = '주변 5x5 범위를 3턴 동안 아무도 놓을 수 없게 막았어요.';
+      break;
+    }
+    case 'coinFlip': {
+      const [t] = targets;
+      if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
+      const defender = otherPlayer(player);
+      if (Math.random() < 0.5) {
+        if (next.watcherActive[defender]) {
+          next.watcherActive = { ...next.watcherActive, [defender]: false };
+          next.message = `동전 던지기 성공! 하지만 ${defender === BLACK ? '흑' : '백'}의 감시자가 무효화했어요.`;
+        } else {
+          board[t.y][t.x] = 0;
+          next.message = '동전 던지기 성공! 상대 돌이 파괴됐어요.';
+        }
+      } else {
+        next.message = '동전 던지기 실패... 아무 일도 일어나지 않았어요.';
+      }
       break;
     }
     case 'destroy': {
@@ -524,7 +562,7 @@ function resolveTargetedEffect(state, cardId, targets) {
     next.lastMove = { x: targets[0].x, y: targets[0].y };
   }
 
-  const boardChanged = ['destroy', 'destroyChain', 'alchemy', 'swap', 'overwrite', 'moveStone', 'wildcard', 'vortex'].includes(cardId);
+  const boardChanged = ['destroy', 'destroyChain', 'alchemy', 'swap', 'overwrite', 'moveStone', 'wildcard', 'vortex', 'coinFlip'].includes(cardId);
   if (boardChanged) {
     next.history = [...next.history, board];
   }
@@ -638,6 +676,70 @@ function resolveStandaloneNoTarget(state, cardId) {
       }
       break;
     }
+    case 'headcount': {
+      const opponent = otherPlayer(player);
+      let myCount = 0, oppCount = 0;
+      for (let y = 0; y < board.length; y++) {
+        for (let x = 0; x < board.length; x++) {
+          if (board[y][x] === player) myCount++;
+          else if (board[y][x] === opponent) oppCount++;
+        }
+      }
+      if (myCount < oppCount) {
+        const pool = poolForPlayer(player);
+        const randomId = pool[Math.floor(Math.random() * pool.length)];
+        next.draft = {
+          ...next.draft,
+          hands: { ...next.draft.hands, [player]: [...next.draft.hands[player], randomId] },
+        };
+        const picked = CARDS.find((c) => c.id === randomId);
+        next.message = `돌 개수가 더 적어서 '${picked ? picked.name : randomId}' 카드를 얻었어요!`;
+      } else {
+        next.message = '돌 개수가 상대보다 적지 않아서 효과가 발동하지 않았어요.';
+      }
+      break;
+    }
+    case 'reroll': {
+      const count = next.draft.hands[player].length;
+      const pool = poolForPlayer(player);
+      const newHand = Array.from({ length: count }, () => pool[Math.floor(Math.random() * pool.length)]);
+      next.draft = { ...next.draft, hands: { ...next.draft.hands, [player]: newHand } };
+      next.message = '손패를 전부 버리고 새로 뽑았어요.';
+      break;
+    }
+    case 'allowOverline': {
+      next.ruleFlags = { ...next.ruleFlags, allowOverline: true };
+      next.message = '이번 판 끝까지 흑의 장목(육목) 금수가 사라졌어요.';
+      break;
+    }
+    case 'reverseForbidden': {
+      next.ruleFlags = { ...next.ruleFlags, forceForbiddenFor: WHITE };
+      next.message = '백의 다음 한 수에도 금수 규칙(3-3, 4-4, 육목)이 강제 적용돼요.';
+      break;
+    }
+    case 'shortWin': {
+      const success = Math.random() < 0.3;
+      next.shortWinResult = success ? 'success' : 'fail';
+      if (success) {
+        next.winLengthOverride = { [BLACK]: 4, [WHITE]: 4 };
+        next.message = '카드가 발동했어요! 이번 판 끝까지 승리 조건이 4목으로 낮아졌어요.';
+      } else {
+        next.message = '카드가 발동하지 않았어요... (30% 확률) 카드는 소모됐어요.';
+      }
+      break;
+    }
+    case 'longWin': {
+      const success = Math.random() < 0.3;
+      next.longWinResult = success ? 'success' : 'fail';
+      if (success) {
+        const opponent = otherPlayer(player);
+        next.winLengthOverride = { ...next.winLengthOverride, [opponent]: 6 };
+        next.message = `카드가 발동했어요! ${opponent === BLACK ? '흑' : '백'}은 이번 판 끝까지 6목을 완성해야 승리해요.`;
+      } else {
+        next.message = '카드가 발동하지 않았어요... (30% 확률) 카드는 소모됐어요.';
+      }
+      break;
+    }
     case 'shrinkBoard': {
       const updates = {};
       const size = board.length;
@@ -699,7 +801,7 @@ function resolveStandaloneNoTarget(state, cardId) {
       break;
     }
     case 'randomSummon': {
-      const allIds = CARDS.map((c) => c.id);
+      const allIds = poolForPlayer(player);
       const randomId = allIds[Math.floor(Math.random() * allIds.length)];
       next.draft = {
         ...next.draft,
@@ -774,6 +876,8 @@ function resolveStandaloneNoTarget(state, cardId) {
       break;
   }
   if (cardId === 'miracle' && next.miracleResult === 'success') break; // 이미 성공했으면 더 굴리지 않아요
+  if (cardId === 'shortWin' && next.shortWinResult === 'success') break;
+  if (cardId === 'longWin' && next.longWinResult === 'success') break;
   }
 
   next.board = board;
@@ -858,6 +962,8 @@ const TARGET_STEPS = {
   wildcard: ['emptyCell'],
   vortex: ['emptyOrAnyCell'],
   mark: ['enemyStone'],
+  sanctuary: ['ownStone'],
+  coinFlip: ['enemyStone'],
 };
 
 function cellMatchesStep(state, x, y, step) {
@@ -891,11 +997,11 @@ export function gameReducer(state, action) {
         timeLimitSec: timeLimitSec || 0,
         message: '카드를 뽑는 중이에요.',
         draft: {
-          pool: CARDS.map((c) => c.id),
+          pool: poolForPlayer(order[0]),
           hands: { [BLACK]: [], [WHITE]: [] },
           order,
           currentIndex: 0,
-          options: drawRandomCards(CARDS.map((c) => c.id), 3),
+          options: drawRandomCards(poolForPlayer(order[0]), 3),
         },
       };
     }
@@ -918,11 +1024,11 @@ export function gameReducer(state, action) {
           timeLimitSec: state.timeLimitSec,
           message: '카드를 뽑는 중이에요.',
           draft: {
-            pool: CARDS.map((c) => c.id),
+            pool: poolForPlayer(order[0]),
             hands: { [BLACK]: [], [WHITE]: [] },
             order,
             currentIndex: 0,
-            options: drawRandomCards(CARDS.map((c) => c.id), 3),
+            options: drawRandomCards(poolForPlayer(order[0]), 3),
           },
         };
       }
@@ -940,7 +1046,6 @@ export function gameReducer(state, action) {
       const hands = { ...state.draft.hands, [player]: [...state.draft.hands[player], cardId] };
       const currentIndex = state.draft.currentIndex + 1;
       const lastPick = { player, cardId, round: state.draft.currentIndex };
-      const fullPool = CARDS.map((c) => c.id);
 
       if (currentIndex >= state.draft.order.length) {
         return withDeadline({
@@ -951,9 +1056,10 @@ export function gameReducer(state, action) {
         });
       }
 
+      const nextDrafter = state.draft.order[currentIndex];
       return {
         ...state,
-        draft: { ...state.draft, hands, currentIndex, options: drawRandomCards(fullPool, 3), lastPick },
+        draft: { ...state.draft, hands, currentIndex, options: drawRandomCards(poolForPlayer(nextDrafter), 3), lastPick },
       };
     }
 

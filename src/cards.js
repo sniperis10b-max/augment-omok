@@ -7,6 +7,10 @@
 // 'emptyCell'    : 빈 칸 1개 선택
 // 'anyStoneCell' : 돌이 있는 칸(내 것이든 상대 것이든) 1개 선택
 // 'line'         : 보드 위 한 칸을 선택해 그 칸이 속한 직선(가로/세로/대각선 중 선택)을 지정
+//
+// blackOnly: true인 카드는 흑의 드래프트에만 등장해요 (렌주 금수 규칙은 흑에게만 적용되기 때문)
+
+import { BLACK } from './gameLogic.js';
 
 export const CARDS = [
   { id: 'destroy', name: '파괴', desc: '지정한 상대 돌 1개를 판에서 제거해요.', targetType: 'enemyStone', icon: 'Skull' },
@@ -26,8 +30,8 @@ export const CARDS = [
   { id: 'undoLast', name: '타임 리턴', desc: '가장 최근에 놓인 돌 1개를 판에서 되돌려요.', targetType: 'none', icon: 'Undo2' },
   { id: 'timeReset', name: '타임 리셋', desc: '판을 5수 전 상태로 되돌려요.', targetType: 'none', icon: 'History' },
   { id: 'chaosShift', name: '격동', desc: '판 위의 모든 돌이 무작위 방향으로 한 칸씩 밀려나요.', targetType: 'none', icon: 'Shuffle' },
-  { id: 'release33', name: '3-3 해제', desc: '이번 판 끝까지 흑돌의 3-3 금수 규칙을 없애요.', targetType: 'none', icon: 'Unlock' },
-  { id: 'allow44', name: '4-4 허용', desc: '흑돌의 4-4 금수 규칙을 1회 무시하고 착수할 수 있어요.', targetType: 'none', icon: 'KeyRound' },
+  { id: 'release33', name: '3-3 해제', desc: '이번 판 끝까지 흑돌의 3-3 금수 규칙을 없애요.', targetType: 'none', icon: 'Unlock', blackOnly: true },
+  { id: 'allow44', name: '4-4 허용', desc: '흑돌의 4-4 금수 규칙을 1회 무시하고 착수할 수 있어요.', targetType: 'none', icon: 'KeyRound', blackOnly: true },
   { id: 'sealLine', name: '라인 봉인', desc: '지정한 칸이 속한 가로줄을 봉인해요. 그 줄 위에서는 5목이 완성돼도 승리로 인정되지 않아요.', targetType: 'emptyOrAnyCell', icon: 'SeparatorHorizontal' },
   { id: 'thornTrap', name: '가시밭', desc: '빈 칸 1개에 보이지 않는 함정을 설치해요. 상대가 그 칸에 놓으면 상대의 다음 턴이 스킵돼요.', targetType: 'emptyCell', icon: 'Sprout' },
   { id: 'comboBlock', name: '연속 공격 차단', desc: '상대의 열린 삼을 찾아, 그걸 사(四)로 만들 수 있는 칸들을 상대의 다음 한 수 동안 막아요.', targetType: 'none', icon: 'ShieldOff' },
@@ -48,10 +52,24 @@ export const CARDS = [
   { id: 'mark', name: '낙인', desc: '지정한 상대 돌 1개에 낙인을 찍어요. 그 돌이 포함된 5목은 앞으로 승리로 인정되지 않아요.', targetType: 'enemyStone', icon: 'Stamp' },
   { id: 'purify', name: '정화', desc: '보드 위의 착수 불가 효과(장벽/결계/동결/오염/판 축소 등)를 모두 즉시 해제해요.', targetType: 'none', icon: 'Sparkle' },
   { id: 'echo', name: '메아리', desc: '50% 확률로 발동해요. 성공하면 바로 다음에 쓰는 카드(대상 선택이 필요 없는 카드에 한해) 효과가 자동으로 한 번 더 발동돼요. 실패해도 카드는 소모되고 턴이 넘어가요.', targetType: 'none', icon: 'AudioLines' },
+  { id: 'sanctuary', name: '성역', desc: '내 돌 1개를 지정하면, 그 돌 반경 2칸(5x5) 범위를 3턴 동안 아무도 놓을 수 없게 막아요.', targetType: 'ownStone', icon: 'Landmark' },
+  { id: 'headcount', name: '머릿수 싸움', desc: '판 위의 내 돌 개수가 상대보다 적으면 무작위 카드 1장을 즉시 얻어요. 같거나 많으면 아무 효과 없이 소모돼요.', targetType: 'none', icon: 'Users' },
+  { id: 'reroll', name: '리롤', desc: '내 손에 있는 카드를 전부 버리고, 그만큼 무작위로 새로 뽑아요.', targetType: 'none', icon: 'Dice5' },
+  { id: 'allowOverline', name: '육목 허용', desc: '이번 판 끝까지 흑돌의 장목(6목 이상) 금수 규칙을 없애요.', targetType: 'none', icon: 'Infinity', blackOnly: true },
+  { id: 'reverseForbidden', name: '역금수', desc: '상대(백)에게도 1턴 동안 흑과 같은 금수 규칙(3-3, 4-4, 육목)을 강제로 적용시켜요.', targetType: 'none', icon: 'FlipHorizontal', blackOnly: true },
+  { id: 'shortWin', name: '단축 승리', desc: '30% 확률로 발동해요. 성공하면 이번 판 끝까지 승리 조건이 5목에서 4목으로 낮아져요 (양쪽 모두 적용). 실패해도 카드는 소모돼요.', targetType: 'none', icon: 'ArrowDownToLine' },
+  { id: 'longWin', name: '연장 승리', desc: '30% 확률로 발동해요. 성공하면 상대에게만 이번 판 끝까지 6목을 완성해야 승리로 인정되는 규칙이 강제돼요. 실패해도 카드는 소모돼요.', targetType: 'none', icon: 'ArrowUpToLine' },
+  { id: 'coinFlip', name: '동전 던지기', desc: '지정한 상대 돌 1개에 50% 확률로 파괴를 시도해요. 성공하면 제거되고, 실패하면 아무 일도 일어나지 않아요.', targetType: 'enemyStone', icon: 'Coins' },
 ];
 
 export function getCardById(id) {
   return CARDS.find((c) => c.id === id);
+}
+
+// 렌주 금수(3-3, 4-4, 육목)는 흑에게만 적용되는 규칙이라, 그 규칙을 다루는 카드들은
+// 흑의 드래프트에만 등장해요. 백이 뽑아봤자 아무 의미가 없기 때문이에요.
+export function poolForPlayer(player) {
+  return CARDS.filter((c) => !c.blackOnly || player === BLACK).map((c) => c.id);
 }
 
 // 드래프트용 무작위 카드 3장 뽑기 (풀에서 중복 없이)
