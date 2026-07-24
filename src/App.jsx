@@ -313,7 +313,7 @@ export default function App() {
   // 로그인하면 레이팅이 없는 계정은 1000점으로 초기화하고, 순위표용 닉네임도 최신화해요.
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
-      ensureRatingInitialized(user.uid, user.displayName).then(setMyRating).catch(() => {});
+      ensureRatingInitialized(user.uid, user.displayName, isDevAccount(user)).then(setMyRating).catch(() => {});
     } else {
       setMyRating(null);
     }
@@ -445,7 +445,7 @@ export default function App() {
                     getRating(opponentUid),
                   ]);
                   const delta = computeRatingDelta(myRatingBefore, opponentRating, result);
-                  const newRating = await applyRatingChange(user.uid, myRatingBefore, delta, user.displayName);
+                  const newRating = await applyRatingChange(user.uid, myRatingBefore, delta, user.displayName, isDevAccount(user));
                   setMyRating(newRating);
                   setLastRatingChange({ delta, newRating });
                 }
@@ -1071,7 +1071,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <span className="leaderboard-rank">{i + 1}</span>
                 <span className="leaderboard-name">
                   {entry.displayName}
-                  {isDevAccount(user) && user && entry.uid === user.uid && (
+                  {entry.isDev && (
                     <span className="dev-badge" style={{ marginLeft: 6 }}><Sparkles size={10} /> 개발자</span>
                   )}
                 </span>
@@ -1090,7 +1090,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           ) : (
             <div className="leaderboard-row" style={{ background: 'var(--accent-soft)', borderRadius: 10 }}>
               <span className="leaderboard-rank">{myEntry ? leaderboard.indexOf(myEntry) + 1 : '100위 밖'}</span>
-              <span className="leaderboard-name">{user.displayName || '이름 없음'}</span>
+              <span className="leaderboard-name">
+                {user.displayName || '이름 없음'}
+                {isDevAccount(user) && (
+                  <span className="dev-badge" style={{ marginLeft: 6 }}><Sparkles size={10} /> 개발자</span>
+                )}
+              </span>
               <span className="leaderboard-score">{myRating}</span>
             </div>
           )}

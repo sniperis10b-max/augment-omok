@@ -31,11 +31,13 @@ function getDb() {
 
 // 로그인할 때 호출해서, 레이팅이 아직 없으면 1000점으로 만들고 순위표에도 반영해요.
 // 이미 레이팅이 있으면 건드리지 않고(닉네임만 최신화), 현재 레이팅을 반환해요.
-export async function ensureRatingInitialized(uid, displayName) {
+// isDev: 이 계정이 개발자 계정인지 (호출하는 쪽에서 이메일로 판별해서 넘겨줘요 - 순위표
+// 자체엔 이메일을 저장하지 않기 때문에, 배지 표시를 위해 별도로 true/false만 남겨둬요)
+export async function ensureRatingInitialized(uid, displayName, isDev = false) {
   const db = getDb();
   const result = await runTransaction(ref(db, `users/${uid}/rating`), (cur) => (cur == null ? DEFAULT_RATING : cur));
   const rating = result.snapshot.val() ?? DEFAULT_RATING;
-  await update(ref(db, `leaderboard/${uid}`), { displayName: displayName || '이름 없음', rating });
+  await update(ref(db, `leaderboard/${uid}`), { displayName: displayName || '이름 없음', rating, isDev });
   return rating;
 }
 
@@ -63,13 +65,14 @@ export function computeRatingDelta(myRating, opponentRating, result) {
 }
 
 // 계산된 변동폭을 실제로 반영해요. 0점 밑으로는 안 내려가게 막아요.
-export async function applyRatingChange(uid, ratingBefore, delta, displayName) {
+export async function applyRatingChange(uid, ratingBefore, delta, displayName, isDev = false) {
   const db = getDb();
   const newRating = Math.max(0, ratingBefore + delta);
   await update(ref(db), {
     [`users/${uid}/rating`]: newRating,
     [`leaderboard/${uid}/rating`]: newRating,
     [`leaderboard/${uid}/displayName`]: displayName || '이름 없음',
+    [`leaderboard/${uid}/isDev`]: isDev,
   });
   return newRating;
 }
@@ -81,7 +84,7 @@ export async function fetchLeaderboard(limit = 100) {
   const snap = await get(q);
   const val = snap.val() || {};
   return Object.entries(val)
-    .map(([uid, v]) => ({ uid, displayName: v.displayName || '이름 없음', rating: v.rating ?? DEFAULT_RATING }))
+    .map(([uid, v]) => ({ uid, displayName: v.displayName || '이름 없음', rating: v.rating ?? DEFAULT_RATING, isDev: !!v.isDev }))
     .sort((a, b) => b.rating - a.rating);
 }
 
