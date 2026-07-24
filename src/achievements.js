@@ -189,6 +189,16 @@ export async function bumpCounter(uid, field, amount = 1) {
   return result.snapshot.val() || 0;
 }
 
+// achievementStats 안에 "집합" 형태로 값을 모아둘 때 써요 (예: 같이 대전해본 친구 uid 목록).
+// key를 추가하고, 지금까지 모인 개수를 돌려줘요.
+export async function addToStatSet(uid, field, key) {
+  const db = getDb();
+  await update(ref(db, `users/${uid}/achievementStats/${field}`), { [key]: true });
+  const snap = await get(ref(db, `users/${uid}/achievementStats/${field}`));
+  const val = snap.val() || {};
+  return Object.keys(val).length;
+}
+
 // 이겼으면 연승 카운터를 1 늘리고, 졌거나 비겼으면 0으로 끊어요. (폭풍 연승/불멸의 연승용)
 export async function updateWinStreak(uid, won) {
   const db = getDb();

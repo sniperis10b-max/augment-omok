@@ -41,10 +41,10 @@ import {
   forceSetPeakTierIndex,
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
-import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById } from './skins.js';
+import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked } from './skins.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
-  getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
+  getAchievementData, bumpCounter, addToStatSet, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
   getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak, getTitleProgress,
 } from './achievements.js';
 
@@ -405,6 +405,9 @@ export default function App() {
         if (cur === 'miracle' && state.miracleResult === 'success') {
           unlockAndNotify('miracleWorker');
         }
+        if (cur === 'echo' && state.echoResult === 'success') {
+          bumpCounter(user.uid, 'echoSuccesses', 1).catch(() => {});
+        }
       } catch {
         // 업적 집계 실패는 게임 진행에 영향 없어야 해요
       }
@@ -738,7 +741,10 @@ export default function App() {
                   if (checkSimpleThreshold(colorTitle, newColorWins)) unlockAndNotify(colorTitle);
 
                   // 장기전의 신: 100수 이상 진행된 대국에서 승리
-                  if (state.ply >= 100) unlockAndNotify('longGameMaster');
+                  if (state.ply >= 100) {
+                    unlockAndNotify('longGameMaster');
+                    bumpCounter(user.uid, 'longGameWins', 1).catch(() => {});
+                  }
 
                   // 풀 하우스: 판이 90% 이상 찬 뒤 승리
                   const size = state.board.length;
@@ -751,6 +757,21 @@ export default function App() {
                     const newAiWins = await bumpCounter(user.uid, 'aiImpossibleWins', 1);
                     if (checkSimpleThreshold('aiSlayer', newAiWins)) unlockAndNotify('aiSlayer');
                   }
+                }
+
+                // 무승부 누적 (AI+온라인 전체 - 대리석 스킨 조건)
+                if (result === 'draw') {
+                  bumpCounter(user.uid, 'totalDraws', 1).catch(() => {});
+                }
+
+                // AI 대전 판수 (다크 월넛 스킨 조건)
+                if (state.aiPlayer) {
+                  bumpCounter(user.uid, 'aiGames', 1).catch(() => {});
+                }
+
+                // 자정~새벽 4시 사이 대국 (미드나잇 스킨 조건)
+                if (new Date().getHours() < 4) {
+                  bumpCounter(user.uid, 'midnightGames', 1).catch(() => {});
                 }
 
                 // 손패 0장으로 게임을 마침 (무일푼)
@@ -772,6 +793,21 @@ export default function App() {
                   if (result === 'win' && !state.lastUsedCard[myColor]) {
                     unlockAndNotify('flawlessVictory');
                   }
+
+                  // 친선전 판수 (파스텔 스톤 스킨 조건)
+                  if (!online.ranked) {
+                    bumpCounter(user.uid, 'casualGames', 1).catch(() => {});
+                  }
+
+                  // 서로 다른 친구와 온라인 대전 (로즈 골드 스킨 조건)
+                  getRoomPlayers(online.code)
+                    .then(({ hostUid, guestUid }) => {
+                      const opponentUid = online.role === 'host' ? guestUid : hostUid;
+                      if (opponentUid && opponentUid !== user.uid) {
+                        addToStatSet(user.uid, 'friendsPlayed', opponentUid).catch(() => {});
+                      }
+                    })
+                    .catch(() => {});
                 }
 
                 // 폭풍 연승 / 불멸의 연승: 랭크전 전용 (친선전은 연승에 포함 안 돼요)
@@ -2309,56 +2345,74 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           </div>
         </div>
 
-        <div className="tutorial-card">
-          <div className="tutorial-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>바둑판 스킨</span>
-            {!isDevAccount(user) && <span className="setup-card-desc">개발자 전용 (준비 중)</span>}
-          </div>
-          <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid', marginTop: 8 }}>
-            {BOARD_SKINS.map((skin) => (
-              <button
-                key={skin.id}
-                className="card-option"
-                disabled={!isDevAccount(user)}
-                style={{
-                  borderColor: settings.boardSkin === skin.id ? 'var(--accent)' : undefined,
-                  opacity: isDevAccount(user) ? 1 : 0.5,
-                }}
-                onClick={() => updateSettings({ boardSkin: skin.id })}
-              >
-                <div style={{ width: 28, height: 28, borderRadius: 6, background: skin.background, border: `1px solid ${skin.border}`, margin: '0 auto 6px' }} />
-                <div className="card-name">{skin.name}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="tutorial-card">
-          <div className="tutorial-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>바둑돌 스킨</span>
-            {!isDevAccount(user) && <span className="setup-card-desc">개발자 전용 (준비 중)</span>}
-          </div>
-          <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid', marginTop: 8 }}>
-            {STONE_SKINS.map((skin) => (
-              <button
-                key={skin.id}
-                className="card-option"
-                disabled={!isDevAccount(user)}
-                style={{
-                  borderColor: settings.stoneSkin === skin.id ? 'var(--accent)' : undefined,
-                  opacity: isDevAccount(user) ? 1 : 0.5,
-                }}
-                onClick={() => updateSettings({ stoneSkin: skin.id })}
-              >
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: skin.black, display: 'inline-block' }} />
-                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: skin.white, border: `1px solid ${skin.whiteBorder}`, display: 'inline-block' }} />
+        {(() => {
+          const skinCtx = {
+            peakTierIndex,
+            friendsPlayedCount: Object.keys(myStats.friendsPlayed || {}).length,
+            titleCount: Object.keys(myTitles).length,
+          };
+          const dev = isDevAccount(user);
+          return (
+            <>
+              <div className="tutorial-card">
+                <div className="tutorial-title">바둑판 스킨</div>
+                <p className="setup-card-desc" style={{ marginBottom: 8 }}>퀘스트를 달성하면 하나씩 풀려요.</p>
+                <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
+                  {BOARD_SKINS.map((skin) => {
+                    const unlocked = dev || isBoardSkinUnlocked(skin.id, myStats, skinCtx);
+                    return (
+                      <button
+                        key={skin.id}
+                        className="card-option"
+                        disabled={!unlocked}
+                        style={{
+                          borderColor: settings.boardSkin === skin.id ? 'var(--accent)' : undefined,
+                          opacity: unlocked ? 1 : 0.5,
+                        }}
+                        onClick={() => updateSettings({ boardSkin: skin.id })}
+                      >
+                        <div style={{ width: 28, height: 28, borderRadius: 6, background: skin.background, border: `1px solid ${skin.border}`, margin: '0 auto 6px', position: 'relative' }}>
+                          {!unlocked && <ShieldQuestion size={14} style={{ position: 'absolute', top: 6, left: 6, color: '#fff' }} />}
+                        </div>
+                        <div className="card-name">{skin.name}</div>
+                        <div className="setup-card-desc" style={{ fontSize: 10 }}>{skin.questDesc}</div>
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="card-name">{skin.name}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+              </div>
+
+              <div className="tutorial-card">
+                <div className="tutorial-title">바둑돌 스킨</div>
+                <p className="setup-card-desc" style={{ marginBottom: 8 }}>퀘스트를 달성하면 하나씩 풀려요.</p>
+                <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
+                  {STONE_SKINS.map((skin) => {
+                    const unlocked = dev || isStoneSkinUnlocked(skin.id, myStats, skinCtx);
+                    return (
+                      <button
+                        key={skin.id}
+                        className="card-option"
+                        disabled={!unlocked}
+                        style={{
+                          borderColor: settings.stoneSkin === skin.id ? 'var(--accent)' : undefined,
+                          opacity: unlocked ? 1 : 0.5,
+                        }}
+                        onClick={() => updateSettings({ stoneSkin: skin.id })}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 6 }}>
+                          <span style={{ width: 20, height: 20, borderRadius: '50%', background: skin.black, display: 'inline-block' }} />
+                          <span style={{ width: 20, height: 20, borderRadius: '50%', background: skin.white, border: `1px solid ${skin.whiteBorder}`, display: 'inline-block' }} />
+                        </div>
+                        <div className="card-name">{skin.name}</div>
+                        <div className="setup-card-desc" style={{ fontSize: 10 }}>{skin.questDesc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          );
+        })()}
 
         <div className="tutorial-card">
           <div className="tutorial-title">효과음</div>
