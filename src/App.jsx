@@ -2135,13 +2135,12 @@ function ChatPanel({ online, user }) {
   if (!online) return null;
 
   const colorLabel = online.role === 'spectator' ? '관전자' : PLAYER_LABEL[online.localColor];
-  const namePart = user?.displayName ? `${user.displayName}${isDevAccount(user) ? ' ✨개발자' : ''}` : null;
-  const myLabel = namePart ? `${namePart} (${colorLabel})` : colorLabel;
+  const myLabel = user?.displayName ? `${user.displayName} (${colorLabel})` : colorLabel;
 
   function send(t) {
     const trimmed = t.trim();
     if (!trimmed) return;
-    sendChatMessage(online.code, myLabel, trimmed).catch(() => {});
+    sendChatMessage(online.code, myLabel, trimmed, isDevAccount(user)).catch(() => {});
     setText('');
   }
 
@@ -2152,7 +2151,13 @@ function ChatPanel({ online, user }) {
         {messages.length === 0 && <span className="chat-empty">아직 메시지가 없어요.</span>}
         {messages.map((m) => (
           <div key={m.id} className={`chat-message ${m.sender === myLabel ? 'chat-message-mine' : ''}`}>
-            <span className="chat-sender">{m.sender}</span>{m.text}
+            <span className="chat-sender">{m.sender}</span>
+            {m.isDev && (
+              <span className="dev-badge chat-dev-badge">
+                <Sparkles size={9} /> 개발자
+              </span>
+            )}
+            {m.text}
           </div>
         ))}
       </div>

@@ -524,6 +524,12 @@ body {
   pointer-events: none;
 }
 
+.chat-dev-badge {
+  margin: 0 6px 0 4px;
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
+
 /* 드래프트 화면 */
 .draft-status {
   display: flex;
