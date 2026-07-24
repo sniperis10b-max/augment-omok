@@ -65,6 +65,9 @@ export const TITLES = [
   { id: 'pacifist', name: '평화주의자', desc: '무승부 제안으로 게임을 5번 성사 (온라인 대전 전용)', category: '스타일' },
   { id: 'blackMaster', name: '선공의 달인', desc: '흑으로 20승 (2인 대국은 포함되지 않아요)', category: '스타일' },
   { id: 'whiteMaster', name: '후공의 달인', desc: '백으로 20승 (2인 대국은 포함되지 않아요)', category: '스타일' },
+
+  // 특별 (자동 해금)
+  { id: 'developer', name: '개발자', desc: '이 게임을 만든 사람에게 자동으로 주어지는 칭호', category: '특별' },
 ];
 
 export function getTitleById(id) {

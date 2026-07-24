@@ -392,11 +392,22 @@ export default function App() {
   }, [user?.uid, user?.displayName]);
 
   // 로그인하면 지금까지 해금한 칭호와 장착 중인 칭호를 불러와요.
+  // 개발자 계정이면 모든 칭호를 자동으로 해금해요 (장착은 다른 칭호들과 똑같이 계정 화면에서 골라요).
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
       getAchievementData(user.uid)
-        .then(({ titles, equippedTitle: eq }) => {
-          setMyTitles(titles);
+        .then(async ({ titles, equippedTitle: eq }) => {
+          let finalTitles = titles;
+          if (isDevAccount(user)) {
+            const missing = TITLES.map((t) => t.id).filter((id) => !titles[id]);
+            if (missing.length > 0) {
+              await unlockTitles(user.uid, missing).catch(() => {});
+              finalTitles = { ...titles };
+              missing.forEach((id) => { finalTitles[id] = true; });
+              setTitleUnlockToast({ name: `칭호 ${missing.length}개 전체 해금 (개발자 전용)` });
+            }
+          }
+          setMyTitles(finalTitles);
           setEquippedTitle(eq);
         })
         .catch(() => {});
@@ -1279,9 +1290,6 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <span className="leaderboard-rank">{i + 1}</span>
                 <span className="leaderboard-name">
                   {entry.displayName}
-                  {entry.isDev && (
-                    <span className="dev-badge" style={{ marginLeft: 6 }}><Sparkles size={10} /> 개발자</span>
-                  )}
                   {entry.titleName && (
                     <span className="dev-badge title-badge" style={{ marginLeft: 6 }}><Medal size={10} /> {entry.titleName}</span>
                   )}
@@ -1303,9 +1311,6 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               <span className="leaderboard-rank">{myEntry ? leaderboard.indexOf(myEntry) + 1 : '100위 밖'}</span>
               <span className="leaderboard-name">
                 {user.displayName || '이름 없음'}
-                {isDevAccount(user) && (
-                  <span className="dev-badge" style={{ marginLeft: 6 }}><Sparkles size={10} /> 개발자</span>
-                )}
                 <TitleBadge titleId={equippedTitle} style={{ marginLeft: 6 }} />
               </span>
               <span className="leaderboard-score">{myRating}</span>
@@ -1515,11 +1520,6 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               <div>
                 <div className="tutorial-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {user.displayName || '이름 없음'}
-                  {isDevAccount(user) && (
-                    <span className="dev-badge">
-                      <Sparkles size={11} /> 개발자
-                    </span>
-                  )}
                   <TitleBadge titleId={equippedTitle} />
                 </div>
                 <div className="setup-card-desc">{user.email}</div>
@@ -1590,7 +1590,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             >
               장착 안 함
             </button>
-            {['승리', '랭크', '카드', '소셜', '스타일'].map((category) => (
+            {['승리', '랭크', '카드', '소셜', '스타일', '특별'].map((category) => (
               <div key={category} style={{ marginTop: 10 }}>
                 <div className="setup-card-desc" style={{ fontWeight: 700, marginBottom: 6 }}>{category}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -2559,11 +2559,6 @@ function ChatPanel({ online, user, unlockAndNotify, equippedTitle }) {
         {messages.map((m) => (
           <div key={m.id} className={`chat-message ${m.sender === myLabel ? 'chat-message-mine' : ''}`}>
             <span className="chat-sender">{m.sender}</span>
-            {m.isDev && (
-              <span className="dev-badge chat-dev-badge">
-                <Sparkles size={9} /> 개발자
-              </span>
-            )}
             {m.titleName && (
               <span className="dev-badge title-badge chat-dev-badge">
                 <Medal size={9} /> {m.titleName}
