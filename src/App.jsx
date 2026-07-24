@@ -36,7 +36,7 @@ import {
 } from './rating.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
-  getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts,
+  getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
 } from './achievements.js';
 
 const ICONS = {
@@ -1591,8 +1591,20 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           </div>
 
           <div className="tutorial-card">
-            <div className="tutorial-title" style={{ marginBottom: 4 }}>
-              칭호 ({Object.keys(myTitles).length} / {TITLES.length})
+            <div className="tutorial-title" style={{ marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>칭호 ({Object.keys(myTitles).length} / {TITLES.length})</span>
+              {isDevAccount(user) && (
+                <button
+                  className="reset-btn"
+                  style={{ fontSize: 11, padding: '4px 8px' }}
+                  onClick={async () => {
+                    const fresh = await recomputeTitleCounts().catch(() => null);
+                    if (fresh) setTitleCounts(fresh);
+                  }}
+                >
+                  보유자 수 다시 계산
+                </button>
+              )}
             </div>
             <p className="setup-card-desc" style={{ marginBottom: 10 }}>
               업적을 달성하면 칭호를 얻어요. 하나를 골라 장착하면 채팅·순위표·계정 화면에 닉네임 옆으로 떠요.

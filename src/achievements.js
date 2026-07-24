@@ -177,4 +177,21 @@ export async function getTitleCounts() {
   return snap.val() || {};
 }
 
+// titleCounts를 실제 users/*/titles 데이터를 전부 세어서 다시 계산해요.
+// 집계 기능이 생기기 전에 이미 해금된 칭호들처럼, 카운트가 실제와 어긋났을 때 바로잡는 용도예요.
+export async function recomputeTitleCounts() {
+  const db = getDb();
+  const snap = await get(ref(db, 'users'));
+  const users = snap.val() || {};
+  const counts = {};
+  for (const uid of Object.keys(users)) {
+    const titles = users[uid]?.titles || {};
+    for (const titleId of Object.keys(titles)) {
+      if (titles[titleId]) counts[titleId] = (counts[titleId] || 0) + 1;
+    }
+  }
+  await update(ref(db), { titleCounts: counts });
+  return counts;
+}
+
 export { isFirebaseConfigured };
