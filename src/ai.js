@@ -365,9 +365,30 @@ const AI_CARD_HANDLERS = {
   sealLine: (board, ai) => findMostConnectedStone(board, otherPlayer(ai)),
   thornTrap: (board, ai, blockedFn = () => false) => chooseBestCell(board, otherPlayer(ai), blockedFn, {}),
   wildcard: (board, ai, blockedFn = () => false) => chooseBestCell(board, ai, blockedFn, {}),
+  // 낙인/동전 던지기는 파괴처럼 위협 라인 위주 상대 돌을 노려요 (강화 여부는 상관없어요)
+  mark: (board, ai) => {
+    const threat = findOpponentWinningCell(board, ai);
+    if (threat) {
+      const opp = otherPlayer(ai);
+      const size = board.length;
+      for (const [dx, dy] of DIRECTIONS) {
+        for (let s = -4; s <= 4; s++) {
+          const nx = threat.x + dx * s, ny = threat.y + dy * s;
+          if (inB(size, nx, ny) && board[ny][nx] === opp) return { x: nx, y: ny };
+        }
+      }
+    }
+    return findMostConnectedStone(board, otherPlayer(ai));
+  },
+  // 성역은 내 가장 강한 진영을 보호막으로 감싸요
+  sanctuary: (board, ai) => findMostConnectedStone(board, ai),
+  // 소용돌이는 상대 진영이 뭉쳐있는 지점을 중심으로 흩뜨려요
+  vortex: (board, ai) => findMostConnectedStone(board, otherPlayer(ai)),
 };
 // 연쇄 파괴는 첫 타겟 선정 방식이 파괴와 동일해요 (인접 돌 제거는 게임 로직이 자동으로 처리).
 AI_CARD_HANDLERS.destroyChain = AI_CARD_HANDLERS.destroy;
+// 동전 던지기도 파괴/낙인과 같은 방식으로 대상을 찾아요 (성공 여부는 게임 로직이 알아서 굴려요).
+AI_CARD_HANDLERS.coinFlip = AI_CARD_HANDLERS.mark;
 
 // 상대의 열린 삼(다음에 열린 사가 될 수 있는 자리)이 있으면 그 확장 칸들을 반환
 function opponentOpenThreeFlanks(board, aiPlayer) {
@@ -377,6 +398,17 @@ function opponentOpenThreeFlanks(board, aiPlayer) {
 // 내 열린 삼이 있으면 그 확장 칸들을 반환 (공격 타이밍 판단용)
 function myOpenThreeFlanks(board, aiPlayer) {
   return findOpenThreeFlankCells(board, aiPlayer);
+}
+
+// 파괴/낙인/동전던지기처럼 "상대 돌 하나를 노리는" 카드 중 손에 있는 걸 우선순위대로 골라요.
+function pickDestroyLikeCard(hand, board, aiPlayer, protectedStones) {
+  for (const cardId of ['destroy', 'destroyChain', 'mark', 'coinFlip']) {
+    if (hand.includes(cardId)) {
+      const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, () => false, protectedStones);
+      if (target) return { cardId, target };
+    }
+  }
+  return null;
 }
 
 // state는 gameReducer의 state 형태를 그대로 받아요 (board, hand, ruleFlags 등)
@@ -395,7 +427,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
 
   // 1) 상대가 바로 이길 수 있는 상황이면, 막을 수 있는 카드부터 우선 사용 (난이도에 따라 놓칠 수도 있음)
   if (opponentThreat && Math.random() < blockChance) {
-    for (const cardId of ['barrier', 'freezeCell', 'destroy', 'destroyChain']) {
+    for (const cardId of ['barrier', 'freezeCell', 'destroy', 'destroyChain', 'mark', 'coinFlip']) {
       if (hand.includes(cardId)) {
         const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, blockedFn, protectedStones);
         if (target) return { cardId, target };
@@ -410,10 +442,8 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     for (const cardId of ['barrier', 'freezeCell']) {
       if (hand.includes(cardId)) return { cardId, target: forcingCell };
     }
-    if (hand.includes('destroy') || hand.includes('destroyChain')) {
-      const target = findMostConnectedStone(board, otherPlayer(aiPlayer), protectedStones);
-      if (target) return { cardId: hand.includes('destroy') ? 'destroy' : 'destroyChain', target };
-    }
+    const pick = pickDestroyLikeCard(hand, board, aiPlayer, protectedStones);
+    if (pick) return pick;
   }
 
   // 2) 상대가 열린 삼(다음다음 수에 못 막는 위협이 될 수 있는 자리)을 만들었으면 미리 막아요
@@ -423,10 +453,8 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
         return { cardId, target: urgentFlanks[0] };
       }
     }
-    if (hand.includes('destroy') || hand.includes('destroyChain')) {
-      const target = findMostConnectedStone(board, otherPlayer(aiPlayer), protectedStones);
-      if (target) return { cardId: hand.includes('destroy') ? 'destroy' : 'destroyChain', target };
-    }
+    const pick = pickDestroyLikeCard(hand, board, aiPlayer, protectedStones);
+    if (pick) return pick;
   }
 
   // 3) 내가 열린 삼을 갖고 있으면(곧 강한 공격 찬스), 공격형 카드를 적극적으로 써요
@@ -440,19 +468,52 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     }
   }
 
+  // 3.5) 프리액션(턴 안 넘김) 준비 카드는 급하지 않아도 이득이면 바로 써요 - 밑질 게 없어요.
+  if (!hasUrgentThreat) {
+    // 감시자: 아직 안 걸려있으면 미리 발동해둬요 (상대 파괴/연금술 1회 무효화)
+    if (hand.includes('watcher') && !state.watcherActive?.[aiPlayer]) {
+      return { cardId: 'watcher' };
+    }
+    // 복구: 최근에 내 돌이 파괴/변환당한 기록이 있으면 되살려요
+    if (hand.includes('restore') && (state.stoneLossLog || []).some((e) => e.owner === aiPlayer)) {
+      return { cardId: 'restore' };
+    }
+    // 머릿수 싸움: 내 돌이 상대보다 적을 때만 의미 있어서, 그럴 때만 써요
+    if (hand.includes('headcount')) {
+      let mine = 0, theirs = 0;
+      for (let y = 0; y < board.length; y++) {
+        for (let x = 0; x < board.length; x++) {
+          if (board[y][x] === aiPlayer) mine++;
+          else if (board[y][x] === otherPlayer(aiPlayer)) theirs++;
+        }
+      }
+      if (mine < theirs) return { cardId: 'headcount' };
+    }
+  }
+
   // 4) 위협 상황이 아니라 진짜로 여유 있을 때만 카드를 써요. 위협을 막을 카드가 마침 없어서
   //    1~2번에서 대응 못 했더라도, 여기서 엉뚱한 카드를 쓰며 턴을 낭비하면 안 되니 확실히 막아요.
   if (hasUrgentThreat) return null;
 
   const opponentHand = state.draft?.hands?.[otherPlayer(aiPlayer)] ?? [];
-  const developCandidates = ['fourToWin', 'bomb', 'doubleMove', 'randomSummon', 'miracle'].filter((id) => hand.includes(id));
+  const developCandidates = ['fourToWin', 'bomb', 'doubleMove', 'randomSummon', 'miracle', 'duplicate', 'allowOverline', 'shortWin', 'longWin']
+    .filter((id) => hand.includes(id));
   // 침묵은 상대에게 아직 쓸 카드가 남아있을 때만 의미가 있어요
   if (hand.includes('silence') && opponentHand.length > 0) developCandidates.push('silence');
+  // 거래/리롤은 다른 쓸만한 카드가 없을 때만 손패를 갈아엎는 최후 수단으로 써요
+  if (developCandidates.length === 0) {
+    if (hand.includes('trade')) developCandidates.push('trade');
+    else if (hand.includes('reroll')) developCandidates.push('reroll');
+  }
 
   const targetedCandidates = [];
   if (hand.includes('reinforce')) {
     const t = findMostConnectedStoneWithScore(board, aiPlayer);
     if (t && t.score >= 40) targetedCandidates.push({ cardId: 'reinforce', target: { x: t.x, y: t.y } });
+  }
+  if (hand.includes('sanctuary')) {
+    const t = findMostConnectedStoneWithScore(board, aiPlayer);
+    if (t && t.score >= 120) targetedCandidates.push({ cardId: 'sanctuary', target: { x: t.x, y: t.y } });
   }
   if (hand.includes('corrupt')) {
     const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
@@ -462,9 +523,16 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
     if (t && t.score >= 350) targetedCandidates.push({ cardId: 'sealLine', target: { x: t.x, y: t.y } });
   }
+  if (hand.includes('mark') && !targetedCandidates.some((c) => c.cardId === 'mark')) {
+    const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+    if (t && t.score >= 350) targetedCandidates.push({ cardId: 'mark', target: { x: t.x, y: t.y } });
+  }
   if (hand.includes('thornTrap')) {
     const t = AI_CARD_HANDLERS.thornTrap(board, aiPlayer, blockedFn);
     if (t) targetedCandidates.push({ cardId: 'thornTrap', target: t });
+  }
+  if (hand.includes('purify') && Object.keys(state.blockedCells || {}).length >= 3) {
+    targetedCandidates.push({ cardId: 'purify' });
   }
 
   // 발전용 카드는 예전보다 덜 헤프게, 대상이 뚜렷한 카드는 조금 더 적극적으로 써요
