@@ -169,9 +169,9 @@ body {
   width: 100%;
   min-width: 340px;
   aspect-ratio: 1 / 1;
-  background: #dcb35c;
+  background: var(--board-bg, #dcb35c);
   border-radius: 10px;
-  border: 1px solid #b8903f;
+  border: 1px solid var(--board-border, #b8903f);
   padding: 5%;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   animation: pageFadeIn 0.45s ease-out;
@@ -184,7 +184,7 @@ body {
 }
 
 .grid-lines line {
-  stroke: rgba(0, 0, 0, 0.35);
+  stroke: var(--board-line, rgba(0, 0, 0, 0.35));
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
@@ -247,18 +247,18 @@ body {
 }
 
 .stone-black {
-  background: #1a1a1a;
+  background: var(--stone-black-bg, #1a1a1a);
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.15);
 }
 
 .stone-white {
-  background: #fbfaf6;
-  border: 1px solid #8a8678;
+  background: var(--stone-white-bg, #fbfaf6);
+  border: 1px solid var(--stone-white-border, #8a8678);
 }
 
 .stone-wild {
-  background: linear-gradient(180deg, #1a1a1a 50%, #fbfaf6 50%);
-  border: 1px solid #8a8678;
+  background: linear-gradient(180deg, var(--stone-black-bg, #1a1a1a) 50%, var(--stone-white-bg, #fbfaf6) 50%);
+  border: 1px solid var(--stone-white-border, #8a8678);
 }
 
 .stone-protected {

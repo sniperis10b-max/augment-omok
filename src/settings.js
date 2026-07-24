@@ -19,6 +19,8 @@ const DEFAULTS = {
   timeLimitSec: 0, // 0 = 제한 없음
   cardsPerPlayer: 3,
   whatsNewSeenVersion: 0, // 사용자가 "다시 보지 않기"를 누른 마지막 업데이트 버전
+  boardSkin: 'classic', // 바둑판 스킨 (지금은 개발자 계정만 바꿀 수 있어요)
+  stoneSkin: 'classic', // 바둑돌 스킨 (지금은 개발자 계정만 바꿀 수 있어요)
 };
 
 export function loadSettings() {

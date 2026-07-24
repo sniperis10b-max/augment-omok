@@ -41,6 +41,7 @@ import {
   forceSetPeakTierIndex,
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
+import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById } from './skins.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -464,6 +465,19 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme);
   }, [settings.theme]);
+
+  // 바둑판/바둑돌 스킨 적용 (CSS 변수로 board/stone 색상을 덮어써요)
+  useEffect(() => {
+    const board = getBoardSkinById(settings.boardSkin);
+    const stone = getStoneSkinById(settings.stoneSkin);
+    const root = document.documentElement.style;
+    root.setProperty('--board-bg', board.background);
+    root.setProperty('--board-border', board.border);
+    root.setProperty('--board-line', board.line);
+    root.setProperty('--stone-black-bg', stone.black);
+    root.setProperty('--stone-white-bg', stone.white);
+    root.setProperty('--stone-white-border', stone.whiteBorder);
+  }, [settings.boardSkin, settings.stoneSkin]);
 
   // 사운드 on/off 반영
   useEffect(() => {
@@ -2292,6 +2306,57 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               <Moon size={18} />
               <div className="card-name">어둡게</div>
             </button>
+          </div>
+        </div>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>바둑판 스킨</span>
+            {!isDevAccount(user) && <span className="setup-card-desc">개발자 전용 (준비 중)</span>}
+          </div>
+          <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid', marginTop: 8 }}>
+            {BOARD_SKINS.map((skin) => (
+              <button
+                key={skin.id}
+                className="card-option"
+                disabled={!isDevAccount(user)}
+                style={{
+                  borderColor: settings.boardSkin === skin.id ? 'var(--accent)' : undefined,
+                  opacity: isDevAccount(user) ? 1 : 0.5,
+                }}
+                onClick={() => updateSettings({ boardSkin: skin.id })}
+              >
+                <div style={{ width: 28, height: 28, borderRadius: 6, background: skin.background, border: `1px solid ${skin.border}`, margin: '0 auto 6px' }} />
+                <div className="card-name">{skin.name}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>바둑돌 스킨</span>
+            {!isDevAccount(user) && <span className="setup-card-desc">개발자 전용 (준비 중)</span>}
+          </div>
+          <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid', marginTop: 8 }}>
+            {STONE_SKINS.map((skin) => (
+              <button
+                key={skin.id}
+                className="card-option"
+                disabled={!isDevAccount(user)}
+                style={{
+                  borderColor: settings.stoneSkin === skin.id ? 'var(--accent)' : undefined,
+                  opacity: isDevAccount(user) ? 1 : 0.5,
+                }}
+                onClick={() => updateSettings({ stoneSkin: skin.id })}
+              >
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: skin.black, display: 'inline-block' }} />
+                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: skin.white, border: `1px solid ${skin.whiteBorder}`, display: 'inline-block' }} />
+                </div>
+                <div className="card-name">{skin.name}</div>
+              </button>
+            ))}
           </div>
         </div>
 
