@@ -42,7 +42,7 @@ import {
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
 import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked } from './skins.js';
-import { PLACEMENT_EFFECTS, getPlacementEffectById } from './effects.js';
+import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked } from './effects.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, addToStatSet, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -869,6 +869,11 @@ export default function App() {
                   setLastRankChange({ delta, newPoints });
                   const peak = await updatePeakTier(user.uid, newPoints).catch(() => null);
                   if (peak !== null) setPeakTierIndex(peak);
+
+                  // 파동 이펙트 조건: 이미 마스터였던 상태에서 랭크전으로 승리
+                  if (result === 'win' && peakTierIndex >= TIERS.length - 1) {
+                    bumpCounter(user.uid, 'postMasterWins', 1).catch(() => {});
+                  }
                 }
               } catch {
                 // 랭크 포인트 반영 실패해도 게임 결과 자체엔 영향 없어요
@@ -2353,6 +2358,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             titleCount: Object.keys(myTitles).length,
           };
           const dev = isDevAccount(user);
+          const unlockedSkinCount = BOARD_SKINS.filter((s) => isBoardSkinUnlocked(s.id, myStats, skinCtx)).length
+            + STONE_SKINS.filter((s) => isStoneSkinUnlocked(s.id, myStats, skinCtx)).length;
+          const fxCtx = { unlockedSkinCount, titleCount: skinCtx.titleCount };
           return (
             <>
               <div className="tutorial-card">
@@ -2411,33 +2419,37 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   })}
                 </div>
               </div>
+
+              <div className="tutorial-card">
+                <div className="tutorial-title">착수 이펙트</div>
+                <p className="setup-card-desc" style={{ marginBottom: 8 }}>돌을 놓을 때 나오는 효과예요. 스킨보다 조건이 더 어려워요.</p>
+                <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
+                  {PLACEMENT_EFFECTS.map((fx) => {
+                    const unlocked = dev || isPlacementEffectUnlocked(fx.id, myStats, fxCtx);
+                    return (
+                      <button
+                        key={fx.id}
+                        className="card-option"
+                        disabled={!unlocked}
+                        style={{
+                          borderColor: settings.placementEffect === fx.id ? 'var(--accent)' : undefined,
+                          opacity: unlocked ? 1 : 0.5,
+                        }}
+                        onClick={() => updateSettings({ placementEffect: fx.id })}
+                      >
+                        <div className="card-name">
+                          {!unlocked && <ShieldQuestion size={12} style={{ verticalAlign: -2, marginRight: 4 }} />}
+                          {fx.name}
+                        </div>
+                        <div className="setup-card-desc" style={{ fontSize: 10 }}>{fx.questDesc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </>
           );
         })()}
-
-        <div className="tutorial-card">
-          <div className="tutorial-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>착수 이펙트</span>
-            {!isDevAccount(user) && <span className="setup-card-desc">개발자 전용 (준비 중)</span>}
-          </div>
-          <p className="setup-card-desc" style={{ marginBottom: 8 }}>돌을 놓을 때 나오는 효과예요.</p>
-          <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
-            {PLACEMENT_EFFECTS.map((fx) => (
-              <button
-                key={fx.id}
-                className="card-option"
-                disabled={!isDevAccount(user)}
-                style={{
-                  borderColor: settings.placementEffect === fx.id ? 'var(--accent)' : undefined,
-                  opacity: isDevAccount(user) ? 1 : 0.5,
-                }}
-                onClick={() => updateSettings({ placementEffect: fx.id })}
-              >
-                <div className="card-name">{fx.name}</div>
-              </button>
-            ))}
-          </div>
-        </div>
 
         <div className="tutorial-card">
           <div className="tutorial-title">효과음</div>
