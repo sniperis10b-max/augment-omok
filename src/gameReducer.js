@@ -85,6 +85,7 @@ export function createInitialState() {
     skipNextTurn: { [BLACK]: false, [WHITE]: false },
     lastUsedCard: { [BLACK]: null, [WHITE]: null },
     history: [],
+    moveLog: [],
     ruleFlags: { noDoubleThree: false, ignoreDoubleFourOnce: false, allowOverline: false, forceForbiddenFor: null },
     winLengthOverride: { [BLACK]: null, [WHITE]: null },
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
@@ -106,6 +107,17 @@ export function createInitialState() {
 
 function cloneBoard(board) {
   return board.map((row) => row.slice());
+}
+
+// 기보(착수/카드 사용 기록)에 한 줄을 추가해요. 실행 취소 카드가 history를
+// 지워도 moveLog는 절대 지워지지 않아서, 게임 중 언제든 지금까지의 전체
+// 기록을 되돌아볼 수 있어요.
+function pushMoveLog(state, entry) {
+  const seq = state.moveLog.length + 1;
+  return {
+    ...state,
+    moveLog: [...state.moveLog, { seq, ply: state.ply, ...entry }],
+  };
 }
 
 function explodeBombs(state) {
@@ -276,6 +288,7 @@ function tryPlaceStone(state, clickX, clickY) {
 
   let nextState = { ...workingState, board: nextBoard, lastMove: { x, y } };
   nextState.history = [...workingState.history, nextBoard];
+  nextState = pushMoveLog(nextState, { type: 'place', player, x, y, board: nextBoard });
 
   if (nextState.forcedZone && nextState.forcedZone.player === player) {
     nextState.forcedZone = null;
@@ -569,6 +582,7 @@ function resolveTargetedEffect(state, cardId, targets) {
   if (boardChanged) {
     next.history = [...next.history, board];
   }
+  next = pushMoveLog(next, { type: 'card', player, cardId, targets, board });
 
   if (cardId === 'overwrite') {
     const wouldWin = checkWin(board, targets[0].x, targets[0].y, player, { sealedLines: next.sealedLines, markedStones: next.markedStones });
@@ -891,6 +905,7 @@ function resolveStandaloneNoTarget(state, cardId) {
   if (boardChanged) {
     next.history = [...next.history, board];
   }
+  next = pushMoveLog(next, { type: 'card', player, cardId, targets: null, board });
 
   if (cardId === 'miracle' && next.miracleResult === 'success') {
     next.phase = 'over';
@@ -942,6 +957,8 @@ function activatePlacementBuff(state, cardId) {
     next.buffs = { ...next.buffs, bombArmed: true };
     next.message = '다음에 놓는 돌이 시한폭탄이 돼요. 돌을 놓으세요.';
   }
+
+  next = pushMoveLog(next, { type: 'card', player, cardId, targets: null, board: next.board });
 
   return withDeadline(next);
 }

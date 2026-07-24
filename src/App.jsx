@@ -8,6 +8,7 @@ import {
   UserCircle, LogOut, Mail, ShieldQuestion, UserPlus, Bell, Dice5, X as XIcon, Star,
   Zap, Tornado, Repeat, Stamp, Sparkle, AudioLines,
   Landmark, Infinity as InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins,
+  ListOrdered,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer, isCellInSealedLine } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -50,6 +51,11 @@ function CardIcon({ name, size = 18 }) {
 }
 
 const PLAYER_LABEL = { [BLACK]: '흑', [WHITE]: '백' };
+
+// 좌표를 "H8" 같은 기보 스타일 표기로 바꿔줘요 (왼쪽부터 A, B, C... / 위에서부터 1, 2, 3...).
+function cellLabel(x, y) {
+  return `${String.fromCharCode(65 + x)}${y + 1}`;
+}
 
 // 특정 계정(개발자)에게만 프로필에 뱃지를 보여주기 위한 판별 함수.
 // 이메일 대소문자가 다를 수 있어서 소문자로 비교해요.
@@ -2317,6 +2323,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
   const isSpectator = online && online.role === 'spectator';
   const isOnlineWaiting = online && !isSpectator && state.turn !== online.localColor && !gameOver;
   const [showResignConfirm, setShowResignConfirm] = useState(false);
+  const [showMoveLog, setShowMoveLog] = useState(false);
 
   let modeLabel = '2인 대국';
   if (state.aiPlayer) modeLabel = `AI 대전 · AI는 ${PLAYER_LABEL[state.aiPlayer]} · 난이도 ${DIFFICULTIES[state.aiDifficulty]?.label ?? '보통'}`;
@@ -2359,6 +2366,13 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       <header className="header">
         <h1>증강 오목</h1>
         <div className="top-toggles">
+          <button
+            className={`icon-toggle-btn ${showMoveLog ? 'icon-toggle-btn-active' : ''}`}
+            onClick={() => setShowMoveLog((v) => !v)}
+            title="기보 보기"
+          >
+            <ListOrdered size={16} />
+          </button>
           <button className="icon-toggle-btn" onClick={() => updateSettings({ soundEnabled: !settings.soundEnabled })} title="효과음">
             {settings.soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
           </button>
@@ -2455,6 +2469,8 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
         <Board state={state} dispatch={dispatch} online={online} />
       </div>
 
+      {showMoveLog && <MoveLogPanel state={state} onClose={() => setShowMoveLog(false)} />}
+
       <div className="hands-row">
         {[BLACK, WHITE].map((p) => (
           <HandPanel key={p} player={p} state={state} dispatch={dispatch} disabled={gameOver} online={online} />
@@ -2462,6 +2478,149 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       </div>
 
       {online && <ChatPanel online={online} user={user} />}
+    </div>
+  );
+}
+
+// 기보 목록 한 줄에 들어갈 설명 텍스트를 만들어요.
+function describeMoveLogEntry(entry) {
+  const who = PLAYER_LABEL[entry.player];
+  if (entry.type === 'place') {
+    return `${who} · ${cellLabel(entry.x, entry.y)}`;
+  }
+  const card = getCardById(entry.cardId);
+  const name = card ? card.name : entry.cardId;
+  if (entry.targets && entry.targets.length === 2) {
+    return `${who} · 카드 「${name}」 (${cellLabel(entry.targets[0].x, entry.targets[0].y)} → ${cellLabel(entry.targets[1].x, entry.targets[1].y)})`;
+  }
+  if (entry.targets && entry.targets.length === 1) {
+    return `${who} · 카드 「${name}」 (${cellLabel(entry.targets[0].x, entry.targets[0].y)})`;
+  }
+  return `${who} · 카드 「${name}」`;
+}
+
+// 선택한 시점의 보드 상태를 작게 보여주는 읽기 전용 미리보기 보드예요.
+function MiniBoard({ board }) {
+  const size = board.length;
+  const gapPct = 100 / (size - 1);
+  return (
+    <div className="movelog-preview-board">
+      <div className="grid-area">
+        <svg className="grid-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+          {Array.from({ length: size }).map((_, i) => (
+            <line key={`v-${i}`} x1={i * gapPct} y1={0} x2={i * gapPct} y2={100} />
+          ))}
+          {Array.from({ length: size }).map((_, i) => (
+            <line key={`h-${i}`} x1={0} y1={i * gapPct} x2={100} y2={i * gapPct} />
+          ))}
+        </svg>
+        {Array.from({ length: size }).map((_, y) =>
+          Array.from({ length: size }).map((_, x) => {
+            const value = board[y][x];
+            if (value === 0) return null;
+            return (
+              <div
+                key={`${x}-${y}`}
+                className="cell"
+                style={{
+                  left: `${x * gapPct}%`,
+                  top: `${y * gapPct}%`,
+                  width: `${gapPct}%`,
+                  height: `${gapPct}%`,
+                }}
+              >
+                <span className={`stone ${value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'}`} />
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 게임 중 지금까지 둔 모든 수(카드 사용 포함)를 확인할 수 있는 기보 패널이에요.
+// 실행 취소 카드로 보드가 되돌아가도 이 기록은 지워지지 않아서 전체 진행을 볼 수 있어요.
+function MoveLogPanel({ state, onClose }) {
+  const { moveLog } = state;
+  const [selected, setSelected] = useState(null); // null이면 지금(라이브) 보드를 보여줘요.
+  const prevLenRef = useRef(moveLog.length);
+  const listEndRef = useRef(null);
+
+  useEffect(() => {
+    const prevLen = prevLenRef.current;
+    setSelected((sel) => {
+      if (sel === null) return null;
+      if (sel === prevLen - 1) return moveLog.length - 1; // 최신 수를 보고 있었다면 계속 따라가요.
+      return sel;
+    });
+    prevLenRef.current = moveLog.length;
+  }, [moveLog.length]);
+
+  useEffect(() => {
+    if (selected === null) listEndRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [moveLog.length, selected]);
+
+  const viewIndex = selected === null ? moveLog.length - 1 : selected;
+  const displayBoard = viewIndex >= 0 ? moveLog[viewIndex].board : state.board;
+  const isLive = selected === null;
+
+  return (
+    <div className="movelog-panel">
+      <div className="movelog-panel-header">
+        <span><ListOrdered size={15} style={{ verticalAlign: 'middle', marginRight: 6 }} />기보</span>
+        <button className="icon-toggle-btn" onClick={onClose} title="닫기">
+          <XIcon size={15} />
+        </button>
+      </div>
+
+      {moveLog.length === 0 ? (
+        <p className="movelog-empty">아직 둔 수가 없어요.</p>
+      ) : (
+        <>
+          <MiniBoard board={displayBoard} />
+
+          <div className="movelog-controls">
+            <button
+              className="icon-toggle-btn"
+              disabled={viewIndex <= 0}
+              onClick={() => setSelected(Math.max(0, viewIndex - 1))}
+              title="이전 수"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="movelog-count">{viewIndex + 1} / {moveLog.length}</span>
+            <button
+              className="icon-toggle-btn"
+              disabled={viewIndex >= moveLog.length - 1}
+              onClick={() => setSelected(Math.min(moveLog.length - 1, viewIndex + 1))}
+              title="다음 수"
+            >
+              <ChevronRight size={14} />
+            </button>
+            {!isLive && (
+              <button className="reset-btn" onClick={() => setSelected(null)}>
+                최신으로
+              </button>
+            )}
+          </div>
+
+          <div className="movelog-list">
+            {moveLog.map((entry, i) => (
+              <button
+                key={entry.seq}
+                ref={i === moveLog.length - 1 ? listEndRef : null}
+                className={`movelog-row ${i === viewIndex ? 'movelog-row-active' : ''}`}
+                onClick={() => setSelected(i)}
+              >
+                <span className="movelog-seq">{entry.seq}.</span>
+                <span className={`movelog-dot ${entry.player === BLACK ? 'movelog-dot-black' : 'movelog-dot-white'}`} />
+                <span className="movelog-desc">{describeMoveLogEntry(entry)}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
