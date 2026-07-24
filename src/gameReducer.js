@@ -84,6 +84,7 @@ export function createInitialState() {
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
     rematchVotes: { [BLACK]: false, [WHITE]: false },
+    drawOffer: null,
     lastMove: null,
     message: '카드를 뽑는 중이에요.',
     draft: {
@@ -996,6 +997,35 @@ export function gameReducer(state, action) {
         phase: 'over',
         winner,
         message: `${resigner === BLACK ? '흑' : '백'}이 기권했어요. ${winner === BLACK ? '흑' : '백'} 승리!`,
+      };
+    }
+
+    case 'OFFER_DRAW': {
+      if (state.phase !== 'play') return state;
+      const offerer = action.player ?? state.turn;
+      if (state.drawOffer) return state; // 이미 제안이 진행 중이면 무시
+      return {
+        ...state,
+        drawOffer: { by: offerer },
+        message: `${offerer === BLACK ? '흑' : '백'}이 무승부를 제안했어요.`,
+      };
+    }
+
+    case 'RESPOND_DRAW': {
+      if (state.phase !== 'play' || !state.drawOffer) return state;
+      if (action.accept) {
+        return {
+          ...state,
+          phase: 'over',
+          winner: null,
+          drawOffer: null,
+          message: '무승부에 합의했어요.',
+        };
+      }
+      return {
+        ...state,
+        drawOffer: null,
+        message: `${state.drawOffer.by === BLACK ? '흑' : '백'}이 제안한 무승부를 거절했어요.`,
       };
     }
 

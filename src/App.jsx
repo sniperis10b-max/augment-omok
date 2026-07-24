@@ -2264,10 +2264,33 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
               <button className="reset-btn" onClick={onReset}>다시 시작</button>
             </>
           ) : (
-            <button className="reset-btn" onClick={() => setShowResignConfirm(true)}>기권</button>
+            <>
+              <button className="reset-btn" onClick={() => setShowResignConfirm(true)}>기권</button>
+              {online && !isSpectator && !state.drawOffer && (
+                <button className="reset-btn" onClick={() => dispatch({ type: 'OFFER_DRAW', player: online.localColor })}>
+                  무승부 제안
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {online && !isSpectator && state.phase === 'play' && state.drawOffer && (
+        <div className="setup-warning" style={{ marginTop: -10, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          {state.drawOffer.by === online.localColor ? (
+            <span>무승부를 제안했어요. 상대의 응답을 기다리는 중...</span>
+          ) : (
+            <>
+              <span>상대가 무승부를 제안했어요.</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="reset-btn" onClick={() => dispatch({ type: 'RESPOND_DRAW', accept: true })}>수락</button>
+                <button className="reset-btn" onClick={() => dispatch({ type: 'RESPOND_DRAW', accept: false })}>거절</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {online && gameOver && (myRematchVote || opponentRematchVote) && (
         <p className="setup-card-desc" style={{ marginTop: -10, marginBottom: 12 }}>
