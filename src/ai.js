@@ -488,6 +488,7 @@ const DRAFT_WEIGHT = {
   release33: 4, shrinkBoard: 3, undoLast: 4, timeReset: 3, chaosShift: 2,
   provoke: 3, confuse: 3, steal: 4, comboBlock: 5, miracle: 2,
   destroyChain: 6, restore: 5, watcher: 6, duplicate: 5, vortex: 3,
+  trade: 4, mark: 5, purify: 4, echo: 3,
 };
 
 export function pickDraftCard(options) {

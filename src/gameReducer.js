@@ -19,6 +19,7 @@ const STANDALONE = new Set([
   'thornTrap', 'comboBlock', 'randomSummon', 'provoke', 'confuse', 'steal',
   'winShield', 'wildcard', 'silence', 'miracle',
   'destroyChain', 'restore', 'watcher', 'duplicate', 'vortex',
+  'trade', 'mark', 'purify', 'echo',
 ]);
 const PLACEMENT_BUFF = new Set(['fourToWin', 'allow44', 'doubleMove', 'bomb']);
 
@@ -30,6 +31,7 @@ const FREE_ACTION = new Set([
   'thornTrap', 'comboBlock', 'randomSummon', 'provoke', 'confuse', 'steal',
   'winShield', 'wildcard', 'silence',
   'watcher', 'duplicate',
+  'trade', 'mark',
 ]);
 
 const key = (x, y) => `${x},${y}`;
@@ -70,6 +72,9 @@ export function createInitialState() {
     confusion: null,
     winShield: { [BLACK]: false, [WHITE]: false },
     watcherActive: { [BLACK]: false, [WHITE]: false },
+    echoActive: { [BLACK]: false, [WHITE]: false },
+    echoResult: null,
+    markedStones: {},
     stoneLossLog: [],
     silencedTurns: { [BLACK]: 0, [WHITE]: 0 },
     skipNextTurn: { [BLACK]: false, [WHITE]: false },
@@ -284,7 +289,7 @@ function tryPlaceStone(state, clickX, clickY) {
 
   const winLength = workingState.buffs.fourToWinActive ? 4 : 5;
   const isBonusMove = !!workingState.buffs.doubleMoveBonusPending;
-  const won = !isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines });
+  const won = !isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones });
 
   if (won) {
     const shieldHolder = otherPlayer(player);
@@ -308,7 +313,7 @@ function tryPlaceStone(state, clickX, clickY) {
     return nextState;
   }
 
-  if (isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines })) {
+  if (isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones })) {
     const res = finishTurnAfterPlacement(nextState, player);
     res.message = `연속 두기의 두 번째 수로는 승리할 수 없어요! ${res.message}`;
     return res;
@@ -328,9 +333,20 @@ function removeFromHand(state, player, cardId) {
 function resolveTargetedEffect(state, cardId, targets) {
   const player = state.turn;
   let next = { ...state, lastUsedCard: { ...state.lastUsedCard, [player]: cardId } };
+  // 메아리는 대상 선택이 필요 없는 카드에만 중첩 발동돼요. 지금처럼 대상이 필요한 카드를
+  // 쓰면 대기 중이던 메아리 효과는 그냥 소모돼요 (중첩 없이).
+  if (next.echoActive[player]) {
+    next.echoActive = { ...next.echoActive, [player]: false };
+  }
   const board = cloneBoard(next.board);
 
   switch (cardId) {
+    case 'mark': {
+      const [t] = targets;
+      next.markedStones = { ...next.markedStones, [key(t.x, t.y)]: true };
+      next.message = '상대 돌 하나에 낙인을 찍었어요. 그 돌이 포함된 5목은 승리로 인정되지 않아요.';
+      break;
+    }
     case 'destroy': {
       const [t] = targets;
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
@@ -513,7 +529,7 @@ function resolveTargetedEffect(state, cardId, targets) {
   }
 
   if (cardId === 'overwrite') {
-    const wouldWin = checkWin(board, targets[0].x, targets[0].y, player, { sealedLines: next.sealedLines });
+    const wouldWin = checkWin(board, targets[0].x, targets[0].y, player, { sealedLines: next.sealedLines, markedStones: next.markedStones });
     if (isBoardFull(board)) {
       next.phase = 'over';
       next.winner = null;
@@ -529,8 +545,8 @@ function resolveTargetedEffect(state, cardId, targets) {
 
   if (cardId === 'wildcard') {
     const t = targets[0];
-    const blackWon = checkWin(board, t.x, t.y, BLACK, { sealedLines: next.sealedLines });
-    const whiteWon = !blackWon && checkWin(board, t.x, t.y, WHITE, { sealedLines: next.sealedLines });
+    const blackWon = checkWin(board, t.x, t.y, BLACK, { sealedLines: next.sealedLines, markedStones: next.markedStones });
+    const whiteWon = !blackWon && checkWin(board, t.x, t.y, WHITE, { sealedLines: next.sealedLines, markedStones: next.markedStones });
     const winner = blackWon ? BLACK : whiteWon ? WHITE : null;
     if (winner) {
       next.phase = 'over';
@@ -562,7 +578,65 @@ function resolveStandaloneNoTarget(state, cardId) {
   let next = { ...state, lastUsedCard: { ...state.lastUsedCard, [player]: cardId } };
   let board = cloneBoard(next.board);
 
+  // 메아리(echo)가 대기 중이었다면, 대상 선택이 필요 없는 이번 카드의 효과를 한 번 더 실행해요.
+  // (echo 카드 자신은 스스로를 중첩시키지 않아요)
+  const repeatCount = (cardId !== 'echo' && next.echoActive[player]) ? 2 : 1;
+  if (next.echoActive[player]) {
+    next.echoActive = { ...next.echoActive, [player]: false };
+  }
+
+  for (let rep = 0; rep < repeatCount; rep++) {
   switch (cardId) {
+    case 'trade': {
+      const myOtherCards = next.draft.hands[player].filter((id) => id !== 'trade');
+      const opponent = otherPlayer(player);
+      const opponentHand = next.draft.hands[opponent];
+      if (myOtherCards.length === 0) {
+        next.message = '거래할 카드가 손에 없어요.';
+        break;
+      }
+      if (opponentHand.length === 0) {
+        next.message = '상대에게 받을 카드가 없어서 거래가 성사되지 않았어요.';
+        break;
+      }
+      const giveIdx = Math.floor(Math.random() * myOtherCards.length);
+      const giveCard = myOtherCards[giveIdx];
+      const takeIdx = Math.floor(Math.random() * opponentHand.length);
+      const takeCard = opponentHand[takeIdx];
+
+      const myHandAfterGive = [...next.draft.hands[player]];
+      myHandAfterGive.splice(myHandAfterGive.indexOf(giveCard), 1);
+      const opponentHandAfterGive = [...opponentHand, giveCard];
+
+      const takeCardIdxInOpp = opponentHandAfterGive.indexOf(takeCard);
+      opponentHandAfterGive.splice(takeCardIdxInOpp, 1);
+      const myHandAfterTake = [...myHandAfterGive, takeCard];
+
+      next.draft = {
+        ...next.draft,
+        hands: { ...next.draft.hands, [player]: myHandAfterTake, [opponent]: opponentHandAfterGive },
+      };
+      const gaveName = CARDS.find((c) => c.id === giveCard)?.name || giveCard;
+      const tookName = CARDS.find((c) => c.id === takeCard)?.name || takeCard;
+      next.message = `'${gaveName}'을(를) 주고 '${tookName}'을(를) 받았어요.`;
+      break;
+    }
+    case 'purify': {
+      next.blockedCells = {};
+      next.message = '보드 위의 착수 불가 효과(장벽/결계/동결/오염/판 축소 등)를 모두 해제했어요.';
+      break;
+    }
+    case 'echo': {
+      const success = Math.random() < 0.5;
+      next.echoResult = success ? 'success' : 'fail';
+      if (success) {
+        next.echoActive = { ...next.echoActive, [player]: true };
+        next.message = '메아리가 발동했어요! 다음에 쓰는 카드(대상 선택 없는 카드)가 한 번 더 발동돼요.';
+      } else {
+        next.message = '메아리가 발동하지 않았어요... (50% 확률) 카드는 소모됐어요.';
+      }
+      break;
+    }
     case 'shrinkBoard': {
       const updates = {};
       const size = board.length;
@@ -698,6 +772,8 @@ function resolveStandaloneNoTarget(state, cardId) {
     default:
       break;
   }
+  if (cardId === 'miracle' && next.miracleResult === 'success') break; // 이미 성공했으면 더 굴리지 않아요
+  }
 
   next.board = board;
   next = removeFromHand(next, player, cardId);
@@ -736,6 +812,9 @@ function activatePlacementBuff(state, cardId) {
   let next = removeFromHand(state, player, cardId);
   next.lastUsedCard = { ...next.lastUsedCard, [player]: cardId };
   next.activeCard = null;
+  if (next.echoActive[player]) {
+    next.echoActive = { ...next.echoActive, [player]: false };
+  }
 
   if (cardId === 'fourToWin') {
     const success = Math.random() < 0.3;
@@ -777,6 +856,7 @@ const TARGET_STEPS = {
   confuse: ['emptyOrAnyCell'],
   wildcard: ['emptyCell'],
   vortex: ['emptyOrAnyCell'],
+  mark: ['enemyStone'],
 };
 
 function cellMatchesStep(state, x, y, step) {

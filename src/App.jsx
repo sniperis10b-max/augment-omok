@@ -6,7 +6,7 @@ import {
   HandMetal, ShieldPlus, CircleDot, VolumeX, Bot, Users, ChevronLeft, Copy, Check, Wifi,
   BookOpen, ChevronRight, Settings, Sun, Moon, Volume2, Eye, MessageCircle, Send, RotateCcw,
   UserCircle, LogOut, Mail, ShieldQuestion, UserPlus, Bell, Dice5, X as XIcon, Star,
-  Zap, Tornado,
+  Zap, Tornado, Repeat, Stamp, Sparkle, AudioLines,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -35,7 +35,7 @@ const ICONS = {
   Minimize2, Trophy, Repeat2, Snowflake, Biohazard, Bomb, Undo2, History, Shuffle,
   Unlock, KeyRound, SeparatorHorizontal, Sprout, ShieldOff, Sparkles, Target, Dices,
   HandMetal, ShieldPlus, CircleDot, VolumeX, Star,
-  Zap, RotateCcw, Eye, Copy, Tornado,
+  Zap, RotateCcw, Eye, Copy, Tornado, Repeat, Stamp, Sparkle, AudioLines,
 };
 
 function CardIcon({ name, size = 18 }) {
@@ -226,7 +226,9 @@ export default function App() {
             ? (state.buffs.fourToWinActive ? 'success' : 'fail')
             : cur === 'miracle'
               ? (state.miracleResult === 'success' ? 'success' : 'fail')
-              : null;
+              : cur === 'echo'
+                ? (state.echoResult === 'success' ? 'success' : 'fail')
+                : null;
           setCardOverlay({ player: p, card, key: Date.now(), result });
         }
       }

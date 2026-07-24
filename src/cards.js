@@ -44,6 +44,10 @@ export const CARDS = [
   { id: 'watcher', name: '감시자', desc: '발동해두면, 상대가 다음에 나에게 파괴나 연금술 카드를 쓸 때 그 효과를 1회 무효화해요.', targetType: 'none', icon: 'Eye' },
   { id: 'duplicate', name: '복제', desc: '지금 내 손에 있는 카드 중 하나를 무작위로 복제해서 1장 더 얻어요.', targetType: 'none', icon: 'Copy' },
   { id: 'vortex', name: '소용돌이', desc: '지정한 칸을 중심으로 3x3 범위 안의 모든 돌(내 것, 상대 것 상관없이)의 위치를 무작위로 뒤섞어요.', targetType: 'emptyOrAnyCell', icon: 'Tornado' },
+  { id: 'trade', name: '거래', desc: '내 손에 있는 카드 중 하나를 무작위로 상대에게 주고, 대신 상대 손에서 카드 1장을 무작위로 받아와요.', targetType: 'none', icon: 'Repeat' },
+  { id: 'mark', name: '낙인', desc: '지정한 상대 돌 1개에 낙인을 찍어요. 그 돌이 포함된 5목은 앞으로 승리로 인정되지 않아요.', targetType: 'enemyStone', icon: 'Stamp' },
+  { id: 'purify', name: '정화', desc: '보드 위의 착수 불가 효과(장벽/결계/동결/오염/판 축소 등)를 모두 즉시 해제해요.', targetType: 'none', icon: 'Sparkle' },
+  { id: 'echo', name: '메아리', desc: '50% 확률로 발동해요. 성공하면 바로 다음에 쓰는 카드(대상 선택이 필요 없는 카드에 한해) 효과가 자동으로 한 번 더 발동돼요. 실패해도 카드는 소모되고 턴이 넘어가요.', targetType: 'none', icon: 'AudioLines' },
 ];
 
 export function getCardById(id) {

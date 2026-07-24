@@ -46,39 +46,36 @@ export function isLineSealed(sealedLines, lineId) {
 }
 
 // x, y에 방금 놓은 player가 승리했는지. 봉인된 라인 위에서만 완성된 5목은 무효 처리.
+// markedStones(낙인)가 있으면, 그 좌표는 어느 쪽 승리 라인에도 포함될 수 없어요 (라인이 그 자리에서 끊겨요).
 export function checkWin(board, x, y, player, options = {}) {
-  const { winLength = 5, sealedLines = [] } = options;
+  const { winLength = 5, sealedLines = [], markedStones = {} } = options;
   const size = board.length;
 
   for (const [dx, dy] of DIRECTIONS) {
     let count = 1;
-    let minStep = 0;
-    let maxStep = 0;
 
     for (let step = 1; step < 8; step++) {
       const nx = x + dx * step;
       const ny = y + dy * step;
       if (nx < 0 || nx >= size || ny < 0 || ny >= size) break;
+      if (markedStones[`${nx},${ny}`]) break;
       if (!matches(board[ny][nx], player)) break;
       count++;
-      maxStep = step;
     }
 
     for (let step = 1; step < 8; step++) {
       const nx = x - dx * step;
       const ny = y - dy * step;
       if (nx < 0 || nx >= size || ny < 0 || ny >= size) break;
+      if (markedStones[`${nx},${ny}`]) break;
       if (!matches(board[ny][nx], player)) break;
       count++;
-      minStep = -step;
     }
 
     if (count >= winLength) {
       const lineId = lineIdentifier(x, y, dx, dy);
       if (!isLineSealed(sealedLines, lineId)) return true;
     }
-    void minStep;
-    void maxStep;
   }
 
   return false;
