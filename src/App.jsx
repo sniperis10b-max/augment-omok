@@ -239,7 +239,9 @@ export default function App() {
                   ? (state.shortWinResult === 'success' ? 'success' : 'fail')
                   : cur === 'longWin'
                     ? (state.longWinResult === 'success' ? 'success' : 'fail')
-                    : null;
+                    : cur === 'coinFlip'
+                      ? (state.coinFlipResult === 'success' ? 'success' : 'fail')
+                      : null;
           setCardOverlay({ player: p, card, key: Date.now(), result });
         }
       }

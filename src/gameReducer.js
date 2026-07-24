@@ -78,6 +78,7 @@ export function createInitialState() {
     echoResult: null,
     shortWinResult: null,
     longWinResult: null,
+    coinFlipResult: null,
     markedStones: {},
     stoneLossLog: [],
     silencedTurns: { [BLACK]: 0, [WHITE]: 0 },
@@ -373,7 +374,9 @@ function resolveTargetedEffect(state, cardId, targets) {
       const [t] = targets;
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
-      if (Math.random() < 0.5) {
+      const success = Math.random() < 0.5;
+      next.coinFlipResult = success ? 'success' : 'fail';
+      if (success) {
         if (next.watcherActive[defender]) {
           next.watcherActive = { ...next.watcherActive, [defender]: false };
           next.message = `동전 던지기 성공! 하지만 ${defender === BLACK ? '흑' : '백'}의 감시자가 무효화했어요.`;
