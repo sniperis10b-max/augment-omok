@@ -9,7 +9,7 @@ import {
   Zap, Tornado, Repeat, Stamp, Sparkle, AudioLines,
   Landmark, Infinity as InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins,
 } from 'lucide-react';
-import { BOARD_SIZE, otherPlayer } from './gameLogic.js';
+import { BOARD_SIZE, otherPlayer, isCellInSealedLine } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
 import { getCardById, CARDS } from './cards.js';
 import { decideAIAction, pickDraftCard, chooseBestCell, computeAITarget, DIFFICULTIES } from './ai.js';
@@ -2518,6 +2518,7 @@ function Board({ state, dispatch, online }) {
   const isSpectator = online && online.role === 'spectator';
   const isOnlineWaiting = online && (isSpectator || state.turn !== online.localColor) && !gameOver;
   const forcedZone = state.forcedZone && state.forcedZone.player === state.turn ? state.forcedZone : null;
+  const confusionZone = state.confusion && state.confusion.player === state.turn ? state.confusion.anchor : null;
 
   return (
     <div className="board">
@@ -2536,14 +2537,17 @@ function Board({ state, dispatch, online }) {
             const value = state.board[y][x];
             const blocked = isBlocked(state, x, y);
             const protectedStone = !!state.protectedStones[`${x},${y}`];
+            const markedStone = !!state.markedStones?.[`${x},${y}`];
+            const inSealedLine = isCellInSealedLine(state.sealedLines || [], x, y);
             const disabled = gameOver || isAITurn || isOnlineWaiting;
             const inForcedZone = forcedZone && x >= forcedZone.x0 && x <= forcedZone.x1 && y >= forcedZone.y0 && y <= forcedZone.y1;
+            const inConfusionZone = confusionZone && Math.abs(x - confusionZone.x) <= 1 && Math.abs(y - confusionZone.y) <= 1;
             const isLastMove = state.lastMove && state.lastMove.x === x && state.lastMove.y === y;
 
             return (
               <button
                 key={`${x}-${y}`}
-                className={`cell ${blocked ? 'cell-blocked' : ''} ${inForcedZone ? 'cell-forced' : ''}`}
+                className={`cell ${blocked ? 'cell-blocked' : ''} ${inForcedZone ? 'cell-forced' : ''} ${inSealedLine ? 'cell-sealed' : ''} ${inConfusionZone ? 'cell-confused' : ''}`}
                 style={{
                   left: `${x * gapPct}%`,
                   top: `${y * gapPct}%`,
@@ -2558,9 +2562,10 @@ function Board({ state, dispatch, online }) {
                   <span
                     className={`stone ${
                       value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'
-                    } ${protectedStone ? 'stone-protected' : ''}`}
+                    } ${protectedStone ? 'stone-protected' : ''} ${markedStone ? 'stone-marked' : ''}`}
                   >
                     {isLastMove && <span className="last-move-dot" />}
+                    {markedStone && <Stamp size={11} className="marked-badge" />}
                   </span>
                 )}
                 {blocked && value === 0 && <span className="blocked-mark" />}

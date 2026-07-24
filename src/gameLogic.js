@@ -45,6 +45,17 @@ export function isLineSealed(sealedLines, lineId) {
   return sealedLines.some((l) => l.type === lineId.type && l.index === lineId.index);
 }
 
+// (x, y) 칸이 봉인된 라인 중 하나에 속하는지 - 보드에 봉인 표시를 그릴 때 사용해요.
+export function isCellInSealedLine(sealedLines, x, y) {
+  return sealedLines.some((l) => {
+    if (l.type === 'row') return l.index === y;
+    if (l.type === 'col') return l.index === x;
+    if (l.type === 'diag1') return l.index === y - x;
+    if (l.type === 'diag2') return l.index === y + x;
+    return false;
+  });
+}
+
 // x, y에 방금 놓은 player가 승리했는지. 봉인된 라인 위에서만 완성된 5목은 무효 처리.
 // markedStones(낙인)가 있으면, 그 좌표는 어느 쪽 승리 라인에도 포함될 수 없어요 (라인이 그 자리에서 끊겨요).
 export function checkWin(board, x, y, player, options = {}) {
