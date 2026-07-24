@@ -547,6 +547,39 @@ body {
   background: linear-gradient(135deg, #5b6fd8, #8f6fe0);
 }
 
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: middle;
+}
+
+.tier-badge-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tier-badge-icon svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.tier-badge-glyph {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+
+.tier-badge-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
 .title-pick {
   display: flex;
   flex-direction: column;

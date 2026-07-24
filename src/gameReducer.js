@@ -760,7 +760,7 @@ function resolveStandaloneNoTarget(state, cardId) {
     }
     case 'reroll': {
       const count = next.draft.hands[player].length;
-      const pool = poolForPlayer(player);
+      const pool = poolForPlayer(player).filter((id) => id !== 'reroll');
       const newHand = Array.from({ length: count }, () => pool[Math.floor(Math.random() * pool.length)]);
       next.draft = { ...next.draft, hands: { ...next.draft.hands, [player]: newHand } };
       next.message = '손패를 전부 버리고 새로 뽑았어요.';

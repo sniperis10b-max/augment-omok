@@ -35,7 +35,8 @@ export function generateRoomCode() {
 
 // 방을 만들고 코드를 반환해요. hostColor: 방장이 플레이할 색(BLACK|WHITE 숫자값)
 // hostUid: 로그인한 방장의 계정 uid (레이팅 반영을 위해 저장해요. 없으면 null)
-export async function createRoom(hostColor, timeLimitSec, cardsPerPlayer, hostUid) {
+// ranked: true면 이 방에서의 대국은 레이팅에 반영돼요 (랭크전 전용, 기본은 false)
+export async function createRoom(hostColor, timeLimitSec, cardsPerPlayer, hostUid, ranked = false) {
   const db = getDb();
   const code = generateRoomCode();
   await set(ref(db, `rooms/${code}`), {
@@ -47,6 +48,7 @@ export async function createRoom(hostColor, timeLimitSec, cardsPerPlayer, hostUi
     hostUid: hostUid || null,
     guestClientId: null,
     guestUid: null,
+    ranked: !!ranked,
     createdAt: serverTimestamp(),
     state: null,
   });
@@ -65,6 +67,7 @@ export async function peekRoom(code) {
     timeLimitSec: data.timeLimitSec || 0,
     cardsPerPlayer: data.cardsPerPlayer || 3,
     status: data.status,
+    ranked: !!data.ranked,
   };
 }
 
@@ -81,21 +84,22 @@ export async function joinRoom(code, myUid) {
   if (!snap.exists()) return { ok: false, reason: 'not-found' };
   const data = snap.val();
   const myId = getClientId();
+  const ranked = !!data.ranked;
 
   if (data.hostClientId === myId) {
-    return { ok: true, hostColor: data.hostColor, localColor: data.hostColor, rejoin: true };
+    return { ok: true, hostColor: data.hostColor, localColor: data.hostColor, rejoin: true, ranked };
   }
   if (data.guestClientId && data.guestClientId === myId) {
     const guestColor = data.hostColor === BLACK ? WHITE : BLACK;
-    return { ok: true, hostColor: data.hostColor, localColor: guestColor, rejoin: true };
+    return { ok: true, hostColor: data.hostColor, localColor: guestColor, rejoin: true, ranked };
   }
 
   if (data.status === 'waiting') {
     await update(roomRef, { status: 'active', guestClientId: myId, guestUid: myUid || null });
-    return { ok: true, hostColor: data.hostColor, asSpectator: false };
+    return { ok: true, hostColor: data.hostColor, asSpectator: false, ranked };
   }
 
-  return { ok: true, hostColor: data.hostColor, asSpectator: true };
+  return { ok: true, hostColor: data.hostColor, asSpectator: true, ranked };
 }
 
 // 대국이 끝났을 때 레이팅 반영을 위해, 방에 저장된 상대의 계정 uid를 조회해요.

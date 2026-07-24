@@ -8,6 +8,7 @@ import {
   UserCircle, LogOut, Mail, ShieldQuestion, UserPlus, Bell, Dice5, X as XIcon, Star,
   Zap, Tornado, Repeat, Stamp, Sparkle, AudioLines,
   Landmark, Infinity as InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins, Medal,
+  Shield, Hexagon, Gem, Flame, Octagon, Crown,
   ListOrdered,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer, isCellInSealedLine } from './gameLogic.js';
@@ -34,6 +35,11 @@ import {
 import {
   ensureRatingInitialized, getRating, computeRatingDelta, applyRatingChange, fetchLeaderboard, DEFAULT_RATING,
 } from './rating.js';
+import {
+  ensureRankPointsInitialized, getRankPoints, computeRankPointsDelta, applyRankPointsChange,
+  fetchRankLeaderboard, DEFAULT_RANK_POINTS,
+} from './rankpoints.js';
+import { getTierForRating, getNextTierInfo, TIERS } from './tiers.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -83,6 +89,39 @@ function TitleBadge({ titleId, style }) {
   return (
     <span className="dev-badge title-badge" style={style}>
       <Medal size={10} /> {title.name}
+    </span>
+  );
+}
+
+// 티어별 안쪽 아이콘 매핑 (tiers.js의 icon 이름 문자열 -> 실제 컴포넌트)
+const TIER_ICON_COMPONENTS = { Shield, ShieldCheck, Star, Hexagon, Gem, Flame, Octagon, Sparkles, Crown };
+
+// 레이팅 점수에 맞는 랭크 티어를 방패 모양 배지로 보여줘요. showName이면 티어 이름도 같이 써요.
+function TierBadge({ rating, size = 20, showName = false, style }) {
+  if (rating == null) return null;
+  const tier = getTierForRating(rating);
+  const Icon = TIER_ICON_COMPONENTS[tier.icon] || Shield;
+  const gradId = `tier-grad-${tier.id}`;
+  return (
+    <span className="tier-badge" style={style} title={tier.displayName}>
+      <span className="tier-badge-icon" style={{ width: size, height: size }}>
+        <svg viewBox="0 0 24 24" width={size} height={size}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor={tier.color} />
+              <stop offset="100%" stopColor={tier.color2} />
+            </linearGradient>
+          </defs>
+          <path
+            d="M12 1.5l8 3v5.2c0 5.1-3.4 9.4-8 10.8-4.6-1.4-8-5.7-8-10.8V4.5l8-3z"
+            fill={`url(#${gradId})`}
+            stroke="rgba(0,0,0,0.18)"
+            strokeWidth="0.6"
+          />
+        </svg>
+        <Icon size={Math.round(size * 0.5)} color="#fff" strokeWidth={2.2} className="tier-badge-glyph" />
+      </span>
+      {showName && <span className="tier-badge-name">{tier.displayName}</span>}
     </span>
   );
 }
@@ -242,6 +281,8 @@ export default function App() {
   const [user, setUser] = useState(null); // null | { uid, displayName, email, photoURL, emailVerified, isGoogle }
   const [myRating, setMyRating] = useState(null);
   const [lastRatingChange, setLastRatingChange] = useState(null);
+  const [myRankPoints, setMyRankPoints] = useState(null);
+  const [lastRankChange, setLastRankChange] = useState(null);
   const [myTitles, setMyTitles] = useState({}); // { [titleId]: true }
   const [equippedTitle, setEquippedTitle] = useState(null);
   const [titleUnlockToast, setTitleUnlockToast] = useState(null); // { name } | null
@@ -432,6 +473,15 @@ export default function App() {
       ensureRatingInitialized(user.uid, user.displayName, isDevAccount(user)).then(setMyRating).catch(() => {});
     } else {
       setMyRating(null);
+    }
+  }, [user?.uid, user?.displayName]);
+
+  // 랭크 포인트(레이팅과는 별개인 랭크전 전용 점수)도 로그인 시 초기화해요.
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      ensureRankPointsInitialized(user.uid, user.displayName, isDevAccount(user)).then(setMyRankPoints).catch(() => {});
+    } else {
+      setMyRankPoints(null);
     }
   }, [user?.uid, user?.displayName]);
 
@@ -672,15 +722,17 @@ export default function App() {
                     if (checkSimpleThreshold('pacifist', newPacifist)) unlockAndNotify('pacifist');
                   }
 
-                  // 폭풍 연승 / 불멸의 연승
-                  const newStreak = await updateWinStreak(user.uid, result === 'win');
-                  if (checkSimpleThreshold('eternalStreak', newStreak)) unlockAndNotify('eternalStreak');
-                  else if (checkSimpleThreshold('stormStreak', newStreak)) unlockAndNotify('stormStreak');
-
                   // 완벽한 승부: 온라인 대전에서 카드를 하나도 안 쓰고 승리
                   if (result === 'win' && !state.lastUsedCard[myColor]) {
                     unlockAndNotify('flawlessVictory');
                   }
+                }
+
+                // 폭풍 연승 / 불멸의 연승: 랭크전 전용 (친선전은 연승에 포함 안 돼요)
+                if (online && online.role !== 'spectator' && online.ranked) {
+                  const newStreak = await updateWinStreak(user.uid, result === 'win');
+                  if (checkSimpleThreshold('eternalStreak', newStreak)) unlockAndNotify('eternalStreak');
+                  else if (checkSimpleThreshold('stormStreak', newStreak)) unlockAndNotify('stormStreak');
                 }
               } catch {
                 // 업적 집계는 부가 기능이라 실패해도 게임 결과엔 영향 없어야 해요
@@ -688,7 +740,7 @@ export default function App() {
             })();
           }
 
-          // 레이팅은 온라인 대전에서만 변동돼요.
+          // 레이팅은 온라인 대전이면 전부(친선전 포함) 변동돼요. 랭크전 전용 점수는 따로 관리해요.
           if (online && online.role !== 'spectator') {
             (async () => {
               try {
@@ -718,11 +770,32 @@ export default function App() {
               }
             })();
           }
+
+          // 랭크 포인트(레이팅과는 별개인 점수, 티어의 기준이 돼요)는 "랭크전"에서만 변동돼요.
+          // 이기면 +100, 지면 "내 현재 티어"에 따른 만큼 감점 - 상대 점수는 필요 없어요.
+          if (online && online.role !== 'spectator' && online.ranked) {
+            (async () => {
+              try {
+                const { hostUid, guestUid } = await getRoomPlayers(online.code);
+                const opponentUid = online.role === 'host' ? guestUid : hostUid;
+                if (opponentUid && opponentUid !== user.uid) {
+                  const myPointsBefore = await getRankPoints(user.uid);
+                  const delta = computeRankPointsDelta(myPointsBefore, result);
+                  const newPoints = await applyRankPointsChange(user.uid, myPointsBefore, delta, user.displayName, isDevAccount(user));
+                  setMyRankPoints(newPoints);
+                  setLastRankChange({ delta, newPoints });
+                }
+              } catch {
+                // 랭크 포인트 반영 실패해도 게임 결과 자체엔 영향 없어요
+              }
+            })();
+          }
         }
       }
     } else if (state.phase !== 'over') {
       recordSavedRef.current = false;
       if (lastRatingChange) setLastRatingChange(null);
+      if (lastRankChange) setLastRankChange(null);
     }
   }, [state.phase, state.winner, state.aiPlayer, state.aiDifficulty, state.history, online, user]);
 
@@ -748,6 +821,7 @@ export default function App() {
         setUser={setUser}
         myRating={myRating}
         setMyRating={setMyRating}
+        myRankPoints={myRankPoints}
         myTitles={myTitles}
         equippedTitle={equippedTitle}
         setEquippedTitle={setEquippedTitle}
@@ -767,6 +841,7 @@ export default function App() {
         updateSettings={updateSettings}
         user={user}
         lastRatingChange={lastRatingChange}
+        lastRankChange={lastRankChange}
         unlockAndNotify={unlockAndNotify}
         equippedTitle={equippedTitle}
       />
@@ -905,7 +980,7 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -943,6 +1018,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState('');
+  const [rankLeaderboard, setRankLeaderboard] = useState([]);
+  const [rankLeaderboardLoading, setRankLeaderboardLoading] = useState(false);
+  const [rankLeaderboardError, setRankLeaderboardError] = useState('');
+  const [leaderboardTab, setLeaderboardTab] = useState('rating'); // 'rating' | 'rank'
   const [titleCounts, setTitleCounts] = useState({});
   const [titleHolders, setTitleHolders] = useState(null);
   const [titleHoldersLoading, setTitleHoldersLoading] = useState(false);
@@ -1108,12 +1187,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     await handleJoinRoom(invite.code);
   }
 
-  async function handleQuickMatch() {
+  async function handleQuickMatch(ranked = false) {
     if (!user) { setLoginNotice('온라인 플레이는 로그인 후에 쓸 수 있어요.'); setStep('account'); return; }
     setMatchmaking(true);
     setErrorMsg('');
     try {
-      const res = await quickMatch(settings.timeLimitSec, settings.cardsPerPlayer);
+      const res = await quickMatch(settings.timeLimitSec, settings.cardsPerPlayer, user.uid, ranked);
       if (res.role === 'host') {
         setOnline({
           code: res.code,
@@ -1123,12 +1202,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           queueKey: res.queueKey,
           timeLimitSec: settings.timeLimitSec,
           cardsPerPlayer: settings.cardsPerPlayer,
+          ranked: res.ranked,
         });
         setStep('online-waiting');
       } else {
         const guestColor = res.hostColor === BLACK ? WHITE : BLACK;
         await joinRoom(res.code, user.uid);
-        setOnline({ code: res.code, localColor: guestColor, role: 'guest' });
+        setOnline({ code: res.code, localColor: guestColor, role: 'guest', ranked: res.ranked });
         setStep('online-waiting');
       }
     } catch {
@@ -1215,6 +1295,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 })
                 .catch(() => setLeaderboardError('순위표를 불러오지 못했어요. Firebase 설정을 확인해주세요.'))
                 .finally(() => setLeaderboardLoading(false));
+
+              setRankLeaderboardLoading(true);
+              setRankLeaderboardError('');
+              fetchRankLeaderboard(100)
+                .then(setRankLeaderboard)
+                .catch(() => setRankLeaderboardError('랭크전 순위표를 불러오지 못했어요. Firebase 설정을 확인해주세요.'))
+                .finally(() => setRankLeaderboardLoading(false));
             }}
           >
             <Trophy size={16} /> 순위표 보기
@@ -1475,6 +1562,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
   if (step === 'leaderboard') {
     const myEntry = leaderboard.find((e) => user && e.uid === user.uid);
+    const myRankEntry = rankLeaderboard.find((e) => user && e.uid === user.uid);
     return (
       <div className="page">
         <header className="header">
@@ -1486,55 +1574,159 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <ChevronLeft size={16} /> 메인으로 돌아가기
         </button>
 
-        <p className="setup-card-desc" style={{ marginBottom: 10 }}>
-          온라인 대전 결과만 레이팅에 반영돼요. 기본 1000점에서 시작하고, 상대와 점수 차이가
-          클수록 낮은 쪽이 이겼을 때 더 많이 얻고, 졌을 때 더 적게 잃어요.
-        </p>
-
-        {leaderboardLoading && <p className="setup-card-desc">불러오는 중...</p>}
-        {leaderboardError && <p className="setup-warning">{leaderboardError}</p>}
-
-        {!leaderboardLoading && !leaderboardError && (
-          <div className="tutorial-card" style={{ padding: 0, overflow: 'hidden' }}>
-            {leaderboard.length === 0 && (
-              <p className="setup-card-desc" style={{ padding: 16 }}>아직 순위표에 아무도 없어요.</p>
-            )}
-            {leaderboard.map((entry, i) => (
-              <div
-                key={entry.uid}
-                className="leaderboard-row"
-                style={user && entry.uid === user.uid ? { background: 'var(--accent-soft)' } : undefined}
-              >
-                <span className="leaderboard-rank">{i + 1}</span>
-                <span className="leaderboard-name">
-                  {entry.displayName}
-                  {entry.titleName && (
-                    <span className="dev-badge title-badge" style={{ marginLeft: 6 }}><Medal size={10} /> {entry.titleName}</span>
-                  )}
-                </span>
-                <span className="leaderboard-score">{entry.rating}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="tutorial-card" style={{ marginTop: 14 }}>
-          <div className="tutorial-title" style={{ marginBottom: 6 }}>내 순위</div>
-          {!user ? (
-            <p className="setup-card-desc">로그인하면 내 점수를 볼 수 있어요.</p>
-          ) : myRating === null ? (
-            <p className="setup-card-desc">불러오는 중...</p>
-          ) : (
-            <div className="leaderboard-row" style={{ background: 'var(--accent-soft)', borderRadius: 10 }}>
-              <span className="leaderboard-rank">{myEntry ? leaderboard.indexOf(myEntry) + 1 : '100위 밖'}</span>
-              <span className="leaderboard-name">
-                {user.displayName || '이름 없음'}
-                <TitleBadge titleId={equippedTitle} style={{ marginLeft: 6 }} />
-              </span>
-              <span className="leaderboard-score">{myRating}</span>
-            </div>
-          )}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button
+            className={`reset-btn ${leaderboardTab === 'rating' ? 'title-pick-active' : ''}`}
+            style={{ flex: 1 }}
+            onClick={() => setLeaderboardTab('rating')}
+          >
+            레이팅
+          </button>
+          <button
+            className={`reset-btn ${leaderboardTab === 'rank' ? 'title-pick-active' : ''}`}
+            style={{ flex: 1 }}
+            onClick={() => setLeaderboardTab('rank')}
+          >
+            랭크전
+          </button>
         </div>
+
+        {leaderboardTab === 'rating' ? (
+          <>
+            <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+              온라인 대전 결과(친선전 포함 전체)면 반영돼요. 기본 1000점에서 시작하고, 상대와 점수 차이가
+              클수록 낮은 쪽이 이겼을 때 더 많이 얻고, 졌을 때 더 적게 잃어요.
+            </p>
+
+            {leaderboardLoading && <p className="setup-card-desc">불러오는 중...</p>}
+            {leaderboardError && <p className="setup-warning">{leaderboardError}</p>}
+
+            {!leaderboardLoading && !leaderboardError && (
+              <div className="tutorial-card" style={{ padding: 0, overflow: 'hidden' }}>
+                {leaderboard.length === 0 && (
+                  <p className="setup-card-desc" style={{ padding: 16 }}>아직 순위표에 아무도 없어요.</p>
+                )}
+                {leaderboard.map((entry, i) => (
+                  <div
+                    key={entry.uid}
+                    className="leaderboard-row"
+                    style={user && entry.uid === user.uid ? { background: 'var(--accent-soft)' } : undefined}
+                  >
+                    <span className="leaderboard-rank">{i + 1}</span>
+                    <span className="leaderboard-name">
+                      {entry.displayName}
+                      {entry.titleName && (
+                        <span className="dev-badge title-badge" style={{ marginLeft: 6 }}><Medal size={10} /> {entry.titleName}</span>
+                      )}
+                    </span>
+                    <span className="leaderboard-score">{entry.rating}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="tutorial-card" style={{ marginTop: 14 }}>
+              <div className="tutorial-title" style={{ marginBottom: 6 }}>내 순위</div>
+              {!user ? (
+                <p className="setup-card-desc">로그인하면 내 점수를 볼 수 있어요.</p>
+              ) : myRating === null ? (
+                <p className="setup-card-desc">불러오는 중...</p>
+              ) : (
+                <div className="leaderboard-row" style={{ background: 'var(--accent-soft)', borderRadius: 10 }}>
+                  <span className="leaderboard-rank">{myEntry ? leaderboard.indexOf(myEntry) + 1 : '100위 밖'}</span>
+                  <span className="leaderboard-name">
+                    {user.displayName || '이름 없음'}
+                    <TitleBadge titleId={equippedTitle} style={{ marginLeft: 6 }} />
+                  </span>
+                  <span className="leaderboard-score">{myRating}</span>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+              "랭크전"으로 진행한 대국 결과만 반영되는 별도 순위표예요. 0점에서 시작해서, 이기면 +100점,
+              지면 현재 티어에 따라 정해진 만큼 감점돼요.
+            </p>
+
+            {rankLeaderboardLoading && <p className="setup-card-desc">불러오는 중...</p>}
+            {rankLeaderboardError && <p className="setup-warning">{rankLeaderboardError}</p>}
+
+            {!rankLeaderboardLoading && !rankLeaderboardError && (
+              <div className="tutorial-card" style={{ padding: 0, overflow: 'hidden' }}>
+                {rankLeaderboard.length === 0 && (
+                  <p className="setup-card-desc" style={{ padding: 16 }}>아직 랭크전 순위표에 아무도 없어요.</p>
+                )}
+                {rankLeaderboard.map((entry, i) => (
+                  <div
+                    key={entry.uid}
+                    className="leaderboard-row"
+                    style={user && entry.uid === user.uid ? { background: 'var(--accent-soft)' } : undefined}
+                  >
+                    <span className="leaderboard-rank">{i + 1}</span>
+                    <TierBadge rating={entry.points} size={20} style={{ marginRight: 2 }} />
+                    <span className="leaderboard-name">
+                      {entry.displayName}
+                      {entry.titleName && (
+                        <span className="dev-badge title-badge" style={{ marginLeft: 6 }}><Medal size={10} /> {entry.titleName}</span>
+                      )}
+                    </span>
+                    <span className="leaderboard-score">{entry.points}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="tutorial-card" style={{ marginTop: 14 }}>
+              <div className="tutorial-title" style={{ marginBottom: 6 }}>내 랭크</div>
+              {!user ? (
+                <p className="setup-card-desc">로그인하면 내 점수를 볼 수 있어요.</p>
+              ) : myRankPoints === null ? (
+                <p className="setup-card-desc">불러오는 중...</p>
+              ) : (
+                <div className="leaderboard-row" style={{ background: 'var(--accent-soft)', borderRadius: 10 }}>
+                  <span className="leaderboard-rank">{myRankEntry ? rankLeaderboard.indexOf(myRankEntry) + 1 : '100위 밖'}</span>
+                  <TierBadge rating={myRankPoints} size={20} style={{ marginRight: 2 }} />
+                  <span className="leaderboard-name">
+                    {user.displayName || '이름 없음'}
+                    <TitleBadge titleId={equippedTitle} style={{ marginLeft: 6 }} />
+                  </span>
+                  <span className="leaderboard-score">{myRankPoints}</span>
+                </div>
+              )}
+            </div>
+
+            {user && myRankPoints !== null && (
+              <div className="tutorial-card" style={{ marginTop: 14 }}>
+                <div className="tutorial-title" style={{ marginBottom: 8 }}>내 티어</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <TierBadge rating={myRankPoints} size={40} showName />
+                </div>
+                {(() => {
+                  const tier = getTierForRating(myRankPoints);
+                  if (!tier.hasDivisions) {
+                    return <p className="setup-card-desc" style={{ marginBottom: 8 }}>내 점수: {myRankPoints}점 (마스터, {tier.min}점 이상)</p>;
+                  }
+                  const rangeStart = tier.min + (tier.division - 1) * tier.divisionWidth;
+                  const rangeEnd = rangeStart + tier.divisionWidth - 1;
+                  return (
+                    <p className="setup-card-desc" style={{ marginBottom: 8 }}>
+                      내 점수: {myRankPoints}점 ({tier.displayName} 구간: {rangeStart}~{rangeEnd}점)
+                    </p>
+                  );
+                })()}
+                {getNextTierInfo(myRankPoints) ? (
+                  <p className="setup-card-desc">
+                    다음 티어({getNextTierInfo(myRankPoints).next.displayName})까지 {getNextTierInfo(myRankPoints).pointsNeeded}점 남았어요.
+                  </p>
+                ) : (
+                  <p className="setup-card-desc">이미 최고 티어(마스터)예요!</p>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
     );
   }
@@ -2346,10 +2538,16 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <div className="setup-card-desc">방을 만들거나, 받은 코드로 참가·관전해요.</div>
           </button>
 
-          <button className="setup-card" disabled={matchmaking} onClick={handleQuickMatch}>
+          <button className="setup-card" disabled={matchmaking} onClick={() => handleQuickMatch(false)}>
             <Dice5 size={22} strokeWidth={1.6} />
-            <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : '랜덤 매칭'}</div>
-            <div className="setup-card-desc">아무나와 바로 매칭돼요. 코드 없이 즉시 시작해요.</div>
+            <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : '랜덤 매칭 (친선)'}</div>
+            <div className="setup-card-desc">아무나와 바로 매칭돼요. 레이팅에는 영향 없어요.</div>
+          </button>
+
+          <button className="setup-card" disabled={matchmaking} onClick={() => handleQuickMatch(true)}>
+            <TierBadge rating={myRankPoints ?? DEFAULT_RANK_POINTS} size={22} />
+            <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : '랭크전'}</div>
+            <div className="setup-card-desc">비공개 매칭이에요. 결과에 따라 레이팅과 티어가 변해요.</div>
           </button>
         </div>
       </div>
@@ -2841,7 +3039,7 @@ function ChatPanel({ online, user, unlockAndNotify, equippedTitle }) {
   );
 }
 
-function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user, lastRatingChange, unlockAndNotify, equippedTitle }) {
+function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user, lastRatingChange, lastRankChange, unlockAndNotify, equippedTitle }) {
   const gameOver = state.phase === 'over';
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
   const isSpectator = online && online.role === 'spectator';
@@ -2852,9 +3050,10 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
   let modeLabel = '2인 대국';
   if (state.aiPlayer) modeLabel = `AI 대전 · AI는 ${PLAYER_LABEL[state.aiPlayer]} · 난이도 ${DIFFICULTIES[state.aiDifficulty]?.label ?? '보통'}`;
   if (online) {
+    const kind = online.ranked ? '랭크전' : '온라인 대전(친선)';
     modeLabel = isSpectator
-      ? `온라인 대전 · 방 ${online.code} · 관전 중`
-      : `온라인 대전 · 방 ${online.code} · 나는 ${PLAYER_LABEL[online.localColor]}`;
+      ? `${kind} · 방 ${online.code} · 관전 중`
+      : `${kind} · 방 ${online.code} · 나는 ${PLAYER_LABEL[online.localColor]}`;
   }
 
   function resignPlayer() {
@@ -2957,11 +3156,32 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       )}
 
       {online && gameOver && lastRatingChange && (
-        <p className="setup-card-desc" style={{ marginTop: -10, marginBottom: 12 }}>
+        <p className="setup-card-desc" style={{ marginTop: -10, marginBottom: 8 }}>
           레이팅 변동: <b style={{ color: lastRatingChange.delta > 0 ? '#3fae52' : lastRatingChange.delta < 0 ? '#c23b3b' : 'inherit' }}>
             {lastRatingChange.delta > 0 ? `+${lastRatingChange.delta}` : lastRatingChange.delta}
           </b> (현재 {lastRatingChange.newRating}점)
         </p>
+      )}
+
+      {online && online.ranked && gameOver && lastRankChange && (
+        <div className="setup-card-desc" style={{ marginTop: -4, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span>
+            랭크 포인트 변동: <b style={{ color: lastRankChange.delta > 0 ? '#3fae52' : lastRankChange.delta < 0 ? '#c23b3b' : 'inherit' }}>
+              {lastRankChange.delta > 0 ? `+${lastRankChange.delta}` : lastRankChange.delta}
+            </b> (현재 {lastRankChange.newPoints}점)
+          </span>
+          <TierBadge rating={lastRankChange.newPoints} size={20} showName />
+          {(() => {
+            const beforeTier = getTierForRating(lastRankChange.newPoints - lastRankChange.delta);
+            const afterTier = getTierForRating(lastRankChange.newPoints);
+            if (afterTier.id === beforeTier.id) return null;
+            const idxBefore = TIERS.findIndex((t) => t.id === beforeTier.id);
+            const idxAfter = TIERS.findIndex((t) => t.id === afterTier.id);
+            return idxAfter > idxBefore
+              ? <span style={{ color: '#3fae52', fontWeight: 700 }}>티어 승급!</span>
+              : <span style={{ color: '#c23b3b', fontWeight: 700 }}>티어 강등...</span>;
+          })()}
+        </div>
       )}
 
       {online && gameOver && (myRematchVote || opponentRematchVote) && (
