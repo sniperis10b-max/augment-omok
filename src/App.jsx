@@ -36,7 +36,7 @@ import {
 } from './rating.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
-  getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle,
+  getAchievementData, bumpCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts,
 } from './achievements.js';
 
 const ICONS = {
@@ -66,6 +66,12 @@ function cellLabel(x, y) {
 const DEV_ACCOUNT_EMAIL = 'sniperis10b@gmail.com';
 function isDevAccount(user) {
   return !!user?.email && user.email.toLowerCase() === DEV_ACCOUNT_EMAIL;
+}
+
+// 개발자는 아니지만, 모든 칭호를 특별히 받는 계정들 ('개발자' 칭호 자체는 안 줘요).
+const BONUS_ALL_TITLES_EMAILS = ['goodlucktoyoul@naver.com'];
+function hasAllTitlesBonus(user) {
+  return !!user?.email && BONUS_ALL_TITLES_EMAILS.includes(user.email.toLowerCase());
 }
 
 // 장착한 칭호를 개발자 뱃지와 같은 캡슐 모양으로 보여주는 배지.
@@ -392,19 +398,23 @@ export default function App() {
   }, [user?.uid, user?.displayName]);
 
   // 로그인하면 지금까지 해금한 칭호와 장착 중인 칭호를 불러와요.
-  // 개발자 계정이면 모든 칭호를 자동으로 해금해요 (장착은 다른 칭호들과 똑같이 계정 화면에서 골라요).
+  // 개발자 계정은 모든 칭호(개발자 칭호 포함)를, 보너스 계정은 개발자 칭호를 제외한
+  // 모든 칭호를 자동으로 해금해요 (장착은 다른 칭호들과 똑같이 계정 화면에서 골라요).
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
       getAchievementData(user.uid)
         .then(async ({ titles, equippedTitle: eq }) => {
           let finalTitles = titles;
-          if (isDevAccount(user)) {
-            const missing = TITLES.map((t) => t.id).filter((id) => !titles[id]);
+          const dev = isDevAccount(user);
+          const bonus = hasAllTitlesBonus(user);
+          if (dev || bonus) {
+            const idsToUnlock = dev ? TITLES.map((t) => t.id) : TITLES.filter((t) => t.id !== 'developer').map((t) => t.id);
+            const missing = idsToUnlock.filter((id) => !titles[id]);
             if (missing.length > 0) {
               await unlockTitles(user.uid, missing).catch(() => {});
               finalTitles = { ...titles };
               missing.forEach((id) => { finalTitles[id] = true; });
-              setTitleUnlockToast({ name: `칭호 ${missing.length}개 전체 해금 (개발자 전용)` });
+              setTitleUnlockToast({ name: `칭호 ${missing.length}개 전체 해금 (특별 계정)` });
             }
           }
           setMyTitles(finalTitles);
@@ -861,6 +871,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState('');
+  const [titleCounts, setTitleCounts] = useState({});
+
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return;
+    getTitleCounts().then(setTitleCounts).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!user || !isFirebaseConfigured()) return undefined;
@@ -1609,6 +1625,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                       >
                         <span className="title-pick-name">
                           {unlocked ? <Medal size={13} /> : <ShieldQuestion size={13} />} {t.name}
+                          <span className="title-pick-count">{titleCounts[t.id] || 0}명 보유</span>
                         </span>
                         <span className="title-pick-desc">{t.desc}</span>
                       </button>

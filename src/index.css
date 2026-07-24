@@ -569,6 +569,14 @@ body {
   gap: 6px;
   font-size: 13px;
   font-weight: 700;
+  width: 100%;
+}
+
+.title-pick-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .title-pick-desc {

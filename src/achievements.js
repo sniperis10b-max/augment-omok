@@ -13,7 +13,7 @@
 //    이 한 줄만 읽으면 되도록 하기 위해서예요 - 개발자 뱃지 때와 같은 이유예요)
 
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, get, update, runTransaction } from 'firebase/database';
+import { getDatabase, ref, get, update, runTransaction, increment } from 'firebase/database';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
 
 let dbInstance = null;
@@ -138,9 +138,13 @@ export async function markCardUsed(uid, cardId) {
 }
 
 // 칭호 하나를 잠금 해제해요. 이미 해금되어 있으면 아무 일도 안 해요.
+// 진짜로 "처음" 해금된 경우에만 titleCounts(칭호별 보유자 수)를 1 늘려요.
 export async function unlockTitle(uid, titleId) {
   const db = getDb();
-  const result = await runTransaction(ref(db, `users/${uid}/titles/${titleId}`), (cur) => (cur ? cur : true));
+  const result = await runTransaction(ref(db, `users/${uid}/titles/${titleId}`), (cur) => (cur ? undefined : true));
+  if (result.committed) {
+    await update(ref(db), { [`titleCounts/${titleId}`]: increment(1) }).catch(() => {});
+  }
   return result.committed;
 }
 
@@ -148,7 +152,10 @@ export async function unlockTitles(uid, titleIds) {
   if (!titleIds || titleIds.length === 0) return;
   const db = getDb();
   const updates = {};
-  for (const id of titleIds) updates[`users/${uid}/titles/${id}`] = true;
+  for (const id of titleIds) {
+    updates[`users/${uid}/titles/${id}`] = true;
+    updates[`titleCounts/${id}`] = increment(1);
+  }
   await update(ref(db), updates);
 }
 
@@ -161,6 +168,13 @@ export async function equipTitle(uid, titleId, displayName) {
     [`leaderboard/${uid}/titleName`]: title ? title.name : null,
     [`leaderboard/${uid}/displayName`]: displayName || '이름 없음',
   });
+}
+
+// 칭호별 보유자 수를 한 번에 조회해요. ({ [titleId]: 보유자 수 })
+export async function getTitleCounts() {
+  const db = getDb();
+  const snap = await get(ref(db, 'titleCounts'));
+  return snap.val() || {};
 }
 
 export { isFirebaseConfigured };
