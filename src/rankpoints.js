@@ -129,3 +129,23 @@ export async function getEquippedTierId(uid) {
 }
 
 export { isFirebaseConfigured };
+
+function emailToKey(email) {
+  return email.trim().toLowerCase().replace(/[.#$[\]]/g, '_');
+}
+
+// 관리자(개발자) 전용: 특정 이메일 계정의 랭크 포인트를 원하는 값으로 강제로 바꿔요.
+// 최고 도달 티어(peakTierIndex)도 그 점수 기준으로 같이 맞춰줘요.
+export async function adminSetRankPoints(email, newPoints) {
+  const db = getDb();
+  const uidSnap = await get(ref(db, `usersByEmail/${emailToKey(email)}`));
+  if (!uidSnap.exists()) return { ok: false, reason: 'not-found' };
+  const uid = uidSnap.val();
+  const safePoints = Math.max(0, Math.round(newPoints));
+  await update(ref(db), {
+    [`users/${uid}/rankPoints`]: safePoints,
+  });
+  const peak = await updatePeakTier(uid, safePoints);
+  await update(ref(db), { [`rankLeaderboard/${uid}/points`]: safePoints });
+  return { ok: true, uid, points: safePoints, peakTierIndex: peak };
+}

@@ -96,3 +96,23 @@ export async function fetchLeaderboard(limit = 100) {
 }
 
 export { isFirebaseConfigured };
+
+// Realtime Database 키 규칙에 맞게 이메일을 안전한 키로 바꿔요.
+function emailToKey(email) {
+  return email.trim().toLowerCase().replace(/[.#$[\]]/g, '_');
+}
+
+// 관리자(개발자) 전용: 특정 이메일 계정의 레이팅을 원하는 값으로 강제로 바꿔요.
+// 부정행위 대응(수동 보정) 등 운영 목적이에요.
+export async function adminSetRating(email, newRating) {
+  const db = getDb();
+  const uidSnap = await get(ref(db, `usersByEmail/${emailToKey(email)}`));
+  if (!uidSnap.exists()) return { ok: false, reason: 'not-found' };
+  const uid = uidSnap.val();
+  const safeRating = Math.max(0, Math.round(newRating));
+  await update(ref(db), {
+    [`users/${uid}/rating`]: safeRating,
+    [`leaderboard/${uid}/rating`]: safeRating,
+  });
+  return { ok: true, uid, rating: safeRating };
+}

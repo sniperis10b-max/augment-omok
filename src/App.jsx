@@ -33,12 +33,12 @@ import {
   subscribeStats, deleteUserData,
 } from './social.js';
 import {
-  ensureRatingInitialized, getRating, computeRatingDelta, applyRatingChange, fetchLeaderboard, DEFAULT_RATING,
+  ensureRatingInitialized, getRating, computeRatingDelta, applyRatingChange, fetchLeaderboard, DEFAULT_RATING, adminSetRating,
 } from './rating.js';
 import {
   ensureRankPointsInitialized, getRankPoints, computeRankPointsDelta, applyRankPointsChange,
   fetchRankLeaderboard, DEFAULT_RANK_POINTS, updatePeakTier, getPeakTierIndex, equipTierBadge, getEquippedTierId,
-  forceSetPeakTierIndex,
+  forceSetPeakTierIndex, adminSetRankPoints,
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
 import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked } from './skins.js';
@@ -1121,6 +1121,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [titleHoldersLoading, setTitleHoldersLoading] = useState(false);
   const [expandedTitle, setExpandedTitle] = useState(null);
   const [revokeEmail, setRevokeEmail] = useState('');
+  const [scoreEditEmail, setScoreEditEmail] = useState('');
+  const [scoreEditRating, setScoreEditRating] = useState('');
+  const [scoreEditRankPoints, setScoreEditRankPoints] = useState('');
+  const [scoreEditStatus, setScoreEditStatus] = useState('');
   const [revokeStatus, setRevokeStatus] = useState('');
   const [myStats, setMyStats] = useState({});
 
@@ -1575,6 +1579,26 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       }
     }
 
+    async function handleScoreEdit(kind) {
+      if (!scoreEditEmail.trim()) return;
+      setScoreEditStatus('처리 중...');
+      if (kind === 'rating') {
+        const val = Number(scoreEditRating);
+        if (Number.isNaN(val)) { setScoreEditStatus('레이팅 값이 숫자가 아니에요.'); return; }
+        const res = await adminSetRating(scoreEditEmail.trim(), val).catch(() => ({ ok: false, reason: 'error' }));
+        if (res.ok) setScoreEditStatus(`'${scoreEditEmail}' 레이팅을 ${res.rating}점으로 바꿨어요.`);
+        else if (res.reason === 'not-found') setScoreEditStatus('그 이메일로 가입한 계정을 찾을 수 없어요.');
+        else setScoreEditStatus('변경하지 못했어요. 다시 시도해주세요.');
+      } else {
+        const val = Number(scoreEditRankPoints);
+        if (Number.isNaN(val)) { setScoreEditStatus('랭크 점수 값이 숫자가 아니에요.'); return; }
+        const res = await adminSetRankPoints(scoreEditEmail.trim(), val).catch(() => ({ ok: false, reason: 'error' }));
+        if (res.ok) setScoreEditStatus(`'${scoreEditEmail}' 랭크 점수를 ${res.points}점으로 바꿨어요. (티어도 자동 반영)`);
+        else if (res.reason === 'not-found') setScoreEditStatus('그 이메일로 가입한 계정을 찾을 수 없어요.');
+        else setScoreEditStatus('변경하지 못했어요. 다시 시도해주세요.');
+      }
+    }
+
     return (
       <div className="page">
         <header className="header"><h1>증강 오목</h1></header>
@@ -1583,6 +1607,43 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <button className="setup-back" onClick={() => setStep('account')}>
           <ChevronLeft size={16} /> 계정 화면으로 돌아가기
         </button>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title" style={{ marginBottom: 6 }}>레이팅 / 랭크 점수 강제 수정</div>
+          <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+            부정행위 대응 등 운영 목적으로, 특정 계정의 점수를 원하는 값으로 직접 바꿔요. 즉시 순위표에도 반영돼요.
+          </p>
+          <input
+            className="join-input"
+            style={{ width: '100%', letterSpacing: 0, fontSize: 14, textTransform: 'none', marginBottom: 8 }}
+            value={scoreEditEmail}
+            onChange={(e) => setScoreEditEmail(e.target.value)}
+            placeholder="example@email.com"
+          />
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <input
+              className="join-input"
+              style={{ flex: 1, minWidth: 120, letterSpacing: 0, fontSize: 14, textTransform: 'none' }}
+              value={scoreEditRating}
+              onChange={(e) => setScoreEditRating(e.target.value)}
+              placeholder="새 레이팅 (예: 1000)"
+              inputMode="numeric"
+            />
+            <button className="reset-btn confirm-danger-btn" onClick={() => handleScoreEdit('rating')}>레이팅 변경</button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+            <input
+              className="join-input"
+              style={{ flex: 1, minWidth: 120, letterSpacing: 0, fontSize: 14, textTransform: 'none' }}
+              value={scoreEditRankPoints}
+              onChange={(e) => setScoreEditRankPoints(e.target.value)}
+              placeholder="새 랭크 점수 (예: 900)"
+              inputMode="numeric"
+            />
+            <button className="reset-btn confirm-danger-btn" onClick={() => handleScoreEdit('rankPoints')}>랭크 점수 변경</button>
+          </div>
+          {scoreEditStatus && <p className="setup-card-desc">{scoreEditStatus}</p>}
+        </div>
 
         <div className="tutorial-card">
           <div className="tutorial-title" style={{ marginBottom: 6 }}>특정 계정 칭호 전체 회수</div>
