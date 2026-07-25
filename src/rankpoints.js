@@ -87,11 +87,50 @@ export async function fetchRankLeaderboard(limit = 100) {
 
 // 랭크 포인트가 바뀔 때마다 호출해서, "지금까지 도달한 가장 높은 티어"를 갱신해요.
 // (점수가 떨어져도 한 번 도달한 티어는 기록에 남아요 - 나중에 칭호처럼 골라 달 수 있게)
+// 동시에 "도달한 적 있는 티어 하나하나"도 별도 집합(reachedTierBadges)에 기록해요.
+// 이건 나중에 관리자가 티어 뱃지를 개별적으로 회수할 수 있게 하기 위해서예요.
 export async function updatePeakTier(uid, currentPoints) {
   const db = getDb();
   const currentIndex = TIERS.findIndex((t) => t.id === getTierForRating(currentPoints).id);
   const result = await runTransaction(ref(db, `users/${uid}/peakTierIndex`), (cur) => Math.max(cur || 0, currentIndex));
-  return result.snapshot.val() || 0;
+  const peak = result.snapshot.val() || 0;
+
+  const updates = {};
+  for (let i = 0; i <= peak; i++) updates[`users/${uid}/reachedTierBadges/${TIERS[i].id}`] = true;
+  await update(ref(db), updates);
+
+  return peak;
+}
+
+export async function getReachedTierBadges(uid) {
+  const db = getDb();
+  const snap = await get(ref(db, `users/${uid}/reachedTierBadges`));
+  return snap.exists() ? snap.val() : {};
+}
+
+// 관리자(개발자) 전용: 지정한 티어 뱃지 id들만 골라서 회수해요. 장착 중이던 티어가
+// 그중에 있으면 장착도 같이 풀어요. (peakTierIndex는 건드리지 않아요 - 스킨 퀘스트 등
+// 다른 시스템은 그대로 유지하고, "장착 가능한 티어 뱃지 목록"만 손보는 거예요)
+export async function adminRevokeTierBadges(uid, tierIds, currentEquippedTierId) {
+  if (!tierIds || tierIds.length === 0) return;
+  const db = getDb();
+  const updates = {};
+  for (const id of tierIds) updates[`users/${uid}/reachedTierBadges/${id}`] = null;
+  if (currentEquippedTierId && tierIds.includes(currentEquippedTierId)) {
+    updates[`users/${uid}/equippedTierId`] = null;
+    updates[`leaderboard/${uid}/tierBadgeId`] = null;
+    updates[`rankLeaderboard/${uid}/tierBadgeId`] = null;
+  }
+  await update(ref(db), updates);
+}
+
+// 관리자(개발자) 전용: 지정한 티어 뱃지 id들을 실제 점수와 무관하게 강제로 부여해요.
+export async function adminGrantTierBadges(uid, tierIds) {
+  if (!tierIds || tierIds.length === 0) return;
+  const db = getDb();
+  const updates = {};
+  for (const id of tierIds) updates[`users/${uid}/reachedTierBadges/${id}`] = true;
+  await update(ref(db), updates);
 }
 
 export async function getPeakTierIndex(uid) {
@@ -103,7 +142,9 @@ export async function getPeakTierIndex(uid) {
 // 관리자(개발자) 전용: 실제로 점수를 안 올려도 최고 티어를 강제로 지정해줘요.
 export async function forceSetPeakTierIndex(uid, index) {
   const db = getDb();
-  await update(ref(db, `users/${uid}`), { peakTierIndex: index });
+  const updates = { [`users/${uid}/peakTierIndex`]: index };
+  for (let i = 0; i <= index; i++) updates[`users/${uid}/reachedTierBadges/${TIERS[i].id}`] = true;
+  await update(ref(db), updates);
   return index;
 }
 

@@ -140,6 +140,58 @@ export function getBoardSkinById(id) {
   return BOARD_SKINS.find((s) => s.id === id) || BOARD_SKINS[0];
 }
 
+// -------- 관리자(개발자) 전용: 스킨을 퀘스트 조건 없이 직접 부여/회수 --------
+
+import { initializeApp, getApps } from 'firebase/app';
+import { getDatabase, ref, get, update } from 'firebase/database';
+import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
+
+let dbInstance = null;
+function getDb() {
+  if (!isFirebaseConfigured()) throw new Error('Firebase 설정이 비어있어요.');
+  if (!dbInstance) {
+    const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+    dbInstance = getDatabase(app);
+  }
+  return dbInstance;
+}
+
+function emailToKey(email) {
+  return email.trim().toLowerCase().replace(/[.#$[\]]/g, '_');
+}
+
+// 이 계정이 "퀘스트 조건 없이" 강제로 부여받은 스킨들이에요. isBoardSkinUnlocked/
+// isStoneSkinUnlocked와 별개로, 이 목록에 있으면 무조건 사용 가능해요.
+export async function getGrantedSkins(uid) {
+  const db = getDb();
+  const snap = await get(ref(db, `users/${uid}`));
+  const data = snap.val() || {};
+  return {
+    board: data.grantedBoardSkins || {},
+    stone: data.grantedStoneSkins || {},
+  };
+}
+
+export async function adminGrantSkinsByEmail(email, boardSkinIds, stoneSkinIds) {
+  const db = getDb();
+  const uidSnap = await get(ref(db, `usersByEmail/${emailToKey(email)}`));
+  if (!uidSnap.exists()) return { ok: false, reason: 'not-found' };
+  const uid = uidSnap.val();
+  const updates = {};
+  for (const id of boardSkinIds || []) updates[`users/${uid}/grantedBoardSkins/${id}`] = true;
+  for (const id of stoneSkinIds || []) updates[`users/${uid}/grantedStoneSkins/${id}`] = true;
+  await update(ref(db), updates);
+  return { ok: true, uid };
+}
+
+export async function adminRevokeSkins(uid, boardSkinIds, stoneSkinIds) {
+  const db = getDb();
+  const updates = {};
+  for (const id of boardSkinIds || []) updates[`users/${uid}/grantedBoardSkins/${id}`] = null;
+  for (const id of stoneSkinIds || []) updates[`users/${uid}/grantedStoneSkins/${id}`] = null;
+  await update(ref(db), updates);
+}
+
 export function getStoneSkinById(id) {
   return STONE_SKINS.find((s) => s.id === id) || STONE_SKINS[0];
 }

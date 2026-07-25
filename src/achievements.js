@@ -331,4 +331,52 @@ export async function revokeAllTitlesByEmail(email) {
   return { ok: true, uid };
 }
 
+// 관리자(개발자) 전용: 이메일로 계정을 찾아, 그 계정이 가진 칭호 목록과 도달한 티어 뱃지
+// 목록을 한 번에 가져와요 (선택적으로 회수하기 전에 뭐가 있는지 보여주기 위해서예요).
+export async function getUserProgressByEmail(email) {
+  const db = getDb();
+  const uidSnap = await get(ref(db, `usersByEmail/${emailToKey(email)}`));
+  if (!uidSnap.exists()) return { ok: false, reason: 'not-found' };
+  const uid = uidSnap.val();
+  const snap = await get(ref(db, `users/${uid}`));
+  const data = snap.val() || {};
+  return {
+    ok: true,
+    uid,
+    displayName: data.profile?.displayName || '(이름 없음)',
+    titles: data.titles || {},
+    equippedTitle: data.equippedTitle || null,
+    reachedTierBadges: data.reachedTierBadges || {},
+    equippedTierId: data.equippedTierId || null,
+    grantedBoardSkins: data.grantedBoardSkins || {},
+    grantedStoneSkins: data.grantedStoneSkins || {},
+    achievementStats: data.achievementStats || {},
+  };
+}
+
+// 관리자(개발자) 전용: 지정한 칭호 id들만 골라서 회수해요. 장착 중이던 칭호가 그중에
+// 있으면 장착도 같이 풀어요.
+export async function adminRevokeTitles(uid, titleIds, currentEquippedTitle) {
+  if (!titleIds || titleIds.length === 0) return;
+  const db = getDb();
+  const updates = {};
+  for (const id of titleIds) updates[`users/${uid}/titles/${id}`] = null;
+  if (currentEquippedTitle && titleIds.includes(currentEquippedTitle)) {
+    updates[`users/${uid}/equippedTitle`] = null;
+    updates[`leaderboard/${uid}/titleName`] = null;
+  }
+  await update(ref(db), updates);
+  await recomputeTitleCounts();
+}
+
+// 관리자(개발자) 전용: 지정한 칭호 id들을 퀘스트 조건 없이 강제로 부여해요.
+export async function adminGrantTitles(uid, titleIds) {
+  if (!titleIds || titleIds.length === 0) return;
+  const db = getDb();
+  const updates = {};
+  for (const id of titleIds) updates[`users/${uid}/titles/${id}`] = true;
+  await update(ref(db), updates);
+  await recomputeTitleCounts();
+}
+
 export { isFirebaseConfigured };

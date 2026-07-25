@@ -38,15 +38,16 @@ import {
 import {
   ensureRankPointsInitialized, getRankPoints, computeRankPointsDelta, applyRankPointsChange,
   fetchRankLeaderboard, DEFAULT_RANK_POINTS, updatePeakTier, getPeakTierIndex, equipTierBadge, getEquippedTierId,
-  forceSetPeakTierIndex, adminSetRankPoints,
+  forceSetPeakTierIndex, adminSetRankPoints, getReachedTierBadges, adminRevokeTierBadges, adminGrantTierBadges,
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
-import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked } from './skins.js';
+import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins } from './skins.js';
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked } from './effects.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, addToStatSet, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
   getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak, getTitleProgress,
+  getUserProgressByEmail, adminRevokeTitles, adminGrantTitles,
 } from './achievements.js';
 
 const ICONS = {
@@ -300,6 +301,7 @@ export default function App() {
   const [myRankPoints, setMyRankPoints] = useState(null);
   const [lastRankChange, setLastRankChange] = useState(null);
   const [peakTierIndex, setPeakTierIndex] = useState(0);
+  const [reachedTierBadges, setReachedTierBadges] = useState({});
   const [equippedTierId, setEquippedTierId] = useState(null);
   const [myTitles, setMyTitles] = useState({}); // { [titleId]: true }
   const [equippedTitle, setEquippedTitle] = useState(null);
@@ -525,12 +527,14 @@ export default function App() {
             const peak = await updatePeakTier(user.uid, points).catch(() => 0);
             setPeakTierIndex(peak);
           }
+          getReachedTierBadges(user.uid).then(setReachedTierBadges).catch(() => {});
         })
         .catch(() => {});
       getEquippedTierId(user.uid).then(setEquippedTierId).catch(() => {});
     } else {
       setMyRankPoints(null);
       setPeakTierIndex(0);
+      setReachedTierBadges({});
       setEquippedTierId(null);
     }
   }, [user?.uid, user?.displayName]);
@@ -868,7 +872,10 @@ export default function App() {
                   setMyRankPoints(newPoints);
                   setLastRankChange({ delta, newPoints });
                   const peak = await updatePeakTier(user.uid, newPoints).catch(() => null);
-                  if (peak !== null) setPeakTierIndex(peak);
+                  if (peak !== null) {
+                    setPeakTierIndex(peak);
+                    getReachedTierBadges(user.uid).then(setReachedTierBadges).catch(() => {});
+                  }
 
                   // 파동 이펙트 조건: 이미 마스터였던 상태에서 랭크전으로 승리
                   if (result === 'win' && peakTierIndex >= TIERS.length - 1) {
@@ -913,6 +920,7 @@ export default function App() {
         setMyRating={setMyRating}
         myRankPoints={myRankPoints}
         peakTierIndex={peakTierIndex}
+        reachedTierBadges={reachedTierBadges}
         equippedTierId={equippedTierId}
         setEquippedTierId={setEquippedTierId}
         myTitles={myTitles}
@@ -1074,7 +1082,7 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -1121,12 +1129,26 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [titleHoldersLoading, setTitleHoldersLoading] = useState(false);
   const [expandedTitle, setExpandedTitle] = useState(null);
   const [revokeEmail, setRevokeEmail] = useState('');
+  const [revokeLookup, setRevokeLookup] = useState(null); // getUserProgressByEmail 결과
+  const [revokeSelectedTitles, setRevokeSelectedTitles] = useState({}); // 원하는 최종 상태(desired state)
+  const [revokeSelectedTiers, setRevokeSelectedTiers] = useState({});
+  const [desiredBoardSkins, setDesiredBoardSkins] = useState({});
+  const [desiredStoneSkins, setDesiredStoneSkins] = useState({});
   const [scoreEditEmail, setScoreEditEmail] = useState('');
   const [scoreEditRating, setScoreEditRating] = useState('');
   const [scoreEditRankPoints, setScoreEditRankPoints] = useState('');
   const [scoreEditStatus, setScoreEditStatus] = useState('');
   const [revokeStatus, setRevokeStatus] = useState('');
   const [myStats, setMyStats] = useState({});
+  const [myGrantedSkins, setMyGrantedSkins] = useState({ board: {}, stone: {} });
+
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      getGrantedSkins(user.uid).then(setMyGrantedSkins).catch(() => {});
+    } else {
+      setMyGrantedSkins({ board: {}, stone: {} });
+    }
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
@@ -1561,24 +1583,6 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       );
     }
 
-    async function handleRevoke() {
-      if (!revokeEmail.trim()) return;
-      setRevokeStatus('처리 중...');
-      const res = await revokeAllTitlesByEmail(revokeEmail.trim()).catch(() => ({ ok: false, reason: 'error' }));
-      if (res.ok) {
-        setRevokeStatus(`'${revokeEmail}' 계정의 칭호를 전부 회수했어요.`);
-        setRevokeEmail('');
-        getTitleCounts().then(setTitleCounts).catch(() => {});
-        if (titleHolders) {
-          getTitleHolders().then(setTitleHolders).catch(() => {});
-        }
-      } else if (res.reason === 'not-found') {
-        setRevokeStatus('그 이메일로 가입한 계정을 찾을 수 없어요.');
-      } else {
-        setRevokeStatus('회수하지 못했어요. 다시 시도해주세요.');
-      }
-    }
-
     async function handleScoreEdit(kind) {
       if (!scoreEditEmail.trim()) return;
       setScoreEditStatus('처리 중...');
@@ -1597,6 +1601,55 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         else if (res.reason === 'not-found') setScoreEditStatus('그 이메일로 가입한 계정을 찾을 수 없어요.');
         else setScoreEditStatus('변경하지 못했어요. 다시 시도해주세요.');
       }
+    }
+
+    async function handleLookup() {
+      if (!revokeEmail.trim()) return;
+      setRevokeStatus('조회 중...');
+      const res = await getUserProgressByEmail(revokeEmail.trim()).catch(() => ({ ok: false, reason: 'error' }));
+      if (res.ok) {
+        setRevokeLookup(res);
+        setRevokeSelectedTitles({ ...res.titles });
+        setRevokeSelectedTiers({ ...res.reachedTierBadges });
+        setDesiredBoardSkins({ ...res.grantedBoardSkins });
+        setDesiredStoneSkins({ ...res.grantedStoneSkins });
+        setRevokeStatus('');
+      } else {
+        setRevokeLookup(null);
+        setRevokeStatus(res.reason === 'not-found' ? '그 이메일로 가입한 계정을 찾을 수 없어요.' : '조회하지 못했어요.');
+      }
+    }
+
+    function diffIds(allIds, desiredMap, originalMap) {
+      const toGrant = allIds.filter((id) => desiredMap[id] && !originalMap[id]);
+      const toRevoke = allIds.filter((id) => !desiredMap[id] && originalMap[id]);
+      return { toGrant, toRevoke };
+    }
+
+    async function handleApplyChanges() {
+      if (!revokeLookup) return;
+      setRevokeStatus('적용 중...');
+      const allTitleIds = TITLES.map((t) => t.id);
+      const allTierIds = TIERS.map((t) => t.id);
+      const allBoardIds = BOARD_SKINS.map((s) => s.id).filter((id) => id !== 'classic');
+      const allStoneIds = STONE_SKINS.map((s) => s.id).filter((id) => id !== 'classic');
+
+      const titleDiff = diffIds(allTitleIds, revokeSelectedTitles, revokeLookup.titles);
+      const tierDiff = diffIds(allTierIds, revokeSelectedTiers, revokeLookup.reachedTierBadges);
+      const boardDiff = diffIds(allBoardIds, desiredBoardSkins, revokeLookup.grantedBoardSkins);
+      const stoneDiff = diffIds(allStoneIds, desiredStoneSkins, revokeLookup.grantedStoneSkins);
+
+      await adminGrantTitles(revokeLookup.uid, titleDiff.toGrant).catch(() => {});
+      await adminRevokeTitles(revokeLookup.uid, titleDiff.toRevoke, revokeLookup.equippedTitle).catch(() => {});
+      await adminGrantTierBadges(revokeLookup.uid, tierDiff.toGrant).catch(() => {});
+      await adminRevokeTierBadges(revokeLookup.uid, tierDiff.toRevoke, revokeLookup.equippedTierId).catch(() => {});
+      await adminGrantSkinsByEmail(revokeEmail.trim(), boardDiff.toGrant, stoneDiff.toGrant).catch(() => {});
+      await adminRevokeSkins(revokeLookup.uid, boardDiff.toRevoke, stoneDiff.toRevoke).catch(() => {});
+
+      setRevokeStatus('변경사항을 적용했어요.');
+      getTitleCounts().then(setTitleCounts).catch(() => {});
+      if (titleHolders) getTitleHolders().then(setTitleHolders).catch(() => {});
+      handleLookup();
     }
 
     return (
@@ -1646,19 +1699,90 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         </div>
 
         <div className="tutorial-card">
-          <div className="tutorial-title" style={{ marginBottom: 6 }}>특정 계정 칭호 전체 회수</div>
+          <div className="tutorial-title" style={{ marginBottom: 6 }}>칭호 / 티어 뱃지 / 스킨 부여·회수</div>
           <p className="setup-card-desc" style={{ marginBottom: 10 }}>
-            이메일을 입력하면 그 계정이 가진 칭호를 전부 지우고, 장착 중인 칭호도 해제해요. 되돌릴 수 없어요.
+            이메일로 조회한 뒤, 체크박스를 원하는 상태로 맞추고 "변경사항 적용"을 누르면 그대로 반영돼요
+            (체크 = 보유, 해제 = 없음). 퀘스트 조건과 무관하게 강제로 부여할 수 있어요.
           </p>
-          <input
-            className="join-input"
-            style={{ width: '100%', letterSpacing: 0, fontSize: 14, textTransform: 'none', marginBottom: 8 }}
-            value={revokeEmail}
-            onChange={(e) => setRevokeEmail(e.target.value)}
-            placeholder="example@email.com"
-          />
-          <button className="reset-btn confirm-danger-btn" onClick={handleRevoke}>칭호 전체 회수</button>
-          {revokeStatus && <p className="setup-card-desc" style={{ marginTop: 8 }}>{revokeStatus}</p>}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input
+              className="join-input"
+              style={{ flex: 1, letterSpacing: 0, fontSize: 14, textTransform: 'none' }}
+              value={revokeEmail}
+              onChange={(e) => setRevokeEmail(e.target.value)}
+              placeholder="example@email.com"
+            />
+            <button className="reset-btn" onClick={handleLookup}>조회</button>
+          </div>
+          {revokeStatus && <p className="setup-card-desc" style={{ marginBottom: 8 }}>{revokeStatus}</p>}
+
+          {revokeLookup && (
+            <>
+              <p className="setup-card-desc" style={{ marginBottom: 6 }}>
+                <b>{revokeLookup.displayName}</b> 계정
+              </p>
+
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 8, marginBottom: 4 }}>칭호 ({TITLES.length}종)</div>
+              <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 6 }}>
+                {TITLES.map((t) => (
+                  <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!revokeSelectedTitles[t.id]}
+                      onChange={(e) => setRevokeSelectedTitles((prev) => ({ ...prev, [t.id]: e.target.checked }))}
+                    />
+                    {t.name}{revokeLookup.equippedTitle === t.id ? ' (장착 중)' : ''}
+                  </label>
+                ))}
+              </div>
+
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>티어 뱃지 (9종)</div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 6 }}>
+                {TIERS.map((t) => (
+                  <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!revokeSelectedTiers[t.id]}
+                      onChange={(e) => setRevokeSelectedTiers((prev) => ({ ...prev, [t.id]: e.target.checked }))}
+                    />
+                    {t.name}{revokeLookup.equippedTierId === t.id ? ' (장착 중)' : ''}
+                  </label>
+                ))}
+              </div>
+
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>바둑판 스킨 (클래식 제외 7종)</div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 6 }}>
+                {BOARD_SKINS.filter((s) => s.id !== 'classic').map((s) => (
+                  <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!desiredBoardSkins[s.id]}
+                      onChange={(e) => setDesiredBoardSkins((prev) => ({ ...prev, [s.id]: e.target.checked }))}
+                    />
+                    {s.name}
+                  </label>
+                ))}
+              </div>
+
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>바둑돌 스킨 (클래식 제외 7종)</div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 6 }}>
+                {STONE_SKINS.filter((s) => s.id !== 'classic').map((s) => (
+                  <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!desiredStoneSkins[s.id]}
+                      onChange={(e) => setDesiredStoneSkins((prev) => ({ ...prev, [s.id]: e.target.checked }))}
+                    />
+                    {s.name}
+                  </label>
+                ))}
+              </div>
+
+              <button className="reset-btn confirm-danger-btn" style={{ marginTop: 10 }} onClick={handleApplyChanges}>
+                변경사항 적용
+              </button>
+            </>
+          )}
         </div>
 
         <div className="tutorial-card" style={{ marginTop: 14 }}>
@@ -2239,7 +2363,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             </button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
               {TIERS.map((t, i) => {
-                const reached = i <= peakTierIndex;
+                const reached = !!reachedTierBadges[t.id];
                 const equipped = equippedTierId === t.id;
                 return (
                   <button
@@ -2429,7 +2553,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <p className="setup-card-desc" style={{ marginBottom: 8 }}>퀘스트를 달성하면 하나씩 풀려요.</p>
                 <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
                   {BOARD_SKINS.map((skin) => {
-                    const unlocked = dev || isBoardSkinUnlocked(skin.id, myStats, skinCtx);
+                    const unlocked = dev || myGrantedSkins.board[skin.id] || isBoardSkinUnlocked(skin.id, myStats, skinCtx);
                     return (
                       <button
                         key={skin.id}
@@ -2457,7 +2581,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <p className="setup-card-desc" style={{ marginBottom: 8 }}>퀘스트를 달성하면 하나씩 풀려요.</p>
                 <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
                   {STONE_SKINS.map((skin) => {
-                    const unlocked = dev || isStoneSkinUnlocked(skin.id, myStats, skinCtx);
+                    const unlocked = dev || myGrantedSkins.stone[skin.id] || isStoneSkinUnlocked(skin.id, myStats, skinCtx);
                     return (
                       <button
                         key={skin.id}
