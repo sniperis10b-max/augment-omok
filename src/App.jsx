@@ -1046,7 +1046,15 @@ function useAIDriver(state, dispatch, online) {
           return;
         }
 
-        const best = chooseBestCell(state.board, state.aiPlayer, blockedFn, state.ruleFlags, state.aiDifficulty);
+        // 도발(forcedZone)이 걸려있으면, 일반 착수 판단에서는 그 영역 밖 칸을 아예
+        // "막힌 칸"처럼 취급해요. 안 그러면 AI가 영역 밖 자리를 계속 골랐다가
+        // 게임 로직에 거부당하는 걸 반복해서, 겉보기엔 "계속 생각만 하는" 것처럼 멈춰요.
+        const zone = state.forcedZone && state.forcedZone.player === state.aiPlayer ? state.forcedZone : null;
+        const placementBlockedFn = zone
+          ? (x, y) => isBlocked(state, x, y) || x < zone.x0 || x > zone.x1 || y < zone.y0 || y > zone.y1
+          : blockedFn;
+
+        const best = chooseBestCell(state.board, state.aiPlayer, placementBlockedFn, state.ruleFlags, state.aiDifficulty);
         if (best) dispatch({ type: 'SELECT_CELL', x: best.x, y: best.y });
       }, 650);
       return () => clearTimeout(t);
