@@ -930,7 +930,7 @@ export default function App() {
       />
     );
   } else if (state.phase === 'draft') {
-    screen = <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} />;
+    screen = <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} user={user} />;
   } else {
     screen = (
       <GameScreen
@@ -2507,7 +2507,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       updateSettings({ timeLimitSec: v });
     };
     const applyCustomCards = () => {
-      const v = Math.min(20, Math.max(1, parseInt(customCards, 10) || 3));
+      const cap = isDevAccount(user) ? 999 : 20;
+      const v = Math.min(cap, Math.max(1, parseInt(customCards, 10) || 3));
       updateSettings({ cardsPerPlayer: v });
     };
 
@@ -2712,7 +2713,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               className="join-input"
               style={{ letterSpacing: 0, fontSize: 16 }}
               value={customCards}
-              onChange={(e) => setCustomCards(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))}
+              onChange={(e) => setCustomCards(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
               placeholder="직접 입력(장)"
             />
             <button className="reset-btn" onClick={applyCustomCards}>이 값으로</button>
@@ -3257,7 +3258,7 @@ function ReplayScreen({ record, onBack }) {
   );
 }
 
-function DraftScreen({ state, dispatch, online }) {
+function DraftScreen({ state, dispatch, online, user }) {
   const { draft, aiPlayer } = state;
   const currentPlayer = draft.order[draft.currentIndex];
   const roundNumber = draft.currentIndex + 1;
@@ -3265,6 +3266,7 @@ function DraftScreen({ state, dispatch, online }) {
   const isAITurn = currentPlayer === aiPlayer;
   const isOnlineWaiting = online && currentPlayer !== online.localColor;
   const waiting = isAITurn || isOnlineWaiting;
+  const [devSearch, setDevSearch] = useState('');
 
   const [pickBanner, setPickBanner] = useState(null);
   const lastPickKeyRef = useRef(null);
@@ -3324,6 +3326,31 @@ function DraftScreen({ state, dispatch, online }) {
       </div>
 
       <HandsPreview hands={draft.hands} />
+
+      {isDevAccount(user) && !waiting && (
+        <div className="tutorial-card" style={{ marginTop: 14 }}>
+          <div className="tutorial-title" style={{ marginBottom: 6 }}>개발자: 전체 카드에서 직접 선택</div>
+          <input
+            className="join-input"
+            style={{ width: '100%', letterSpacing: 0, fontSize: 14, textTransform: 'none', marginBottom: 8 }}
+            value={devSearch}
+            onChange={(e) => setDevSearch(e.target.value)}
+            placeholder="카드 이름 검색..."
+          />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+            {CARDS.filter((c) => c.name.includes(devSearch)).map((c) => (
+              <button
+                key={c.id}
+                className="reset-btn"
+                style={{ fontSize: 11, padding: '4px 8px' }}
+                onClick={() => dispatch({ type: 'DRAFT_PICK', cardId: c.id })}
+              >
+                <CardIcon name={c.icon} size={12} /> {c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
