@@ -67,6 +67,46 @@ export const BOARD_SKINS = [
     line: 'rgba(0, 0, 0, 0.2)',
     questDesc: '온라인 대전에서 무승부 제안으로 5판 마무리',
   },
+  {
+    id: 'aurora',
+    name: '오로라',
+    background: 'linear-gradient(135deg, #7bf1c9, #7b9df1, #c97bf1)',
+    border: '#5a8fd6',
+    line: 'rgba(255, 255, 255, 0.2)',
+    questDesc: '랭크전 티어 승급 15회',
+  },
+  {
+    id: 'lavastone',
+    name: '용암석',
+    background: 'linear-gradient(135deg, #ff6a3d, #7a1f0d)',
+    border: '#4a1206',
+    line: 'rgba(255, 220, 180, 0.3)',
+    questDesc: '파괴 계열 카드로 상대 돌 30개 파괴',
+  },
+  {
+    id: 'galaxy',
+    name: '은하수',
+    background: 'radial-gradient(circle at 30% 30%, #4b3f8a, #0a0a2a)',
+    border: '#1a1a3a',
+    line: 'rgba(255, 255, 255, 0.25)',
+    questDesc: '온라인 대전에서 완벽한 승부(카드 없이 승리) 10회',
+  },
+  {
+    id: 'ancientRuins',
+    name: '고대 유적',
+    background: 'linear-gradient(135deg, #b8ab8a, #8a7a5a)',
+    border: '#6b5d42',
+    line: 'rgba(0, 0, 0, 0.3)',
+    questDesc: '100수 이상 대국 10판 진행 (승패 무관)',
+  },
+  {
+    id: 'chessboard',
+    name: '체스판',
+    background: 'repeating-conic-gradient(#2a2a2a 0% 25%, #f2f2f2 0% 50%)',
+    border: '#1a1a1a',
+    line: 'rgba(255, 0, 0, 0.3)',
+    questDesc: '온라인 대전(친선전+랭크전) 총 100판 진행',
+  },
 ];
 
 export const STONE_SKINS = [
@@ -133,6 +173,38 @@ export const STONE_SKINS = [
     white: 'linear-gradient(160deg, #ffffff, #cfcfcf)',
     whiteBorder: '#aaaaaa',
     questDesc: '칭호 10개 이상 해금',
+  },
+  {
+    id: 'crystal',
+    name: '크리스탈',
+    black: 'linear-gradient(160deg, #3a2f6b, #1a1440)',
+    white: 'linear-gradient(160deg, #d8f0ff, #9fd6f5)',
+    whiteBorder: '#7fc0e8',
+    questDesc: "'낙인' 카드 50회 사용",
+  },
+  {
+    id: 'phoenix',
+    name: '불사조',
+    black: 'linear-gradient(160deg, #ff8c3d, #c22b1a)',
+    white: 'linear-gradient(160deg, #ffe27a, #ff9d3d)',
+    whiteBorder: '#e08a2a',
+    questDesc: "'복구' 카드 50회 사용",
+  },
+  {
+    id: 'shadow',
+    name: '그림자',
+    black: 'linear-gradient(160deg, #1a1a1a, #000000)',
+    white: 'linear-gradient(160deg, #6a6a6a, #2a2a2a)',
+    whiteBorder: '#3a3a3a',
+    questDesc: '감시자로 상대 효과 50회 무효화',
+  },
+  {
+    id: 'hologram',
+    name: '홀로그램',
+    black: 'linear-gradient(160deg, #3df1ff, #9d3dff)',
+    white: 'linear-gradient(160deg, #ffffff, #b3f5ff)',
+    whiteBorder: '#7fe0f0',
+    questDesc: '서로 다른 카드 10종류 이상 사용',
   },
 ];
 
@@ -208,6 +280,11 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'roseGold': return (ctx.friendsPlayedCount || 0) >= 5;
     case 'midnight': return (stats.midnightGames || 0) >= 5;
     case 'pastelMint': return (stats.drawOfferSuccesses || 0) >= 5;
+    case 'aurora': return (stats.tierPromotions || 0) >= 15;
+    case 'lavastone': return (stats.destroyKills || 0) >= 30;
+    case 'galaxy': return (stats.flawlessVictories || 0) >= 10;
+    case 'ancientRuins': return (stats.longGamesPlayed || 0) >= 10;
+    case 'chessboard': return (stats.onlineGames || 0) >= 100;
     default: return false;
   }
 }
@@ -222,6 +299,10 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'woodTone': return (stats.longGameWins || 0) >= 5;
     case 'rubySapphire': return (ctx.peakTierIndex || 0) >= 5;
     case 'monochrome': return (ctx.titleCount || 0) >= 10;
+    case 'crystal': return (stats.markUses || 0) >= 50;
+    case 'phoenix': return (stats.restoreUses || 0) >= 50;
+    case 'shadow': return (stats.watcherBlocks || 0) >= 50;
+    case 'hologram': return (ctx.cardsUsedCount || 0) >= 10;
     default: return false;
   }
 }
@@ -244,6 +325,11 @@ export function getBoardSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'roseGold': return clampProgress(ctx.friendsPlayedCount, 5);
     case 'midnight': return clampProgress(stats.midnightGames, 5);
     case 'pastelMint': return clampProgress(stats.drawOfferSuccesses, 5);
+    case 'aurora': return clampProgress(stats.tierPromotions, 15);
+    case 'lavastone': return clampProgress(stats.destroyKills, 30);
+    case 'galaxy': return clampProgress(stats.flawlessVictories, 10);
+    case 'ancientRuins': return clampProgress(stats.longGamesPlayed, 10);
+    case 'chessboard': return clampProgress(stats.onlineGames, 100);
     default: return null;
   }
 }
@@ -261,6 +347,10 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'woodTone': return clampProgress(stats.longGameWins, 5);
     case 'rubySapphire': return clampProgress(ctx.peakTierIndex, 5);
     case 'monochrome': return clampProgress(ctx.titleCount, 10);
+    case 'crystal': return clampProgress(stats.markUses, 50);
+    case 'phoenix': return clampProgress(stats.restoreUses, 50);
+    case 'shadow': return clampProgress(stats.watcherBlocks, 50);
+    case 'hologram': return clampProgress(ctx.cardsUsedCount, 10);
     default: return null;
   }
 }

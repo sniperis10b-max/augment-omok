@@ -392,6 +392,12 @@ export default function App() {
           const newCount = await bumpCounter(user.uid, 'tradeUses', 1);
           if (checkSimpleThreshold('tradeMaster', newCount)) unlockAndNotify('tradeMaster');
         }
+        if (cur === 'mark') {
+          bumpCounter(user.uid, 'markUses', 1).catch(() => {});
+        }
+        if (cur === 'restore') {
+          bumpCounter(user.uid, 'restoreUses', 1).catch(() => {});
+        }
 
         if (destroyDelta > 0) {
           const newTotal = await bumpCounter(user.uid, 'destroyKills', destroyDelta);
@@ -779,6 +785,11 @@ export default function App() {
                   bumpCounter(user.uid, 'midnightGames', 1).catch(() => {});
                 }
 
+                // 100수 이상 진행된 대국 (승패 무관 - 고대 유적 스킨 조건)
+                if (state.ply >= 100) {
+                  bumpCounter(user.uid, 'longGamesPlayed', 1).catch(() => {});
+                }
+
                 // 손패 0장으로 게임을 마침 (무일푼)
                 if ((state.draft.hands[myColor] || []).length === 0) {
                   unlockAndNotify('penniless');
@@ -794,9 +805,10 @@ export default function App() {
                     if (checkSimpleThreshold('pacifist', newPacifist)) unlockAndNotify('pacifist');
                   }
 
-                  // 완벽한 승부: 온라인 대전에서 카드를 하나도 안 쓰고 승리
+                  // 완벽한 승부: 온라인 대전에서 카드를 하나도 안 쓰고 승리 (은하수 스킨 조건)
                   if (result === 'win' && !state.lastUsedCard[myColor]) {
                     unlockAndNotify('flawlessVictory');
+                    bumpCounter(user.uid, 'flawlessVictories', 1).catch(() => {});
                   }
 
                   // 친선전 판수 (파스텔 스톤 스킨 조건)
@@ -880,6 +892,13 @@ export default function App() {
                   // 파동 이펙트 조건: 이미 마스터였던 상태에서 랭크전으로 승리
                   if (result === 'win' && peakTierIndex >= TIERS.length - 1) {
                     bumpCounter(user.uid, 'postMasterWins', 1).catch(() => {});
+                  }
+
+                  // 오로라 스킨 조건: 티어 승급 횟수
+                  const tierBefore = TIERS.findIndex((t) => t.id === getTierForRating(myPointsBefore).id);
+                  const tierAfter = TIERS.findIndex((t) => t.id === getTierForRating(newPoints).id);
+                  if (tierAfter > tierBefore) {
+                    bumpCounter(user.uid, 'tierPromotions', 1).catch(() => {});
                   }
                 }
               } catch {
@@ -2550,6 +2569,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             peakTierIndex,
             friendsPlayedCount: Object.keys(myStats.friendsPlayed || {}).length,
             titleCount: Object.keys(myTitles).length,
+            cardsUsedCount: Object.keys(myStats.cardsUsed || {}).length,
           };
           const dev = isDevAccount(user);
           const unlockedSkinCount = BOARD_SKINS.filter((s) => isBoardSkinUnlocked(s.id, myStats, skinCtx)).length
