@@ -41,8 +41,8 @@ import {
   forceSetPeakTierIndex, adminSetRankPoints, getReachedTierBadges, adminRevokeTierBadges, adminGrantTierBadges,
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
-import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins } from './skins.js';
-import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked } from './effects.js';
+import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins } from './skins.js';
+import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, addToStatSet, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -2563,6 +2563,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
                   {BOARD_SKINS.map((skin) => {
                     const unlocked = dev || myGrantedSkins.board[skin.id] || isBoardSkinUnlocked(skin.id, myStats, skinCtx);
+                    const progress = unlocked ? null : getBoardSkinProgress(skin.id, myStats, skinCtx);
                     return (
                       <button
                         key={skin.id}
@@ -2579,6 +2580,14 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                         </div>
                         <div className="card-name">{skin.name}</div>
                         <div className="setup-card-desc" style={{ fontSize: 10 }}>{skin.questDesc}</div>
+                        {progress && (
+                          <div className="title-progress-track">
+                            <div className="title-progress-fill" style={{ width: `${progress.pct}%` }} />
+                            <span className="title-progress-label">
+                              {progress.current != null ? `${progress.current} / ${progress.target}` : `${progress.pct}%`}
+                            </span>
+                          </div>
+                        )}
                       </button>
                     );
                   })}
@@ -2591,6 +2600,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
                   {STONE_SKINS.map((skin) => {
                     const unlocked = dev || myGrantedSkins.stone[skin.id] || isStoneSkinUnlocked(skin.id, myStats, skinCtx);
+                    const progress = unlocked ? null : getStoneSkinProgress(skin.id, myStats, skinCtx);
                     return (
                       <button
                         key={skin.id}
@@ -2608,6 +2618,14 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                         </div>
                         <div className="card-name">{skin.name}</div>
                         <div className="setup-card-desc" style={{ fontSize: 10 }}>{skin.questDesc}</div>
+                        {progress && (
+                          <div className="title-progress-track">
+                            <div className="title-progress-fill" style={{ width: `${progress.pct}%` }} />
+                            <span className="title-progress-label">
+                              {progress.current != null ? `${progress.current} / ${progress.target}` : `${progress.pct}%`}
+                            </span>
+                          </div>
+                        )}
                       </button>
                     );
                   })}
@@ -2620,6 +2638,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
                   {PLACEMENT_EFFECTS.map((fx) => {
                     const unlocked = dev || isPlacementEffectUnlocked(fx.id, myStats, fxCtx);
+                    const progress = unlocked ? null : getPlacementEffectProgress(fx.id, myStats, fxCtx);
                     return (
                       <button
                         key={fx.id}
@@ -2636,6 +2655,14 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                           {fx.name}
                         </div>
                         <div className="setup-card-desc" style={{ fontSize: 10 }}>{fx.questDesc}</div>
+                        {progress && (
+                          <div className="title-progress-track">
+                            <div className="title-progress-fill" style={{ width: `${progress.pct}%` }} />
+                            <span className="title-progress-label">
+                              {progress.current != null ? `${progress.current} / ${progress.target}` : `${progress.pct}%`}
+                            </span>
+                          </div>
+                        )}
                       </button>
                     );
                   })}

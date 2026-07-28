@@ -29,3 +29,30 @@ export function isPlacementEffectUnlocked(effectId, stats = {}, ctx = {}) {
     default: return false;
   }
 }
+
+function clampProgress(current, target) {
+  const safeCurrent = Math.max(0, current || 0);
+  const pct = target > 0 ? Math.min(100, Math.round((safeCurrent / target) * 100)) : 0;
+  return { current: Math.min(safeCurrent, target), target, pct };
+}
+
+// 이펙트 하나의 달성 진행률. 조건이 여러 개인 것들(섬광/잔광)은 제일 뒤처진 조건
+// 기준으로 퍼센트만 줘요 (단위가 서로 달라서 하나의 x/y로 못 합쳐요).
+export function getPlacementEffectProgress(effectId, stats = {}, ctx = {}) {
+  switch (effectId) {
+    case 'shock': return clampProgress(stats.onlineWinStreak, 15);
+    case 'ripple': return clampProgress(stats.postMasterWins, 10);
+    case 'flash': {
+      const p1 = clampProgress(stats.aiImpossibleWins, 10).pct;
+      const p2 = clampProgress(stats.blackWins, 10).pct;
+      const p3 = clampProgress(stats.whiteWins, 10).pct;
+      return { current: null, target: null, pct: Math.min(p1, p2, p3) };
+    }
+    case 'glow': {
+      const p1 = clampProgress(ctx.unlockedSkinCount, 6).pct;
+      const p2 = clampProgress(ctx.titleCount, 20).pct;
+      return { current: null, target: null, pct: Math.min(p1, p2) };
+    }
+    default: return null;
+  }
+}

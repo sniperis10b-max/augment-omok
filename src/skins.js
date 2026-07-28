@@ -225,3 +225,42 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     default: return false;
   }
 }
+
+function clampProgress(current, target) {
+  const safeCurrent = Math.max(0, current || 0);
+  const pct = target > 0 ? Math.min(100, Math.round((safeCurrent / target) * 100)) : 0;
+  return { current: Math.min(safeCurrent, target), target, pct };
+}
+
+// 스킨 하나의 달성 진행률을 계산해요. 조건이 하나면 current/target을 주고,
+// 조건이 여러 개(예: 흑 10승 + 백 10승)면 제일 뒤처진 쪽을 기준으로 퍼센트만 줘요
+// (단위가 서로 달라서 하나의 x/y로 합칠 수 없어서예요 - current/target은 null이 돼요).
+export function getBoardSkinProgress(skinId, stats = {}, ctx = {}) {
+  switch (skinId) {
+    case 'darkWalnut': return clampProgress(stats.aiGames, 50);
+    case 'marble': return clampProgress(stats.totalDraws, 10);
+    case 'deepBlue': return clampProgress(stats.onlineGames, 20);
+    case 'emeraldFelt': return clampProgress(ctx.peakTierIndex, 2);
+    case 'roseGold': return clampProgress(ctx.friendsPlayedCount, 5);
+    case 'midnight': return clampProgress(stats.midnightGames, 5);
+    case 'pastelMint': return clampProgress(stats.drawOfferSuccesses, 5);
+    default: return null;
+  }
+}
+
+export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
+  switch (skinId) {
+    case 'onyxPearl': {
+      const p1 = clampProgress(stats.blackWins, 10).pct;
+      const p2 = clampProgress(stats.whiteWins, 10).pct;
+      return { current: null, target: null, pct: Math.min(p1, p2) };
+    }
+    case 'neon': return clampProgress(stats.echoSuccesses, 2);
+    case 'goldSilver': return clampProgress(ctx.peakTierIndex, 3);
+    case 'pastel': return clampProgress(stats.casualGames, 30);
+    case 'woodTone': return clampProgress(stats.longGameWins, 5);
+    case 'rubySapphire': return clampProgress(ctx.peakTierIndex, 5);
+    case 'monochrome': return clampProgress(ctx.titleCount, 10);
+    default: return null;
+  }
+}
