@@ -109,6 +109,54 @@ export const BOARD_SKINS = [
     line: 'rgba(255, 0, 0, 0.3)',
     questDesc: '온라인 대전(친선전+랭크전) 총 100판 진행',
   },
+  {
+    id: 'glacier',
+    name: '빙하',
+    background: 'linear-gradient(135deg, #dff6ff, #8fd3f4)',
+    border: '#5fb0d8',
+    line: 'rgba(0, 60, 90, 0.25)',
+    questDesc: "'얼리기' 카드 100회 사용",
+  },
+  {
+    id: 'desertStorm',
+    name: '사막의 폭풍',
+    background: 'linear-gradient(135deg, #e8c27a, #b8862f)',
+    border: '#8a6320',
+    line: 'rgba(60, 30, 0, 0.3)',
+    questDesc: "'소용돌이' 카드 100회 사용",
+  },
+  {
+    id: 'goldenTemple',
+    name: '황금 사원',
+    background: 'linear-gradient(135deg, #ffe27a, #a67c1a)',
+    border: '#7a5a10',
+    line: 'rgba(80, 50, 0, 0.35)',
+    questDesc: '랭크전 200판 진행 (승패 무관)',
+  },
+  {
+    id: 'dawn',
+    name: '여명',
+    background: 'linear-gradient(135deg, #ffd6a5, #ff9a8b, #a5c8ff)',
+    border: '#e08a6a',
+    line: 'rgba(80, 40, 30, 0.25)',
+    questDesc: '오전 5시~8시 사이 대국 30판',
+  },
+  {
+    id: 'ruinedBattlefield',
+    name: '폐허가 된 전장',
+    background: 'linear-gradient(135deg, #5a5248, #2a2620)',
+    border: '#1a1712',
+    line: 'rgba(255, 120, 60, 0.25)',
+    questDesc: '상대에게 돌 5개 이상 파괴당한 판에서도 승리 10회',
+  },
+  {
+    id: 'nebula',
+    name: '네뷸러',
+    background: 'radial-gradient(circle at 40% 40%, #ff7ae0, #4a1a8a, #0a0a2a)',
+    border: '#3a1a6a',
+    line: 'rgba(255, 255, 255, 0.25)',
+    questDesc: '확률형 카드 성공 누적 150회',
+  },
 ];
 
 export const STONE_SKINS = [
@@ -208,6 +256,54 @@ export const STONE_SKINS = [
     whiteBorder: '#7fe0f0',
     questDesc: '모든 카드를 각각 10번씩 사용',
   },
+  {
+    id: 'windSpirit',
+    name: '바람의 정령',
+    black: 'linear-gradient(160deg, #a8d8c8, #4a8a7a)',
+    white: 'linear-gradient(160deg, #f0fff8, #c8ecdf)',
+    whiteBorder: '#a0d8c0',
+    questDesc: "'봉인' 카드 100회 사용",
+  },
+  {
+    id: 'steel',
+    name: '강철',
+    black: 'linear-gradient(160deg, #5a6470, #2a3038)',
+    white: 'linear-gradient(160deg, #e8ecef, #b8c2ca)',
+    whiteBorder: '#9aa5ad',
+    questDesc: "'강화' 카드 100회 사용",
+  },
+  {
+    id: 'mirror',
+    name: '거울',
+    black: 'linear-gradient(160deg, #cfd8e0, #8fa0ac)',
+    white: 'linear-gradient(160deg, #ffffff, #dfe8ee)',
+    whiteBorder: '#c0ccd6',
+    questDesc: "'복제' 카드 20회 사용",
+  },
+  {
+    id: 'cursedDoll',
+    name: '저주받은 인형',
+    black: 'linear-gradient(160deg, #4a1a2a, #1a0a12)',
+    white: 'linear-gradient(160deg, #d8a8b8, #8a4a5a)',
+    whiteBorder: '#6a3a48',
+    questDesc: "'낙인' 200회 누적 사용",
+  },
+  {
+    id: 'obelisk',
+    name: '오벨리스크',
+    black: 'linear-gradient(160deg, #6a5a3a, #2a2214)',
+    white: 'linear-gradient(160deg, #e8d8a8, #b8a068)',
+    whiteBorder: '#9a8850',
+    questDesc: "'성역' 카드 100회 사용",
+  },
+  {
+    id: 'crown',
+    name: '왕관',
+    black: 'linear-gradient(160deg, #3a2a0a, #1a1005)',
+    white: 'linear-gradient(160deg, #ffe27a, #d4af37)',
+    whiteBorder: '#b8952a',
+    questDesc: '불가능 난이도 AI 20연승',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -287,6 +383,12 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'galaxy': return (stats.flawlessVictories || 0) >= 10;
     case 'ancientRuins': return (stats.longGamesPlayed || 0) >= 10;
     case 'chessboard': return (stats.onlineGames || 0) >= 100;
+    case 'glacier': return (stats.freezeCellUses || 0) >= 100;
+    case 'desertStorm': return (stats.vortexUses || 0) >= 100;
+    case 'goldenTemple': return (stats.rankedGamesPlayed || 0) >= 200;
+    case 'dawn': return (stats.dawnGames || 0) >= 30;
+    case 'ruinedBattlefield': return (stats.ruinedBattlefieldWins || 0) >= 10;
+    case 'nebula': return (stats.probSuccess || 0) >= 150;
     default: return false;
   }
 }
@@ -305,6 +407,12 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'phoenix': return (stats.restoreUses || 0) >= 50;
     case 'shadow': return (stats.watcherBlocks || 0) >= 50;
     case 'hologram': return CARDS.every((c) => (ctx.cardUseCounts?.[c.id] || 0) >= 10);
+    case 'windSpirit': return (stats.sealLineUses || 0) >= 100;
+    case 'steel': return (stats.reinforceUses || 0) >= 100;
+    case 'mirror': return (stats.duplicateUses || 0) >= 20;
+    case 'cursedDoll': return (stats.markUses || 0) >= 200;
+    case 'obelisk': return (stats.sanctuaryUses || 0) >= 100;
+    case 'crown': return (stats.impossibleWinStreak || 0) >= 20;
     default: return false;
   }
 }
@@ -332,6 +440,12 @@ export function getBoardSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'galaxy': return clampProgress(stats.flawlessVictories, 10);
     case 'ancientRuins': return clampProgress(stats.longGamesPlayed, 10);
     case 'chessboard': return clampProgress(stats.onlineGames, 100);
+    case 'glacier': return clampProgress(stats.freezeCellUses, 100);
+    case 'desertStorm': return clampProgress(stats.vortexUses, 100);
+    case 'goldenTemple': return clampProgress(stats.rankedGamesPlayed, 200);
+    case 'dawn': return clampProgress(stats.dawnGames, 30);
+    case 'ruinedBattlefield': return clampProgress(stats.ruinedBattlefieldWins, 10);
+    case 'nebula': return clampProgress(stats.probSuccess, 150);
     default: return null;
   }
 }
@@ -358,6 +472,12 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
       for (const c of CARDS) minCount = Math.min(minCount, counts[c.id] || 0);
       return clampProgress(minCount === Infinity ? 0 : minCount, 10);
     }
+    case 'windSpirit': return clampProgress(stats.sealLineUses, 100);
+    case 'steel': return clampProgress(stats.reinforceUses, 100);
+    case 'mirror': return clampProgress(stats.duplicateUses, 20);
+    case 'cursedDoll': return clampProgress(stats.markUses, 200);
+    case 'obelisk': return clampProgress(stats.sanctuaryUses, 100);
+    case 'crown': return clampProgress(stats.impossibleWinStreak, 20);
     default: return null;
   }
 }

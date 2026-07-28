@@ -189,6 +189,13 @@ export async function bumpCounter(uid, field, amount = 1) {
   return result.snapshot.val() || 0;
 }
 
+// 연승형 카운터 전용: 이기면(성공하면) 1 늘리고, 아니면 0으로 끊어요.
+export async function bumpStreakCounter(uid, field, succeeded) {
+  const db = getDb();
+  const result = await runTransaction(ref(db, `users/${uid}/achievementStats/${field}`), (cur) => (succeeded ? (cur || 0) + 1 : 0));
+  return result.snapshot.val() || 0;
+}
+
 // achievementStats 안에 "집합" 형태로 값을 모아둘 때 써요 (예: 같이 대전해본 친구 uid 목록).
 // key를 추가하고, 지금까지 모인 개수를 돌려줘요.
 export async function addToStatSet(uid, field, key) {

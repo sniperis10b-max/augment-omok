@@ -45,7 +45,7 @@ import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSk
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
-  getAchievementData, bumpCounter, addToStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
+  getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
   getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak, getTitleProgress,
   getUserProgressByEmail, adminRevokeTitles, adminGrantTitles,
 } from './achievements.js';
@@ -398,6 +398,24 @@ export default function App() {
         }
         if (cur === 'restore') {
           bumpCounter(user.uid, 'restoreUses', 1).catch(() => {});
+        }
+        if (cur === 'freezeCell') {
+          bumpCounter(user.uid, 'freezeCellUses', 1).catch(() => {});
+        }
+        if (cur === 'vortex') {
+          bumpCounter(user.uid, 'vortexUses', 1).catch(() => {});
+        }
+        if (cur === 'sealLine') {
+          bumpCounter(user.uid, 'sealLineUses', 1).catch(() => {});
+        }
+        if (cur === 'reinforce') {
+          bumpCounter(user.uid, 'reinforceUses', 1).catch(() => {});
+        }
+        if (cur === 'duplicate') {
+          bumpCounter(user.uid, 'duplicateUses', 1).catch(() => {});
+        }
+        if (cur === 'sanctuary') {
+          bumpCounter(user.uid, 'sanctuaryUses', 1).catch(() => {});
         }
 
         if (destroyDelta > 0) {
@@ -786,9 +804,27 @@ export default function App() {
                   bumpCounter(user.uid, 'midnightGames', 1).catch(() => {});
                 }
 
+                // 오전 5시~8시 사이 대국 (여명 스킨 조건)
+                {
+                  const hour = new Date().getHours();
+                  if (hour >= 5 && hour < 8) {
+                    bumpCounter(user.uid, 'dawnGames', 1).catch(() => {});
+                  }
+                }
+
                 // 100수 이상 진행된 대국 (승패 무관 - 고대 유적 스킨 조건)
                 if (state.ply >= 100) {
                   bumpCounter(user.uid, 'longGamesPlayed', 1).catch(() => {});
+                }
+
+                // 폐허가 된 전장: 상대에게 이번 판에서 돌 5개 이상 파괴당했는데도 승리
+                if (result === 'win' && (state.stoneDestroyCount?.[otherPlayer(myColor)] || 0) >= 5) {
+                  bumpCounter(user.uid, 'ruinedBattlefieldWins', 1).catch(() => {});
+                }
+
+                // 왕관: 불가능 난이도 AI 연승 (지거나 비기면 끊겨요)
+                if (state.aiPlayer && state.aiDifficulty === 'impossible') {
+                  bumpStreakCounter(user.uid, 'impossibleWinStreak', result === 'win').catch(() => {});
                 }
 
                 // 손패 0장으로 게임을 마침 (무일푼)
@@ -815,6 +851,9 @@ export default function App() {
                   // 친선전 판수 (파스텔 스톤 스킨 조건)
                   if (!online.ranked) {
                     bumpCounter(user.uid, 'casualGames', 1).catch(() => {});
+                  } else {
+                    // 랭크전 판수 (승패 무관 - 황금 사원 스킨 조건)
+                    bumpCounter(user.uid, 'rankedGamesPlayed', 1).catch(() => {});
                   }
 
                   // 서로 다른 친구와 온라인 대전 (로즈 골드 스킨 조건)
