@@ -9,6 +9,7 @@ import {
   Zap, Tornado, Repeat, Stamp, Sparkle, AudioLines,
   Landmark, Infinity as InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins, Medal,
   Shield, Hexagon, Gem, Flame, Octagon, Crown,
+  Wind, CloudLightning, Waves, Orbit, Feather, Heart, Gift, Dice6,
   ListOrdered,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer, isCellInSealedLine } from './gameLogic.js';
@@ -57,6 +58,7 @@ const ICONS = {
   HandMetal, ShieldPlus, CircleDot, VolumeX, Star,
   Zap, RotateCcw, Eye, Copy, Tornado, Repeat, Stamp, Sparkle, AudioLines,
   Landmark, Users, Dice5, Infinity: InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins,
+  Wind, CloudLightning, Waves, Orbit, Shield, Feather, Heart, Gift, Dice6,
 };
 
 function CardIcon({ name, size = 18 }) {

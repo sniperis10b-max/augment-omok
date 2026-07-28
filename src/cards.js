@@ -60,6 +60,15 @@ export const CARDS = [
   { id: 'shortWin', name: '단축 승리', desc: '30% 확률로 발동해요. 성공하면 이번 판 끝까지 승리 조건이 5목에서 4목으로 낮아져요 (양쪽 모두 적용). 실패해도 카드는 소모돼요.', targetType: 'none', icon: 'ArrowDownToLine' },
   { id: 'longWin', name: '연장 승리', desc: '30% 확률로 발동해요. 성공하면 상대에게만 이번 판 끝까지 6목을 완성해야 승리로 인정되는 규칙이 강제돼요. 실패해도 카드는 소모돼요.', targetType: 'none', icon: 'ArrowUpToLine' },
   { id: 'coinFlip', name: '동전 던지기', desc: '지정한 상대 돌 1개에 50% 확률로 파괴를 시도해요. 성공하면 제거되고, 실패하면 아무 일도 일어나지 않아요.', targetType: 'enemyStone', icon: 'Coins' },
+  { id: 'erosion', name: '침식', desc: '상대의 가장 오래된 돌 1개를 판에서 제거해요.', targetType: 'none', icon: 'Wind' },
+  { id: 'lightning', name: '낙뢰', desc: '지정한 칸이 속한 세로줄에서, 그 칸과 가까운 상대 돌부터 최대 3개까지 제거해요.', targetType: 'emptyOrAnyCell', icon: 'CloudLightning' },
+  { id: 'tsunami', name: '해일', desc: '지정한 칸이 속한 가로줄에서, 그 칸과 가까운 상대 돌부터 최대 3개까지 제거해요.', targetType: 'emptyOrAnyCell', icon: 'Waves' },
+  { id: 'blackhole', name: '블랙홀', desc: '지정한 칸 반경 2칸(5x5) 안의 모든 돌(내 것, 상대 것 모두)을 제거해요. 감시자·수호천사·반사로는 막을 수 없어요.', targetType: 'emptyOrAnyCell', icon: 'Orbit' },
+  { id: 'reflect', name: '반사', desc: '발동해두면, 상대가 다음에 나에게 쓰는 파괴류 효과를 그대로 되돌려서 오히려 상대 돌이 파괴돼요.', targetType: 'none', icon: 'Shield' },
+  { id: 'guardian', name: '수호천사', desc: '발동해두면, 다음에 나를 노리는 파괴류 효과 1회를 자동으로 무효화해요.', targetType: 'none', icon: 'Feather' },
+  { id: 'resurrection', name: '재림', desc: '30% 확률로 발동해요. 성공하면 이번 판에서 잃어버린 내 돌을 전부 한 번에 되돌려요. 실패해도 카드는 소모돼요.', targetType: 'none', icon: 'Heart' },
+  { id: 'lottery', name: '복권', desc: '40% 확률로 발동해요. 성공하면 무작위 카드 2장을 즉시 얻어요. 실패해도 카드는 소모돼요.', targetType: 'none', icon: 'Gift' },
+  { id: 'dice', name: '주사위', desc: '지정한 상대 돌 1개에 주사위를 굴려요. 1~2는 실패, 3~4는 그 돌만 제거(소파괴), 5~6은 그 돌과 인접 상대 돌까지 최대 3개 제거(대파괴)돼요.', targetType: 'enemyStone', icon: 'Dice6' },
 ];
 
 export function getCardById(id) {

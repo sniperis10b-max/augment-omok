@@ -21,6 +21,8 @@ const STANDALONE = new Set([
   'destroyChain', 'restore', 'watcher', 'duplicate', 'vortex',
   'trade', 'mark', 'purify', 'echo',
   'sanctuary', 'headcount', 'reroll', 'allowOverline', 'reverseForbidden', 'shortWin', 'longWin', 'coinFlip',
+  'erosion', 'reflect', 'guardian', 'resurrection', 'lottery',
+  'lightning', 'tsunami', 'blackhole', 'dice',
 ]);
 const PLACEMENT_BUFF = new Set(['fourToWin', 'allow44', 'doubleMove', 'bomb']);
 
@@ -34,6 +36,7 @@ const FREE_ACTION = new Set([
   'watcher', 'duplicate',
   'trade', 'mark',
   'headcount', 'coinFlip',
+  'erosion', 'reflect', 'guardian',
 ]);
 
 const key = (x, y) => `${x},${y}`;
@@ -61,6 +64,35 @@ function bumpWatcherBlock(next, defender) {
     ...next.watcherBlockCount,
     [defender]: (next.watcherBlockCount?.[defender] || 0) + 1,
   };
+}
+
+// 상대 돌 하나를 노리는 효과(파괴류)를 쓰기 전에 호출해요. 감시자 -> 수호천사 -> 반사 순으로
+// 확인해서, 그중 하나라도 걸려있으면 그걸 소모하고 { message } 를 돌려줘요 (원래 효과는 취소).
+// 반사는 대신 공격자(player)의 가장 최근 돌 하나를 파괴해요. 아무것도 안 걸려있으면 null.
+function tryDefend(next, board, player, target) {
+  const defender = otherPlayer(player);
+  if (next.watcherActive[defender]) {
+    next.watcherActive = { ...next.watcherActive, [defender]: false };
+    bumpWatcherBlock(next, defender);
+    return { message: `${defender === BLACK ? '흑' : '백'}의 감시자가 효과를 무효화했어요!` };
+  }
+  if (next.guardianActive[defender]) {
+    next.guardianActive = { ...next.guardianActive, [defender]: false };
+    return { message: `${defender === BLACK ? '흑' : '백'}의 수호천사가 효과를 무효화했어요!` };
+  }
+  if (next.reflectActive[defender]) {
+    next.reflectActive = { ...next.reflectActive, [defender]: false };
+    const mine = next.moveLog.filter((m) => m.type === 'place' && m.player === player).slice().reverse();
+    for (const m of mine) {
+      if (board[m.y][m.x] === player && !next.protectedStones[key(m.x, m.y)]) {
+        next.stoneLossLog = [...next.stoneLossLog, { owner: player, x: m.x, y: m.y, ply: next.ply }];
+        board[m.y][m.x] = 0;
+        return { message: `${defender === BLACK ? '흑' : '백'}이 효과를 반사했어요! 오히려 내 돌이 파괴됐어요.` };
+      }
+    }
+    return { message: `${defender === BLACK ? '흑' : '백'}이 반사를 시도했지만 반사할 대상이 없었어요.` };
+  }
+  return null;
 }
 
 function isBlocked(state, x, y) {
@@ -99,11 +131,16 @@ export function createInitialState() {
     confusion: null,
     winShield: { [BLACK]: false, [WHITE]: false },
     watcherActive: { [BLACK]: false, [WHITE]: false },
+    guardianActive: { [BLACK]: false, [WHITE]: false },
+    reflectActive: { [BLACK]: false, [WHITE]: false },
     echoActive: { [BLACK]: false, [WHITE]: false },
     echoResult: null,
     shortWinResult: null,
     longWinResult: null,
     coinFlipResult: null,
+    resurrectionResult: null,
+    lotteryResult: null,
+    diceResult: null,
     markedStones: {},
     stoneLossLog: [],
     stoneDestroyCount: { [BLACK]: 0, [WHITE]: 0 },
@@ -402,6 +439,106 @@ function resolveTargetedEffect(state, cardId, targets) {
       next.message = '상대 돌 하나에 낙인을 찍었어요. 그 돌이 포함된 5목은 승리로 인정되지 않아요.';
       break;
     }
+    case 'lightning': {
+      const [t] = targets;
+      const defender = otherPlayer(player);
+      const defense = tryDefend(next, board, player, t);
+      if (defense) { next.message = defense.message; break; }
+      const size = board.length;
+      const candidates = [];
+      for (let y = 0; y < size; y++) {
+        if (board[y][t.x] === defender && !next.protectedStones[key(t.x, y)]) candidates.push({ x: t.x, y });
+      }
+      candidates.sort((a, b) => Math.abs(a.y - t.y) - Math.abs(b.y - t.y));
+      const toRemove = candidates.slice(0, 3);
+      toRemove.forEach((c) => {
+        next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: c.x, y: c.y, ply: next.ply }];
+        board[c.y][c.x] = 0;
+        bumpDestroyCount(next, player, 1);
+      });
+      next.message = toRemove.length > 0 ? `낙뢰가 내리쳐서 상대 돌 ${toRemove.length}개가 사라졌어요!` : '그 세로줄엔 제거할 상대 돌이 없어요.';
+      break;
+    }
+    case 'tsunami': {
+      const [t] = targets;
+      const defender = otherPlayer(player);
+      const defense = tryDefend(next, board, player, t);
+      if (defense) { next.message = defense.message; break; }
+      const size = board.length;
+      const candidates = [];
+      for (let x = 0; x < size; x++) {
+        if (board[t.y][x] === defender && !next.protectedStones[key(x, t.y)]) candidates.push({ x, y: t.y });
+      }
+      candidates.sort((a, b) => Math.abs(a.x - t.x) - Math.abs(b.x - t.x));
+      const toRemove = candidates.slice(0, 3);
+      toRemove.forEach((c) => {
+        next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: c.x, y: c.y, ply: next.ply }];
+        board[c.y][c.x] = 0;
+        bumpDestroyCount(next, player, 1);
+      });
+      next.message = toRemove.length > 0 ? `해일이 휩쓸어서 상대 돌 ${toRemove.length}개가 사라졌어요!` : '그 가로줄엔 제거할 상대 돌이 없어요.';
+      break;
+    }
+    case 'blackhole': {
+      const [t] = targets;
+      let removedMine = 0;
+      let removedTheirs = 0;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          const nx = t.x + dx, ny = t.y + dy;
+          if (!inBounds(board, nx, ny)) continue;
+          const owner = board[ny][nx];
+          if (owner === 0) continue;
+          if (next.protectedStones[key(nx, ny)]) continue;
+          if (owner === BLACK || owner === WHITE) {
+            next.stoneLossLog = [...next.stoneLossLog, { owner, x: nx, y: ny, ply: next.ply }];
+            if (owner === player) removedMine++; else removedTheirs++;
+          }
+          board[ny][nx] = 0;
+        }
+      }
+      if (removedTheirs > 0) bumpDestroyCount(next, player, removedTheirs);
+      next.message = `블랙홀이 돌 ${removedMine + removedTheirs}개를 삼켰어요 (내 돌 ${removedMine}개, 상대 돌 ${removedTheirs}개). 감시자/수호천사/반사로는 막을 수 없어요.`;
+      break;
+    }
+    case 'dice': {
+      const [t] = targets;
+      if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
+      const defender = otherPlayer(player);
+      const defense = tryDefend(next, board, player, t);
+      if (defense) { next.message = defense.message; break; }
+      const roll = 1 + Math.floor(Math.random() * 6);
+      next.diceResult = roll;
+      if (roll <= 2) {
+        next.message = `주사위 눈 ${roll}... 아무 효과도 없었어요.`;
+      } else if (roll <= 4) {
+        next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
+        board[t.y][t.x] = 0;
+        bumpDestroyCount(next, player, 1);
+        next.message = `주사위 눈 ${roll}! 소파괴로 상대 돌 1개를 제거했어요.`;
+      } else {
+        next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
+        board[t.y][t.x] = 0;
+        bumpDestroyCount(next, player, 1);
+        let extra = 0;
+        outerDice: for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = t.x + dx, ny = t.y + dy;
+            if (!inBounds(board, nx, ny)) continue;
+            if (board[ny][nx] !== defender) continue;
+            if (next.protectedStones[key(nx, ny)]) continue;
+            next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: nx, y: ny, ply: next.ply }];
+            board[ny][nx] = 0;
+            bumpDestroyCount(next, player, 1);
+            extra++;
+            if (extra >= 2) break outerDice;
+          }
+        }
+        next.message = `주사위 눈 ${roll}! 대파괴로 상대 돌 ${1 + extra}개를 제거했어요.`;
+      }
+      break;
+    }
     case 'sanctuary': {
       const [t] = targets;
       const updates = {};
@@ -423,11 +560,11 @@ function resolveTargetedEffect(state, cardId, targets) {
       next.coinFlipResult = success ? 'success' : 'fail';
       bumpProbTally(next, player, success);
       if (success) {
-        if (next.watcherActive[defender]) {
-          next.watcherActive = { ...next.watcherActive, [defender]: false };
-          bumpWatcherBlock(next, defender);
-          next.message = `동전 던지기 성공! 하지만 ${defender === BLACK ? '흑' : '백'}의 감시자가 무효화했어요.`;
+        const defense = tryDefend(next, board, player, t);
+        if (defense) {
+          next.message = `동전 던지기 성공! 하지만 ${defense.message}`;
         } else {
+          next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
           board[t.y][t.x] = 0;
           bumpDestroyCount(next, player, 1);
           next.message = '동전 던지기 성공! 상대 돌이 파괴됐어요.';
@@ -441,12 +578,8 @@ function resolveTargetedEffect(state, cardId, targets) {
       const [t] = targets;
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
-      if (next.watcherActive[defender]) {
-        next.watcherActive = { ...next.watcherActive, [defender]: false };
-        bumpWatcherBlock(next, defender);
-        next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 파괴 효과를 무효화했어요!`;
-        break;
-      }
+      const defense = tryDefend(next, board, player, t);
+      if (defense) { next.message = defense.message; break; }
       next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = 0;
       bumpDestroyCount(next, player, 1);
@@ -456,12 +589,8 @@ function resolveTargetedEffect(state, cardId, targets) {
       const [t] = targets;
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
-      if (next.watcherActive[defender]) {
-        next.watcherActive = { ...next.watcherActive, [defender]: false };
-        bumpWatcherBlock(next, defender);
-        next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 연쇄 파괴를 무효화했어요!`;
-        break;
-      }
+      const defense = tryDefend(next, board, player, t);
+      if (defense) { next.message = `${defense.message} (연쇄 파괴 무효화됨)`; break; }
       const removed = [{ x: t.x, y: t.y }];
       next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = 0;
@@ -511,12 +640,8 @@ function resolveTargetedEffect(state, cardId, targets) {
       const [t] = targets;
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 변환할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
-      if (next.watcherActive[defender]) {
-        next.watcherActive = { ...next.watcherActive, [defender]: false };
-        bumpWatcherBlock(next, defender);
-        next.message = `${defender === BLACK ? '흑' : '백'}의 감시자가 연금술 효과를 무효화했어요!`;
-        break;
-      }
+      const defense = tryDefend(next, board, player, t);
+      if (defense) { next.message = defense.message; break; }
       next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = player;
       break;
@@ -920,6 +1045,63 @@ function resolveStandaloneNoTarget(state, cardId) {
       next.message = '감시자를 발동했어요. 다음에 상대가 파괴/연금술을 쓰면 무효화돼요.';
       break;
     }
+    case 'guardian': {
+      next.guardianActive = { ...next.guardianActive, [player]: true };
+      next.message = '수호천사를 발동했어요. 다음 파괴 위기를 자동으로 무효화해줘요.';
+      break;
+    }
+    case 'reflect': {
+      next.reflectActive = { ...next.reflectActive, [player]: true };
+      next.message = '반사를 발동했어요. 다음에 나를 노리는 파괴 효과를 상대에게 그대로 되돌려줘요.';
+      break;
+    }
+    case 'erosion': {
+      const opponent = otherPlayer(player);
+      const defense = tryDefend(next, board, player, null);
+      if (defense) { next.message = defense.message; break; }
+      const placements = next.moveLog.filter((m) => m.type === 'place' && m.player === opponent);
+      let target = null;
+      for (const m of placements) {
+        if (board[m.y][m.x] === opponent && !next.protectedStones[key(m.x, m.y)]) { target = m; break; }
+      }
+      if (target) {
+        next.stoneLossLog = [...next.stoneLossLog, { owner: opponent, x: target.x, y: target.y, ply: next.ply }];
+        board[target.y][target.x] = 0;
+        bumpDestroyCount(next, player, 1);
+        next.message = '상대의 가장 오래된 돌을 침식시켰어요.';
+      } else {
+        next.message = '침식시킬 수 있는 상대 돌이 없어요.';
+      }
+      break;
+    }
+    case 'resurrection': {
+      const success = Math.random() < 0.3;
+      next.resurrectionResult = success ? 'success' : 'fail';
+      bumpProbTally(next, player, success);
+      if (success) {
+        const mine = next.stoneLossLog.filter((e) => e.owner === player && board[e.y][e.x] === 0);
+        mine.forEach((e) => { board[e.y][e.x] = player; });
+        next.stoneLossLog = next.stoneLossLog.filter((e) => !mine.includes(e));
+        next.message = mine.length > 0 ? `재림 성공! 잃어버린 돌 ${mine.length}개를 전부 되돌렸어요!` : '재림은 성공했지만 되돌릴 돌이 없었어요.';
+      } else {
+        next.message = '재림 실패... (30% 확률) 카드는 소모됐어요.';
+      }
+      break;
+    }
+    case 'lottery': {
+      const success = Math.random() < 0.4;
+      next.lotteryResult = success ? 'success' : 'fail';
+      bumpProbTally(next, player, success);
+      if (success) {
+        const pool = poolForPlayer(player);
+        const picks = [pool[Math.floor(Math.random() * pool.length)], pool[Math.floor(Math.random() * pool.length)]];
+        next.draft = { ...next.draft, hands: { ...next.draft.hands, [player]: [...next.draft.hands[player], ...picks] } };
+        next.message = '복권 당첨! 무작위 카드 2장을 얻었어요!';
+      } else {
+        next.message = '복권 낙첨... (40% 확률) 카드는 소모됐어요.';
+      }
+      break;
+    }
     case 'duplicate': {
       const otherCards = next.draft.hands[player].filter((id) => id !== 'duplicate');
       if (otherCards.length > 0) {
@@ -1031,6 +1213,10 @@ const TARGET_STEPS = {
   mark: ['enemyStone'],
   sanctuary: ['ownStone'],
   coinFlip: ['enemyStone'],
+  lightning: ['emptyOrAnyCell'],
+  tsunami: ['emptyOrAnyCell'],
+  blackhole: ['emptyOrAnyCell'],
+  dice: ['enemyStone'],
 };
 
 function cellMatchesStep(state, x, y, step) {

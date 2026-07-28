@@ -418,6 +418,35 @@ const AI_CARD_HANDLERS = {
 AI_CARD_HANDLERS.destroyChain = AI_CARD_HANDLERS.destroy;
 // 동전 던지기도 파괴/낙인과 같은 방식으로 대상을 찾아요 (성공 여부는 게임 로직이 알아서 굴려요).
 AI_CARD_HANDLERS.coinFlip = AI_CARD_HANDLERS.mark;
+// 주사위도 마찬가지로 위협 라인 위주 상대 돌을 노려요.
+AI_CARD_HANDLERS.dice = AI_CARD_HANDLERS.mark;
+// 낙뢰/해일은 상대 돌이 가장 많이 몰려있는 세로줄/가로줄을 노려요.
+AI_CARD_HANDLERS.lightning = (board, ai) => {
+  const opp = otherPlayer(ai);
+  const size = board.length;
+  let bestX = 0, bestCount = -1, bestY = Math.floor(size / 2);
+  for (let x = 0; x < size; x++) {
+    let count = 0;
+    for (let y = 0; y < size; y++) if (board[y][x] === opp) count++;
+    if (count > bestCount) { bestCount = count; bestX = x; }
+  }
+  for (let y = 0; y < size; y++) if (board[y][bestX] === opp) { bestY = y; break; }
+  return { x: bestX, y: bestY };
+};
+AI_CARD_HANDLERS.tsunami = (board, ai) => {
+  const opp = otherPlayer(ai);
+  const size = board.length;
+  let bestY = 0, bestCount = -1, bestX = Math.floor(size / 2);
+  for (let y = 0; y < size; y++) {
+    let count = 0;
+    for (let x = 0; x < size; x++) if (board[y][x] === opp) count++;
+    if (count > bestCount) { bestCount = count; bestY = y; }
+  }
+  for (let x = 0; x < size; x++) if (board[bestY][x] === opp) { bestX = x; break; }
+  return { x: bestX, y: bestY };
+};
+// 블랙홀은 상대 진영이 가장 뭉쳐있는 지점을 중심으로 잡아요.
+AI_CARD_HANDLERS.blackhole = (board, ai) => findMostConnectedStone(board, otherPlayer(ai));
 
 // 상대의 열린 삼(다음에 열린 사가 될 수 있는 자리)이 있으면 그 확장 칸들을 반환
 function opponentOpenThreeFlanks(board, aiPlayer) {
@@ -431,8 +460,9 @@ function myOpenThreeFlanks(board, aiPlayer) {
 
 // 파괴/낙인/동전던지기처럼 "상대 돌 하나를 노리는" 카드 중 손에 있는 걸 우선순위대로 골라요.
 function pickDestroyLikeCard(hand, board, aiPlayer, protectedStones) {
-  for (const cardId of ['destroy', 'destroyChain', 'mark', 'coinFlip']) {
+  for (const cardId of ['destroy', 'destroyChain', 'mark', 'coinFlip', 'dice', 'erosion', 'lightning', 'tsunami']) {
     if (hand.includes(cardId)) {
+      if (cardId === 'erosion') return { cardId };
       const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, () => false, protectedStones);
       if (target) return { cardId, target };
     }
@@ -456,12 +486,13 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
 
   // 1) 상대가 바로 이길 수 있는 상황이면, 막을 수 있는 카드부터 우선 사용 (난이도에 따라 놓칠 수도 있음)
   if (opponentThreat && Math.random() < blockChance) {
-    for (const cardId of ['barrier', 'freezeCell', 'destroy', 'destroyChain', 'mark', 'coinFlip']) {
+    for (const cardId of ['barrier', 'freezeCell', 'destroy', 'destroyChain', 'mark', 'coinFlip', 'dice', 'lightning', 'tsunami']) {
       if (hand.includes(cardId)) {
         const target = AI_CARD_HANDLERS[cardId](board, aiPlayer, blockedFn, protectedStones);
         if (target) return { cardId, target };
       }
     }
+    if (hand.includes('erosion')) return { cardId: 'erosion' };
     if (hand.includes('winShield')) return { cardId: 'winShield' };
   }
 
@@ -503,9 +534,31 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     if (hand.includes('watcher') && !state.watcherActive?.[aiPlayer]) {
       return { cardId: 'watcher' };
     }
+    // 수호천사: 감시자와 별개로, 아직 안 걸려있으면 미리 발동해둬요
+    if (hand.includes('guardian') && !state.guardianActive?.[aiPlayer]) {
+      return { cardId: 'guardian' };
+    }
+    // 반사: 아직 안 걸려있으면 미리 발동해둬요 (상대 파괴류를 오히려 되돌려줘요)
+    if (hand.includes('reflect') && !state.reflectActive?.[aiPlayer]) {
+      return { cardId: 'reflect' };
+    }
     // 복구: 최근에 내 돌이 파괴/변환당한 기록이 있으면 되살려요
     if (hand.includes('restore') && (state.stoneLossLog || []).some((e) => e.owner === aiPlayer)) {
       return { cardId: 'restore' };
+    }
+    // 재림: 이번 판에서 잃은 돌이 있으면 30% 확률에 걸어봐요 (복구보다 우선순위는 낮게)
+    if (hand.includes('resurrection') && (state.stoneLossLog || []).some((e) => e.owner === aiPlayer)) {
+      return { cardId: 'resurrection' };
+    }
+    // 침식: 프리액션이라 밑질 게 없어서, 상대 돌이 있으면 바로 써요
+    if (hand.includes('erosion')) {
+      let oppHasStone = false;
+      outerErosionCheck: for (let y = 0; y < board.length; y++) {
+        for (let x = 0; x < board.length; x++) {
+          if (board[y][x] === otherPlayer(aiPlayer)) { oppHasStone = true; break outerErosionCheck; }
+        }
+      }
+      if (oppHasStone) return { cardId: 'erosion' };
     }
     // 머릿수 싸움: 내 돌이 상대보다 적을 때만 의미 있어서, 그럴 때만 써요
     if (hand.includes('headcount')) {
@@ -525,7 +578,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
   if (hasUrgentThreat) return null;
 
   const opponentHand = state.draft?.hands?.[otherPlayer(aiPlayer)] ?? [];
-  const developCandidates = ['fourToWin', 'bomb', 'doubleMove', 'randomSummon', 'miracle', 'duplicate', 'allowOverline', 'shortWin', 'longWin']
+  const developCandidates = ['fourToWin', 'bomb', 'doubleMove', 'randomSummon', 'miracle', 'duplicate', 'allowOverline', 'shortWin', 'longWin', 'lottery']
     .filter((id) => hand.includes(id));
   // 침묵은 상대에게 아직 쓸 카드가 남아있을 때만 의미가 있어요
   if (hand.includes('silence') && opponentHand.length > 0) developCandidates.push('silence');
@@ -563,6 +616,10 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
   if (hand.includes('purify') && Object.keys(state.blockedCells || {}).length >= 3) {
     targetedCandidates.push({ cardId: 'purify' });
   }
+  if (hand.includes('blackhole')) {
+    const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+    if (t && t.score >= 250) targetedCandidates.push({ cardId: 'blackhole', target: { x: t.x, y: t.y } });
+  }
 
   // 발전용 카드는 예전보다 덜 헤프게, 대상이 뚜렷한 카드는 조금 더 적극적으로 써요
   if (targetedCandidates.length > 0 && Math.random() < cardUseChance) {
@@ -586,6 +643,8 @@ const DRAFT_WEIGHT = {
   provoke: 3, confuse: 3, steal: 4, comboBlock: 5, miracle: 2,
   destroyChain: 6, restore: 5, watcher: 6, duplicate: 5, vortex: 3,
   trade: 4, mark: 5, purify: 4, echo: 3,
+  erosion: 6, lightning: 7, tsunami: 7, blackhole: 5, reflect: 5,
+  guardian: 6, resurrection: 4, lottery: 4, dice: 6,
 };
 
 export function pickDraftCard(options) {
