@@ -278,7 +278,7 @@ export const STONE_SKINS = [
     black: 'linear-gradient(160deg, #cfd8e0, #8fa0ac)',
     white: 'linear-gradient(160deg, #ffffff, #dfe8ee)',
     whiteBorder: '#c0ccd6',
-    questDesc: "'복제' 카드 20회 사용",
+    questDesc: "'복제' 카드 100회 사용",
   },
   {
     id: 'cursedDoll',
@@ -409,7 +409,7 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'hologram': return CARDS.every((c) => (ctx.cardUseCounts?.[c.id] || 0) >= 10);
     case 'windSpirit': return (stats.sealLineUses || 0) >= 100;
     case 'steel': return (stats.reinforceUses || 0) >= 100;
-    case 'mirror': return (stats.duplicateUses || 0) >= 20;
+    case 'mirror': return (stats.duplicateUses || 0) >= 100;
     case 'cursedDoll': return (stats.markUses || 0) >= 200;
     case 'obelisk': return (stats.sanctuaryUses || 0) >= 100;
     case 'crown': return (stats.impossibleWinStreak || 0) >= 20;
@@ -474,7 +474,7 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
     }
     case 'windSpirit': return clampProgress(stats.sealLineUses, 100);
     case 'steel': return clampProgress(stats.reinforceUses, 100);
-    case 'mirror': return clampProgress(stats.duplicateUses, 20);
+    case 'mirror': return clampProgress(stats.duplicateUses, 100);
     case 'cursedDoll': return clampProgress(stats.markUses, 200);
     case 'obelisk': return clampProgress(stats.sanctuaryUses, 100);
     case 'crown': return clampProgress(stats.impossibleWinStreak, 20);
