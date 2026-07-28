@@ -1778,7 +1778,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 ))}
               </div>
 
-              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>바둑판 스킨 (클래식 제외 7종)</div>
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>바둑판 스킨 (클래식 제외 {BOARD_SKINS.length - 1}종)</div>
               <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 6 }}>
                 {BOARD_SKINS.filter((s) => s.id !== 'classic').map((s) => (
                   <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12 }}>
@@ -1792,7 +1792,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 ))}
               </div>
 
-              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>바둑돌 스킨 (클래식 제외 7종)</div>
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>바둑돌 스킨 (클래식 제외 {STONE_SKINS.length - 1}종)</div>
               <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 6 }}>
                 {STONE_SKINS.filter((s) => s.id !== 'classic').map((s) => (
                   <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12 }}>
