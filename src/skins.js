@@ -2,6 +2,8 @@
 // (settings 자체는 이 브라우저에만 저장되는 로컬 설정이라, Firebase 계정 데이터와는 별개예요 -
 // "내 계정만 열어준다"는 건 UI에서 개발자 계정일 때만 선택 가능하게 막아둔다는 뜻이에요).
 
+import { CARDS } from './cards.js';
+
 export const BOARD_SKINS = [
   {
     id: 'classic',
@@ -204,7 +206,7 @@ export const STONE_SKINS = [
     black: 'linear-gradient(160deg, #3df1ff, #9d3dff)',
     white: 'linear-gradient(160deg, #ffffff, #b3f5ff)',
     whiteBorder: '#7fe0f0',
-    questDesc: '서로 다른 카드 10종류 이상 사용',
+    questDesc: '모든 카드를 각각 10번씩 사용',
   },
 ];
 
@@ -302,7 +304,7 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'crystal': return (stats.markUses || 0) >= 50;
     case 'phoenix': return (stats.restoreUses || 0) >= 50;
     case 'shadow': return (stats.watcherBlocks || 0) >= 50;
-    case 'hologram': return (ctx.cardsUsedCount || 0) >= 10;
+    case 'hologram': return CARDS.every((c) => (ctx.cardUseCounts?.[c.id] || 0) >= 10);
     default: return false;
   }
 }
@@ -350,7 +352,12 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'crystal': return clampProgress(stats.markUses, 50);
     case 'phoenix': return clampProgress(stats.restoreUses, 50);
     case 'shadow': return clampProgress(stats.watcherBlocks, 50);
-    case 'hologram': return clampProgress(ctx.cardsUsedCount, 10);
+    case 'hologram': {
+      const counts = ctx.cardUseCounts || {};
+      let minCount = Infinity;
+      for (const c of CARDS) minCount = Math.min(minCount, counts[c.id] || 0);
+      return clampProgress(minCount === Infinity ? 0 : minCount, 10);
+    }
     default: return null;
   }
 }

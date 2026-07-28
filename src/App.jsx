@@ -45,7 +45,7 @@ import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSk
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
-  getAchievementData, bumpCounter, addToStatSet, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
+  getAchievementData, bumpCounter, addToStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
   getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak, getTitleProgress,
   getUserProgressByEmail, adminRevokeTitles, adminGrantTitles,
 } from './achievements.js';
@@ -379,6 +379,7 @@ export default function App() {
       try {
         const usedCount = await markCardUsed(user.uid, cur);
         if (usedCount >= CARDS.length) unlockAndNotify('allRounder');
+        bumpNestedCounter(user.uid, 'cardUseCounts', cur, 1).catch(() => {});
 
         if (cur === 'coinFlip') {
           const newCount = await bumpCounter(user.uid, 'coinFlipUses', 1);
@@ -2569,7 +2570,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             peakTierIndex,
             friendsPlayedCount: Object.keys(myStats.friendsPlayed || {}).length,
             titleCount: Object.keys(myTitles).length,
-            cardsUsedCount: Object.keys(myStats.cardsUsed || {}).length,
+            cardUseCounts: myStats.cardUseCounts || {},
           };
           const dev = isDevAccount(user);
           const unlockedSkinCount = BOARD_SKINS.filter((s) => isBoardSkinUnlocked(s.id, myStats, skinCtx)).length

@@ -199,6 +199,13 @@ export async function addToStatSet(uid, field, key) {
   return Object.keys(val).length;
 }
 
+// achievementStats 안에 "카드별 사용 횟수"처럼 중첩된 카운터를 늘릴 때 써요.
+export async function bumpNestedCounter(uid, field, subKey, amount = 1) {
+  const db = getDb();
+  const result = await runTransaction(ref(db, `users/${uid}/achievementStats/${field}/${subKey}`), (cur) => (cur || 0) + amount);
+  return result.snapshot.val() || 0;
+}
+
 // 이겼으면 연승 카운터를 1 늘리고, 졌거나 비겼으면 0으로 끊어요. (폭풍 연승/불멸의 연승용)
 export async function updateWinStreak(uid, won) {
   const db = getDb();
