@@ -336,8 +336,13 @@ export default function App() {
                     ? (state.longWinResult === 'success' ? 'success' : 'fail')
                     : cur === 'coinFlip'
                       ? (state.coinFlipResult === 'success' ? 'success' : 'fail')
-                      : null;
-          setCardOverlay({ player: p, card, key: Date.now(), result });
+                      : cur === 'resurrection'
+                        ? (state.resurrectionResult === 'success' ? 'success' : 'fail')
+                        : cur === 'lottery'
+                          ? (state.lotteryResult === 'success' ? 'success' : 'fail')
+                          : null;
+          const diceRoll = cur === 'dice' ? state.diceResult : null;
+          setCardOverlay({ player: p, card, key: Date.now(), result, diceRoll });
         }
       }
     }
@@ -1048,13 +1053,19 @@ export default function App() {
         <div className="card-use-overlay">
           <div
             className={`card-use-overlay-inner ${
-              cardOverlay.result === 'success' ? 'card-use-success' : cardOverlay.result === 'fail' ? 'card-use-fail' : ''
+              cardOverlay.diceRoll
+                ? (cardOverlay.diceRoll <= 2 ? 'card-use-fail' : 'card-use-success')
+                : cardOverlay.result === 'success' ? 'card-use-success' : cardOverlay.result === 'fail' ? 'card-use-fail' : ''
             }`}
             key={cardOverlay.key}
           >
             <div className="card-use-overlay-icon"><CardIcon name={cardOverlay.card.icon} size={40} /></div>
             <div className="card-use-overlay-name">{cardOverlay.card.name}</div>
-            {cardOverlay.result && (
+            {cardOverlay.diceRoll ? (
+              <div className={`card-use-result ${cardOverlay.diceRoll <= 2 ? 'card-use-result-fail' : 'card-use-result-success'}`}>
+                주사위 눈: {cardOverlay.diceRoll} ({cardOverlay.diceRoll <= 2 ? '실패' : cardOverlay.diceRoll <= 4 ? '소파괴' : '대파괴'})
+              </div>
+            ) : cardOverlay.result && (
               <div className={`card-use-result ${cardOverlay.result === 'success' ? 'card-use-result-success' : 'card-use-result-fail'}`}>
                 {cardOverlay.result === 'success' ? '발동 성공!' : '발동 실패...'}
               </div>
