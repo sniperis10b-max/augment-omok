@@ -188,31 +188,22 @@ export const BOARD_SKINS = [
     background:
       'linear-gradient(88deg, #ff2ec4, #ff2ec4), ' +
       'linear-gradient(93deg, #7ee8fa, #7ee8fa), ' +
-      'linear-gradient(85deg, transparent, #a855f7 25%, #a855f7 75%, transparent), ' +
-      'linear-gradient(97deg, #ff6ec7, #ff6ec7), ' +
-      'linear-gradient(90deg, #4a6cff, #4a6cff), ' +
-      'linear-gradient(82deg, transparent, #2ee6ff 25%, #2ee6ff 75%, transparent), ' +
+      'linear-gradient(85deg, #4a6cff, #4a6cff), ' +
+      'linear-gradient(97deg, #a855f7, #a855f7), ' +
+      'linear-gradient(90deg, #ff6ec7, #ff6ec7), ' +
+      'linear-gradient(82deg, #2ee6ff, #2ee6ff), ' +
       'linear-gradient(95deg, #ff2ec4, #ff2ec4), ' +
-      'linear-gradient(80deg, #a855f7, #a855f7), ' +
-      'linear-gradient(89deg, transparent, #7ee8fa 25%, #7ee8fa 75%, transparent), ' +
-      'linear-gradient(91deg, #ff6ec7, #ff6ec7), ' +
-      'linear-gradient(84deg, #4a6cff, #4a6cff), ' +
-      'linear-gradient(96deg, transparent, #2ee6ff 25%, #2ee6ff 75%, transparent), ' +
-      'linear-gradient(87deg, #ff2ec4, #ff2ec4), ' +
-      'linear-gradient(94deg, #a855f7, #a855f7), ' +
-      'linear-gradient(81deg, transparent, #7ee8fa 25%, #7ee8fa 75%, transparent), ' +
-      'linear-gradient(99deg, #ff6ec7, #ff6ec7), ' +
-      'linear-gradient(86deg, #4a6cff, #4a6cff), ' +
-      'linear-gradient(92deg, transparent, #2ee6ff 25%, #2ee6ff 75%, transparent), ' +
+      'linear-gradient(80deg, #7ee8fa, #7ee8fa), ' +
+      'linear-gradient(89deg, #4a6cff, #4a6cff), ' +
+      'linear-gradient(91deg, #a855f7, #a855f7), ' +
+      'linear-gradient(84deg, #ff6ec7, #ff6ec7), ' +
       'linear-gradient(150deg, #2a0a3a, #180620)',
     backgroundPosition:
-      '0% 3%, 100% 7%, 25% 12%, 0% 17%, 100% 22%, 15% 27%, ' +
-      '0% 33%, 100% 38%, 30% 43%, 0% 49%, 100% 54%, 20% 59%, ' +
-      '0% 65%, 100% 70%, 25% 76%, 0% 82%, 100% 87%, 15% 93%, 0 0',
+      '2% 3%, 55% 9%, 0% 19%, 30% 25%, 100% 33%, 10% 44%, ' +
+      '60% 51%, 0% 60%, 40% 68%, 100% 78%, 15% 88%, 0 0',
     backgroundSize:
-      '135% 3px, 140% 3px, 20% 2px, 130% 3px, 145% 2px, 18% 4px, ' +
-      '138% 2px, 125% 3px, 22% 2px, 142% 3px, 130% 2px, 16% 3px, ' +
-      '136% 3px, 128% 2px, 20% 4px, 140% 3px, 132% 2px, 18% 3px, 100% 100%',
+      '22% 2px, 15% 3px, 130% 2px, 10% 5%, 140% 3px, 25% 2px, ' +
+      '18% 4px, 12% 3%, 20% 2px, 135% 2px, 28% 3px, 100% 100%',
     border: '#3a1450',
     line: 'rgba(255, 46, 196, 0.25)',
     questDesc: '???',
@@ -417,32 +408,26 @@ export const STONE_SKINS = [
     name: 'ERROR',
     black:
       'linear-gradient(88deg, #ff2ec4, #ff2ec4), ' +
-      'linear-gradient(93deg, #2ee6ff, #2ee6ff), ' +
-      'linear-gradient(85deg, transparent, #a855f7 25%, #a855f7 75%, transparent), ' +
-      'linear-gradient(97deg, #ff6ec7, #ff6ec7), ' +
-      'linear-gradient(90deg, #4a6cff, #4a6cff), ' +
-      'linear-gradient(82deg, transparent, #7ee8fa 25%, #7ee8fa 75%, transparent), ' +
+      'linear-gradient(93deg, #4a6cff, #4a6cff), ' +
+      'linear-gradient(85deg, #a855f7, #a855f7), ' +
+      'linear-gradient(97deg, #2ee6ff, #2ee6ff), ' +
+      'linear-gradient(90deg, #ff6ec7, #ff6ec7), ' +
+      'linear-gradient(82deg, #7ee8fa, #7ee8fa), ' +
       'linear-gradient(95deg, #ff2ec4, #ff2ec4), ' +
-      'linear-gradient(80deg, #2ee6ff, #2ee6ff), ' +
-      'linear-gradient(89deg, transparent, #a855f7 25%, #a855f7 75%, transparent), ' +
-      'linear-gradient(91deg, #ff6ec7, #ff6ec7), ' +
       'linear-gradient(150deg, #2a0a3a, #180620)',
-    blackPosition: '0% 5%, 100% 16%, 30% 27%, 0% 37%, 100% 47%, 15% 57%, 0% 67%, 100% 77%, 20% 87%, 5% 95%, 0 0',
-    blackSize: '130% 6px, 140% 5px, 50% 8%, 120% 5px, 135% 6px, 45% 6%, 125% 5px, 130% 6px, 50% 5%, 90% 4px, 100% 100%',
+    blackPosition: '5% 5%, 0% 16%, 45% 23%, 100% 38%, 10% 52%, 60% 68%, 0% 84%, 0 0',
+    blackSize: '30% 3px, 125% 2px, 18% 7%, 135% 4px, 45% 2px, 22% 6%, 115% 3px, 100% 100%',
     white:
       'linear-gradient(88deg, #ff2ec4, #ff2ec4), ' +
-      'linear-gradient(93deg, #2ee6ff, #2ee6ff), ' +
-      'linear-gradient(85deg, transparent, #a855f7 25%, #a855f7 75%, transparent), ' +
-      'linear-gradient(97deg, #ff6ec7, #ff6ec7), ' +
-      'linear-gradient(90deg, #4a6cff, #4a6cff), ' +
-      'linear-gradient(82deg, transparent, #7ee8fa 25%, #7ee8fa 75%, transparent), ' +
+      'linear-gradient(93deg, #4a6cff, #4a6cff), ' +
+      'linear-gradient(85deg, #a855f7, #a855f7), ' +
+      'linear-gradient(97deg, #2ee6ff, #2ee6ff), ' +
+      'linear-gradient(90deg, #ff6ec7, #ff6ec7), ' +
+      'linear-gradient(82deg, #7ee8fa, #7ee8fa), ' +
       'linear-gradient(95deg, #ff2ec4, #ff2ec4), ' +
-      'linear-gradient(80deg, #2ee6ff, #2ee6ff), ' +
-      'linear-gradient(89deg, transparent, #a855f7 25%, #a855f7 75%, transparent), ' +
-      'linear-gradient(91deg, #ff6ec7, #ff6ec7), ' +
       'linear-gradient(150deg, #6a3a8a, #402a58)',
-    whitePosition: '0% 5%, 100% 16%, 30% 27%, 0% 37%, 100% 47%, 15% 57%, 0% 67%, 100% 77%, 20% 87%, 5% 95%, 0 0',
-    whiteSize: '130% 6px, 140% 5px, 50% 8%, 120% 5px, 135% 6px, 45% 6%, 125% 5px, 130% 6px, 50% 5%, 90% 4px, 100% 100%',
+    whitePosition: '5% 5%, 0% 16%, 45% 23%, 100% 38%, 10% 52%, 60% 68%, 0% 84%, 0 0',
+    whiteSize: '30% 3px, 125% 2px, 18% 7%, 135% 4px, 45% 2px, 22% 6%, 115% 3px, 100% 100%',
     whiteBorder: '#5a2a78',
     questDesc: '???',
   },
