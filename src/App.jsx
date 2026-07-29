@@ -1001,6 +1001,7 @@ export default function App() {
         equippedTitle={equippedTitle}
         setEquippedTitle={setEquippedTitle}
         unlockAndNotify={unlockAndNotify}
+        setTitleUnlockToast={setTitleUnlockToast}
       />
     );
   } else if (state.phase === 'draft') {
@@ -1031,7 +1032,7 @@ export default function App() {
         <div className="title-toast">
           <Medal size={16} />
           <div>
-            <div className="title-toast-title">새 칭호 획득!</div>
+            <div className="title-toast-title">{titleUnlockToast.label || '새 칭호 획득!'}</div>
             <div className="title-toast-name">
               '{titleUnlockToast.name}'{titleUnlockToast.count > 1 ? ` 외 ${titleUnlockToast.count - 1}개` : ''}
             </div>
@@ -1170,7 +1171,7 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify, setTitleUnlockToast }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -1229,6 +1230,46 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [revokeStatus, setRevokeStatus] = useState('');
   const [myStats, setMyStats] = useState({});
   const [myGrantedSkins, setMyGrantedSkins] = useState({ board: {}, stone: {} });
+  const knownUnlockedSkinsRef = useRef(null); // null = 아직 초기 계산 전 (첫 로드 때는 알림 안 띄움)
+
+  // 스킨이 새로 해금되면(퀘스트 달성) 칭호처럼 토스트 알림을 띄워요.
+  useEffect(() => {
+    if (!user) { knownUnlockedSkinsRef.current = null; return; }
+    const skinCtx = {
+      peakTierIndex,
+      friendsPlayedCount: Object.keys(myStats.friendsPlayed || {}).length,
+      titleCount: Object.keys(myTitles).length,
+      cardUseCounts: myStats.cardUseCounts || {},
+    };
+    const currentUnlocked = new Set();
+    BOARD_SKINS.forEach((s) => {
+      if (myGrantedSkins.board[s.id] || isBoardSkinUnlocked(s.id, myStats, skinCtx)) currentUnlocked.add(`board:${s.id}`);
+    });
+    STONE_SKINS.forEach((s) => {
+      if (myGrantedSkins.stone[s.id] || isStoneSkinUnlocked(s.id, myStats, skinCtx)) currentUnlocked.add(`stone:${s.id}`);
+    });
+
+    if (knownUnlockedSkinsRef.current === null) {
+      // 첫 계산이라 기준선만 세우고, 알림은 안 띄워요.
+      knownUnlockedSkinsRef.current = currentUnlocked;
+      return;
+    }
+
+    const prev = knownUnlockedSkinsRef.current;
+    const newlyUnlocked = [...currentUnlocked].filter((k) => !prev.has(k));
+    knownUnlockedSkinsRef.current = currentUnlocked;
+
+    if (newlyUnlocked.length > 0 && setTitleUnlockToast) {
+      const [kind, id] = newlyUnlocked[0].split(':');
+      const skin = kind === 'board' ? getBoardSkinById(id) : getStoneSkinById(id);
+      setTitleUnlockToast({
+        label: '새 스킨 획득!',
+        name: skin.name,
+        count: newlyUnlocked.length,
+      });
+    }
+  }, [myStats, peakTierIndex, myTitles, myGrantedSkins, user]);
+
 
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
