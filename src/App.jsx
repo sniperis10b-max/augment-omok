@@ -534,10 +534,16 @@ export default function App() {
     const stone = getStoneSkinById(settings.stoneSkin);
     const root = document.documentElement.style;
     root.setProperty('--board-bg', board.background);
+    root.setProperty('--board-bg-pos', board.backgroundPosition || '0 0');
+    root.setProperty('--board-bg-size', board.backgroundSize || 'auto');
     root.setProperty('--board-border', board.border);
     root.setProperty('--board-line', board.line);
     root.setProperty('--stone-black-bg', stone.black);
+    root.setProperty('--stone-black-bg-pos', stone.blackPosition || '0 0');
+    root.setProperty('--stone-black-bg-size', stone.blackSize || 'auto');
     root.setProperty('--stone-white-bg', stone.white);
+    root.setProperty('--stone-white-bg-pos', stone.whitePosition || '0 0');
+    root.setProperty('--stone-white-bg-size', stone.whiteSize || 'auto');
     root.setProperty('--stone-white-border', stone.whiteBorder);
     root.setProperty('--stone-black-shadow', stone.id === 'invisible' ? 'none' : 'inset 0 1px 2px rgba(255, 255, 255, 0.15)');
     document.documentElement.setAttribute('data-stone-skin', stone.id);
