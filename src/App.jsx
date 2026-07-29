@@ -3161,6 +3161,15 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: 'ladder',
                 });
+              } else if (selectedChallenge) {
+                dispatch({
+                  type: 'START_GAME',
+                  aiPlayer: WHITE,
+                  difficulty: 'impossible',
+                  timeLimitSec: settings.timeLimitSec,
+                  cardsPerPlayer: settings.cardsPerPlayer,
+                  challengeId: selectedChallenge,
+                });
               } else {
                 setStep('difficulty');
               }
@@ -3183,6 +3192,15 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   timeLimitSec: settings.timeLimitSec,
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: 'ladder',
+                });
+              } else if (selectedChallenge) {
+                dispatch({
+                  type: 'START_GAME',
+                  aiPlayer: BLACK,
+                  difficulty: 'impossible',
+                  timeLimitSec: settings.timeLimitSec,
+                  cardsPerPlayer: settings.cardsPerPlayer,
+                  challengeId: selectedChallenge,
                 });
               } else {
                 setStep('difficulty');
