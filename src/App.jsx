@@ -1275,6 +1275,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   useEffect(() => {
     if (!user) { knownUnlockedSkinsRef.current = null; return; }
     if (!statsLoaded) return; // 통계가 아직 로딩 전(빈 값)이면 그 상태를 기준으로 삼으면 안 돼요.
+    const dev = isDevAccount(user);
     const skinCtx = {
       peakTierIndex,
       friendsPlayedCount: Object.keys(myStats.friendsPlayed || {}).length,
@@ -1283,10 +1284,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     };
     const currentUnlocked = new Set();
     BOARD_SKINS.forEach((s) => {
-      if (myGrantedSkins.board[s.id] || isBoardSkinUnlocked(s.id, myStats, skinCtx)) currentUnlocked.add(`board:${s.id}`);
+      if (dev || myGrantedSkins.board[s.id] || isBoardSkinUnlocked(s.id, myStats, skinCtx)) currentUnlocked.add(`board:${s.id}`);
     });
     STONE_SKINS.forEach((s) => {
-      if (myGrantedSkins.stone[s.id] || isStoneSkinUnlocked(s.id, myStats, skinCtx)) currentUnlocked.add(`stone:${s.id}`);
+      if (dev || myGrantedSkins.stone[s.id] || isStoneSkinUnlocked(s.id, myStats, skinCtx)) currentUnlocked.add(`stone:${s.id}`);
     });
 
     if (knownUnlockedSkinsRef.current === null) {
