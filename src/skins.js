@@ -185,9 +185,11 @@ export const BOARD_SKINS = [
   {
     id: 'errorBoard',
     name: 'ERROR',
-    background: 'repeating-linear-gradient(45deg, #ff2a2a 0 10px, #1a0000 10px 20px)',
-    border: '#ff0000',
-    line: 'rgba(255, 0, 0, 0.5)',
+    background:
+      'repeating-linear-gradient(0deg, rgba(0,0,0,0.5) 0 1px, transparent 1px 3px), ' +
+      'repeating-linear-gradient(90deg, #050007 0 6px, #ff003c 6px 8px, #050007 8px 22px, #00fff9 22px 24px, #050007 24px 38px, #050007 38px 46px, #ff003c 46px 47px, #050007 47px 64px)',
+    border: '#ff003c',
+    line: 'rgba(0, 255, 249, 0.35)',
     questDesc: '???',
   },
 ];
@@ -388,9 +390,11 @@ export const STONE_SKINS = [
   {
     id: 'errorStone',
     name: 'ERROR',
-    black: 'repeating-linear-gradient(45deg, #ff2a2a 0 4px, #1a0000 4px 8px)',
-    white: 'repeating-linear-gradient(45deg, #ff2a2a 0 4px, #ffffff 4px 8px)',
-    whiteBorder: '#ff0000',
+    black:
+      'repeating-linear-gradient(95deg, #050005 0 3px, #ff003c 3px 4px, #050005 4px 10px, #00fff9 10px 11px, #050005 11px 17px, #050005 17px 22px, #ff003c 22px 23px, #050005 23px 30px)',
+    white:
+      'repeating-linear-gradient(95deg, #f5f5f5 0 3px, #ff003c 3px 4px, #f5f5f5 4px 10px, #00fff9 10px 11px, #f5f5f5 11px 17px, #f5f5f5 17px 22px, #ff003c 22px 23px, #f5f5f5 23px 30px)',
+    whiteBorder: '#ff003c',
     questDesc: '???',
   },
 ];
