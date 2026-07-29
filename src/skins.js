@@ -186,15 +186,11 @@ export const BOARD_SKINS = [
     id: 'errorBoard',
     name: 'ERROR',
     background:
-      'linear-gradient(90deg, transparent 0%, #ff2ec4 12%, transparent 42%) no-repeat 0% 10%/72% 5px, ' +
-      'linear-gradient(90deg, transparent 20%, #2ee6ff 45%, transparent 78%) no-repeat 22% 24%/58% 4px, ' +
-      'linear-gradient(90deg, transparent 0%, #ff2ec4 18%, transparent 52%) no-repeat 8% 40%/55% 5px, ' +
-      'linear-gradient(90deg, transparent 35%, #2ee6ff 60%, transparent 95%) no-repeat 32% 55%/60% 4px, ' +
-      'linear-gradient(90deg, transparent 0%, #ff2ec4 15%, transparent 48%) no-repeat 4% 70%/65% 5px, ' +
-      'linear-gradient(90deg, transparent 25%, #2ee6ff 50%, transparent 85%) no-repeat 18% 85%/62% 4px, ' +
-      'linear-gradient(160deg, #2a0a3a, #180620)',
+      'repeating-linear-gradient(90deg, transparent 0 5px, rgba(0,255,200,0.55) 5px 7px, transparent 7px 14px, rgba(190,60,255,0.45) 14px 16px, transparent 16px 22px) 0 0/24px 24px, ' +
+      'repeating-linear-gradient(0deg, transparent 0 5px, rgba(255,50,90,0.4) 5px 7px, transparent 7px 14px, rgba(0,255,255,0.4) 14px 16px, transparent 16px 22px) 0 0/19px 19px, ' +
+      'repeating-conic-gradient(from 0deg, #06060c 0deg 90deg, #0c1420 90deg 180deg, #06060c 180deg 270deg, #100a1c 270deg 360deg) 0 0/14px 14px',
     border: '#3a1450',
-    line: 'rgba(255, 46, 196, 0.25)',
+    line: 'rgba(0, 255, 200, 0.3)',
     questDesc: '???',
   },
 ];
@@ -396,14 +392,14 @@ export const STONE_SKINS = [
     id: 'errorStone',
     name: 'ERROR',
     black:
-      'linear-gradient(90deg, transparent 10%, #ff2ec4 40%, transparent 70%) no-repeat 0% 30%/100% 15%, ' +
-      'linear-gradient(90deg, transparent 20%, #2ee6ff 55%, transparent 85%) no-repeat 0% 60%/100% 12%, ' +
-      'linear-gradient(160deg, #2a0a3a, #180620)',
+      'repeating-linear-gradient(90deg, transparent 0 3px, rgba(0,255,200,0.6) 3px 4px, transparent 4px 8px, rgba(190,60,255,0.5) 8px 9px, transparent 9px 13px) 0 0/14px 14px, ' +
+      'repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,50,90,0.45) 3px 4px, transparent 4px 8px, rgba(0,255,255,0.45) 8px 9px, transparent 9px 13px) 0 0/11px 11px, ' +
+      'repeating-conic-gradient(from 0deg, #06060c 0deg 90deg, #0c1420 90deg 180deg, #06060c 180deg 270deg, #100a1c 270deg 360deg) 0 0/8px 8px',
     white:
-      'linear-gradient(90deg, transparent 10%, #ff2ec4 40%, transparent 70%) no-repeat 0% 25%/100% 15%, ' +
-      'linear-gradient(90deg, transparent 20%, #2ee6ff 55%, transparent 85%) no-repeat 0% 55%/100% 12%, ' +
-      'linear-gradient(160deg, #4a2a68, #2f1848)',
-    whiteBorder: '#5a2a78',
+      'repeating-linear-gradient(90deg, transparent 0 3px, rgba(30,30,30,0.6) 3px 4px, transparent 4px 8px, rgba(90,90,90,0.5) 8px 9px, transparent 9px 13px) 0 0/14px 14px, ' +
+      'repeating-linear-gradient(0deg, transparent 0 3px, rgba(60,60,60,0.45) 3px 4px, transparent 4px 8px, rgba(160,160,160,0.5) 8px 9px, transparent 9px 13px) 0 0/11px 11px, ' +
+      'repeating-conic-gradient(from 0deg, #f2f2f2 0deg 90deg, #d8d8d8 90deg 180deg, #f2f2f2 180deg 270deg, #c4c4c4 270deg 360deg) 0 0/8px 8px',
+    whiteBorder: '#8a8a8a',
     questDesc: '???',
   },
 ];
