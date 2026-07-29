@@ -526,6 +526,7 @@ export default function App() {
     root.setProperty('--stone-black-bg', stone.black);
     root.setProperty('--stone-white-bg', stone.white);
     root.setProperty('--stone-white-border', stone.whiteBorder);
+    root.setProperty('--stone-black-shadow', stone.id === 'invisible' ? 'none' : 'inset 0 1px 2px rgba(255, 255, 255, 0.15)');
   }, [settings.boardSkin, settings.stoneSkin]);
 
   // 사운드 on/off 반영
