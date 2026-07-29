@@ -533,15 +533,19 @@ export default function App() {
     const board = getBoardSkinById(settings.boardSkin);
     const stone = getStoneSkinById(settings.stoneSkin);
     const root = document.documentElement.style;
-    root.setProperty('--board-bg', board.background);
+    // background-image는 색상값(#fff 같은)을 그대로 못 받아서, 단색 스킨은 그라데이션으로 감싸줘요.
+    const toBgImage = (value) => (
+      /gradient|url\(/.test(value) ? value : `linear-gradient(${value}, ${value})`
+    );
+    root.setProperty('--board-bg', toBgImage(board.background));
     root.setProperty('--board-bg-pos', board.backgroundPosition || '0 0');
     root.setProperty('--board-bg-size', board.backgroundSize || 'auto');
     root.setProperty('--board-border', board.border);
     root.setProperty('--board-line', board.line);
-    root.setProperty('--stone-black-bg', stone.black);
+    root.setProperty('--stone-black-bg', toBgImage(stone.black));
     root.setProperty('--stone-black-bg-pos', stone.blackPosition || '0 0');
     root.setProperty('--stone-black-bg-size', stone.blackSize || 'auto');
-    root.setProperty('--stone-white-bg', stone.white);
+    root.setProperty('--stone-white-bg', toBgImage(stone.white));
     root.setProperty('--stone-white-bg-pos', stone.whitePosition || '0 0');
     root.setProperty('--stone-white-bg-size', stone.whiteSize || 'auto');
     root.setProperty('--stone-white-border', stone.whiteBorder);
