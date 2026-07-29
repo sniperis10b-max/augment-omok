@@ -186,11 +186,29 @@ export const BOARD_SKINS = [
     id: 'errorBoard',
     name: 'ERROR',
     background:
-      'repeating-linear-gradient(90deg, transparent 0 5px, rgba(0,255,200,0.55) 5px 7px, transparent 7px 14px, rgba(190,60,255,0.45) 14px 16px, transparent 16px 22px) 0 0/24px 24px, ' +
-      'repeating-linear-gradient(0deg, transparent 0 5px, rgba(255,50,90,0.4) 5px 7px, transparent 7px 14px, rgba(0,255,255,0.4) 14px 16px, transparent 16px 22px) 0 0/19px 19px, ' +
-      'repeating-conic-gradient(from 0deg, #06060c 0deg 90deg, #0c1420 90deg 180deg, #06060c 180deg 270deg, #100a1c 270deg 360deg) 0 0/14px 14px',
+      'linear-gradient(90deg, transparent, #ff2ec4, transparent) no-repeat 2% 4%/38% 3px, ' +
+      'linear-gradient(90deg, transparent, #7ee8fa, transparent) no-repeat 48% 6%/22% 5px, ' +
+      'linear-gradient(90deg, transparent, #a855f7, transparent) no-repeat 8% 13%/14% 2px, ' +
+      'linear-gradient(90deg, transparent, #ff6ec7, transparent) no-repeat 60% 11%/33% 4px, ' +
+      'linear-gradient(90deg, transparent, #4a6cff, transparent) no-repeat 20% 19%/50% 2px, ' +
+      'linear-gradient(90deg, transparent, #2ee6ff, transparent) no-repeat 0% 24%/18% 6px, ' +
+      'linear-gradient(90deg, transparent, #ff2ec4, transparent) no-repeat 55% 27%/40% 3px, ' +
+      'linear-gradient(90deg, transparent, #a855f7, transparent) no-repeat 30% 33%/12% 4px, ' +
+      'linear-gradient(90deg, transparent, #7ee8fa, transparent) no-repeat 5% 38%/28% 2px, ' +
+      'linear-gradient(90deg, transparent, #ff6ec7, transparent) no-repeat 62% 41%/20% 5px, ' +
+      'linear-gradient(90deg, transparent, #4a6cff, transparent) no-repeat 15% 47%/45% 3px, ' +
+      'linear-gradient(90deg, transparent, #ff2ec4, transparent) no-repeat 0% 53%/16% 4px, ' +
+      'linear-gradient(90deg, transparent, #2ee6ff, transparent) no-repeat 45% 58%/35% 2px, ' +
+      'linear-gradient(90deg, transparent, #a855f7, transparent) no-repeat 25% 64%/22% 6px, ' +
+      'linear-gradient(90deg, transparent, #ff6ec7, transparent) no-repeat 65% 68%/30% 3px, ' +
+      'linear-gradient(90deg, transparent, #7ee8fa, transparent) no-repeat 3% 74%/48% 4px, ' +
+      'linear-gradient(90deg, transparent, #4a6cff, transparent) no-repeat 40% 79%/14% 2px, ' +
+      'linear-gradient(90deg, transparent, #ff2ec4, transparent) no-repeat 12% 85%/26% 5px, ' +
+      'linear-gradient(90deg, transparent, #2ee6ff, transparent) no-repeat 55% 90%/38% 3px, ' +
+      'linear-gradient(90deg, transparent, #ff6ec7, transparent) no-repeat 0% 95%/20% 4px, ' +
+      'linear-gradient(150deg, #2a0a3a, #180620)',
     border: '#3a1450',
-    line: 'rgba(0, 255, 200, 0.3)',
+    line: 'rgba(255, 46, 196, 0.25)',
     questDesc: '???',
   },
 ];
@@ -392,14 +410,20 @@ export const STONE_SKINS = [
     id: 'errorStone',
     name: 'ERROR',
     black:
-      'repeating-linear-gradient(90deg, transparent 0 3px, rgba(0,255,200,0.6) 3px 4px, transparent 4px 8px, rgba(190,60,255,0.5) 8px 9px, transparent 9px 13px) 0 0/14px 14px, ' +
-      'repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,50,90,0.45) 3px 4px, transparent 4px 8px, rgba(0,255,255,0.45) 8px 9px, transparent 9px 13px) 0 0/11px 11px, ' +
-      'repeating-conic-gradient(from 0deg, #06060c 0deg 90deg, #0c1420 90deg 180deg, #06060c 180deg 270deg, #100a1c 270deg 360deg) 0 0/8px 8px',
+      'linear-gradient(90deg, transparent, #ff2ec4, transparent) no-repeat 5% 10%/70% 12%, ' +
+      'linear-gradient(90deg, transparent, #2ee6ff, transparent) no-repeat 30% 28%/45% 8%, ' +
+      'linear-gradient(90deg, transparent, #a855f7, transparent) no-repeat 0% 45%/55% 10%, ' +
+      'linear-gradient(90deg, transparent, #ff6ec7, transparent) no-repeat 40% 62%/40% 8%, ' +
+      'linear-gradient(90deg, transparent, #4a6cff, transparent) no-repeat 10% 80%/60% 10%, ' +
+      'linear-gradient(150deg, #2a0a3a, #180620)',
     white:
-      'repeating-linear-gradient(90deg, transparent 0 3px, rgba(30,30,30,0.6) 3px 4px, transparent 4px 8px, rgba(90,90,90,0.5) 8px 9px, transparent 9px 13px) 0 0/14px 14px, ' +
-      'repeating-linear-gradient(0deg, transparent 0 3px, rgba(60,60,60,0.45) 3px 4px, transparent 4px 8px, rgba(160,160,160,0.5) 8px 9px, transparent 9px 13px) 0 0/11px 11px, ' +
-      'repeating-conic-gradient(from 0deg, #f2f2f2 0deg 90deg, #d8d8d8 90deg 180deg, #f2f2f2 180deg 270deg, #c4c4c4 270deg 360deg) 0 0/8px 8px',
-    whiteBorder: '#8a8a8a',
+      'linear-gradient(90deg, transparent, #ff2ec4, transparent) no-repeat 5% 12%/70% 12%, ' +
+      'linear-gradient(90deg, transparent, #2ee6ff, transparent) no-repeat 30% 30%/45% 8%, ' +
+      'linear-gradient(90deg, transparent, #a855f7, transparent) no-repeat 0% 48%/55% 10%, ' +
+      'linear-gradient(90deg, transparent, #ff6ec7, transparent) no-repeat 40% 65%/40% 8%, ' +
+      'linear-gradient(90deg, transparent, #4a6cff, transparent) no-repeat 10% 82%/60% 10%, ' +
+      'linear-gradient(150deg, #6a3a8a, #402a58)',
+    whiteBorder: '#5a2a78',
     questDesc: '???',
   },
 ];
