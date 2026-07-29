@@ -44,12 +44,16 @@ import {
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
 import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins } from './skins.js';
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
+import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
   getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak, getTitleProgress,
   getUserProgressByEmail, adminRevokeTitles, adminGrantTitles,
 } from './achievements.js';
+
+// 일일 퀘스트 "확률형 카드 시도" 집계용 (성공/실패와 무관하게 시도만 세요)
+const PROB_CARD_IDS = new Set(['coinFlip', 'miracle', 'echo', 'shortWin', 'longWin', 'resurrection', 'lottery', 'dice']);
 
 const ICONS = {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
@@ -387,6 +391,10 @@ export default function App() {
         const usedCount = await markCardUsed(user.uid, cur);
         if (usedCount >= CARDS.length) unlockAndNotify('allRounder');
         bumpNestedCounter(user.uid, 'cardUseCounts', cur, 1).catch(() => {});
+        bumpCounter(user.uid, 'totalCardUses', 1).catch(() => {});
+        if (PROB_CARD_IDS.has(cur)) {
+          bumpCounter(user.uid, 'totalProbAttempts', 1).catch(() => {});
+        }
 
         if (cur === 'coinFlip') {
           const newCount = await bumpCounter(user.uid, 'coinFlipUses', 1);
@@ -1235,11 +1243,18 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     getTitleCounts().then(setTitleCounts).catch(() => {});
   }, []);
 
+  const [dailyQuestState, setDailyQuestState] = useState(null);
+  const [dailyClaimStatus, setDailyClaimStatus] = useState('');
+
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
-      getAchievementData(user.uid).then(({ stats }) => setMyStats(stats)).catch(() => {});
+      getAchievementData(user.uid).then(({ stats }) => {
+        setMyStats(stats);
+        ensureDailyQuests(user.uid, stats).then(setDailyQuestState).catch(() => {});
+      }).catch(() => {});
     } else {
       setMyStats({});
+      setDailyQuestState(null);
     }
   }, [user?.uid, myTitles]);
 
@@ -2347,6 +2362,54 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               </div>
             )}
           </div>
+
+          {dailyQuestState && (
+            <div className="tutorial-card">
+              <div className="tutorial-title" style={{ marginBottom: 4 }}>오늘의 퀘스트</div>
+              <p className="setup-card-desc" style={{ marginBottom: 8 }}>
+                매일 자정(UTC 기준)에 새로 3개가 나와요. 전부 깨면 랭크 포인트 {DAILY_REWARD_RANK_POINTS}점을 받아요.
+              </p>
+              {(() => {
+                const progress = getQuestProgress(dailyQuestState, myStats);
+                const allDone = progress.length > 0 && progress.every((q) => q.done);
+                return (
+                  <>
+                    {progress.map((q) => (
+                      <div key={q.id} style={{ marginBottom: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                          <span>{q.done ? '✓ ' : ''}{q.name}</span>
+                          <span className="setup-card-desc">{q.current} / {q.target}</span>
+                        </div>
+                        <div className="title-progress-track">
+                          <div className="title-progress-fill" style={{ width: `${Math.round((q.current / q.target) * 100)}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                    {allDone && !dailyQuestState.rewardClaimed && (
+                      <button
+                        className="reset-btn"
+                        onClick={async () => {
+                          setDailyClaimStatus('처리 중...');
+                          const res = await claimDailyReward(user.uid, dailyQuestState, myStats, (uid, before, delta) => applyRankPointsChange(uid, before, delta, user.displayName, isDevAccount(user)), myRankPoints ?? 0).catch(() => ({ claimed: false }));
+                          if (res.claimed) {
+                            setDailyClaimStatus(`보상으로 랭크 포인트 ${DAILY_REWARD_RANK_POINTS}점을 받았어요!`);
+                            setMyRankPoints(res.newPoints);
+                            setDailyQuestState({ ...dailyQuestState, rewardClaimed: true });
+                          } else {
+                            setDailyClaimStatus('아직 받을 수 없어요.');
+                          }
+                        }}
+                      >
+                        보상 받기
+                      </button>
+                    )}
+                    {dailyQuestState.rewardClaimed && <p className="setup-card-desc">오늘 보상은 이미 받았어요. 내일 다시 와주세요!</p>}
+                    {dailyClaimStatus && <p className="setup-card-desc">{dailyClaimStatus}</p>}
+                  </>
+                );
+              })()}
+            </div>
+          )}
 
           <div className="tutorial-card">
             <div className="tutorial-title" style={{ marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
