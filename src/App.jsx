@@ -310,6 +310,7 @@ export default function App() {
   const [peakTierIndex, setPeakTierIndex] = useState(0);
   const [challengesCleared, setChallengesCleared] = useState({});
   const [ladderLevel, setLadderLevel] = useState(1); // 5단 계단 챌린지의 현재 단계(1~5), 새로고침하면 초기화돼요.
+  const knownUnlockedSkinsRef = useRef(null); // 스킨 신규 해금 감지 기준값 - SetupScreen이 다시 마운트돼도 유지돼야 해서 여기 둬요.
   const [reachedTierBadges, setReachedTierBadges] = useState({});
   const [equippedTierId, setEquippedTierId] = useState(null);
   const [myTitles, setMyTitles] = useState({}); // { [titleId]: true }
@@ -1037,6 +1038,7 @@ export default function App() {
         setTitleUnlockToast={setTitleUnlockToast}
         challengesCleared={challengesCleared}
         ladderLevel={ladderLevel}
+        knownUnlockedSkinsRef={knownUnlockedSkinsRef}
       />
     );
   } else if (state.phase === 'draft') {
@@ -1206,7 +1208,7 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify, setTitleUnlockToast, challengesCleared, ladderLevel }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify, setTitleUnlockToast, challengesCleared, ladderLevel, knownUnlockedSkinsRef }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -1264,13 +1266,15 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [scoreEditRankPoints, setScoreEditRankPoints] = useState('');
   const [scoreEditStatus, setScoreEditStatus] = useState('');
   const [revokeStatus, setRevokeStatus] = useState('');
+  const [statsLoaded, setStatsLoaded] = useState(false);
+
   const [myStats, setMyStats] = useState({});
   const [myGrantedSkins, setMyGrantedSkins] = useState({ board: {}, stone: {} });
-  const knownUnlockedSkinsRef = useRef(null); // null = 아직 초기 계산 전 (첫 로드 때는 알림 안 띄움)
 
   // 스킨이 새로 해금되면(퀘스트 달성) 칭호처럼 토스트 알림을 띄워요.
   useEffect(() => {
     if (!user) { knownUnlockedSkinsRef.current = null; return; }
+    if (!statsLoaded) return; // 통계가 아직 로딩 전(빈 값)이면 그 상태를 기준으로 삼으면 안 돼요.
     const skinCtx = {
       peakTierIndex,
       friendsPlayedCount: Object.keys(myStats.friendsPlayed || {}).length,
@@ -1304,7 +1308,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         count: newlyUnlocked.length,
       });
     }
-  }, [myStats, peakTierIndex, myTitles, myGrantedSkins, user]);
+  }, [myStats, peakTierIndex, myTitles, myGrantedSkins, user, statsLoaded]);
 
 
   useEffect(() => {
@@ -1325,13 +1329,16 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
+      setStatsLoaded(false);
       getAchievementData(user.uid).then(({ stats }) => {
         setMyStats(stats);
+        setStatsLoaded(true);
         ensureDailyQuests(user.uid, stats).then(setDailyQuestState).catch(() => {});
-      }).catch(() => {});
+      }).catch(() => { setStatsLoaded(true); });
     } else {
       setMyStats({});
       setDailyQuestState(null);
+      setStatsLoaded(true);
     }
   }, [user?.uid, myTitles]);
 
