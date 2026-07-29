@@ -158,6 +158,38 @@ export const BOARD_SKINS = [
     line: 'rgba(255, 255, 255, 0.25)',
     questDesc: '확률형 카드 성공 누적 150회',
   },
+  {
+    id: 'firstSnow',
+    name: '첫눈',
+    background: 'linear-gradient(135deg, #ffffff, #dce8f0)',
+    border: '#c0d4e0',
+    line: 'rgba(80, 100, 120, 0.2)',
+    questDesc: '무승부로 대국 50판 마무리',
+  },
+  {
+    id: 'alchemistBench',
+    name: '연금술사의 작업대',
+    background: 'linear-gradient(135deg, #6a4a2a, #3a2a14)',
+    border: '#2a1c0e',
+    line: 'rgba(180, 220, 120, 0.3)',
+    questDesc: "'연금술' 카드 100회 사용",
+  },
+  {
+    id: 'plagueGround',
+    name: '역병지대',
+    background: 'linear-gradient(135deg, #4a5a2a, #1a2a0a)',
+    border: '#0e1a06',
+    line: 'rgba(140, 200, 60, 0.3)',
+    questDesc: "'오염' 카드 100회 사용",
+  },
+  {
+    id: 'errorBoard',
+    name: 'ERROR',
+    background: 'repeating-linear-gradient(45deg, #ff2a2a 0 10px, #1a0000 10px 20px)',
+    border: '#ff0000',
+    line: 'rgba(255, 0, 0, 0.5)',
+    questDesc: '???',
+  },
 ];
 
 export const STONE_SKINS = [
@@ -313,6 +345,54 @@ export const STONE_SKINS = [
     whiteBorder: 'transparent',
     questDesc: '모든 챌린지(핸디캡) 클리어',
   },
+  {
+    id: 'twins',
+    name: '쌍둥이',
+    black: 'linear-gradient(160deg, #8a8aff, #3a3a9a)',
+    white: 'linear-gradient(160deg, #ffffff, #c0c0ff)',
+    whiteBorder: '#a0a0e0',
+    questDesc: "'복제' 카드 30회 사용",
+  },
+  {
+    id: 'frostbite',
+    name: '동결',
+    black: 'linear-gradient(160deg, #2a4a5a, #0a1a2a)',
+    white: 'linear-gradient(160deg, #d8f0ff, #a0d8ec)',
+    whiteBorder: '#8ac8e0',
+    questDesc: "'얼리기' 카드 50회 사용",
+  },
+  {
+    id: 'swappedFate',
+    name: '뒤바뀐 운명',
+    black: 'linear-gradient(160deg, #e8e8e8, #2a2a2a)',
+    white: 'linear-gradient(160deg, #2a2a2a, #e8e8e8)',
+    whiteBorder: '#8a8a8a',
+    questDesc: "'위치 교환' 카드 100회 사용",
+  },
+  {
+    id: 'taxidermy',
+    name: '박제',
+    black: 'linear-gradient(160deg, #6a5a4a, #2a2018)',
+    white: 'linear-gradient(160deg, #e0d0b8, #b0987a)',
+    whiteBorder: '#9a8262',
+    questDesc: "'낙인' 카드 30회 사용",
+  },
+  {
+    id: 'reverseEngineer',
+    name: '역설계',
+    black: 'linear-gradient(160deg, #4a4a5a, #16161e)',
+    white: 'linear-gradient(160deg, #b8c8e0, #7888a8)',
+    whiteBorder: '#647092',
+    questDesc: "'관통' 카드 100회 사용",
+  },
+  {
+    id: 'errorStone',
+    name: 'ERROR',
+    black: 'repeating-linear-gradient(45deg, #ff2a2a 0 4px, #1a0000 4px 8px)',
+    white: 'repeating-linear-gradient(45deg, #ff2a2a 0 4px, #ffffff 4px 8px)',
+    whiteBorder: '#ff0000',
+    questDesc: '???',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -398,6 +478,10 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'dawn': return (stats.dawnGames || 0) >= 30;
     case 'ruinedBattlefield': return (stats.ruinedBattlefieldWins || 0) >= 10;
     case 'nebula': return (stats.probSuccess || 0) >= 150;
+    case 'firstSnow': return (stats.totalDraws || 0) >= 50;
+    case 'alchemistBench': return (stats.alchemyUses || 0) >= 100;
+    case 'plagueGround': return (stats.corruptUses || 0) >= 100;
+    case 'errorBoard': return (stats.tutorialClicks || 0) >= 100;
     default: return false;
   }
 }
@@ -426,6 +510,12 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
       const cleared = ctx.challengesCleared || {};
       return CHALLENGES.every((c) => cleared[c.id]);
     }
+    case 'twins': return (stats.duplicateUses || 0) >= 30;
+    case 'frostbite': return (stats.freezeCellUses || 0) >= 50;
+    case 'swappedFate': return (stats.swapUses || 0) >= 100;
+    case 'taxidermy': return (stats.markUses || 0) >= 30;
+    case 'reverseEngineer': return (stats.overwriteUses || 0) >= 100;
+    case 'errorStone': return (stats.timeLimit369Count || 0) >= 2;
     default: return false;
   }
 }
@@ -459,6 +549,10 @@ export function getBoardSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'dawn': return clampProgress(stats.dawnGames, 30);
     case 'ruinedBattlefield': return clampProgress(stats.ruinedBattlefieldWins, 10);
     case 'nebula': return clampProgress(stats.probSuccess, 150);
+    case 'firstSnow': return clampProgress(stats.totalDraws, 50);
+    case 'alchemistBench': return clampProgress(stats.alchemyUses, 100);
+    case 'plagueGround': return clampProgress(stats.corruptUses, 100);
+    case 'errorBoard': return null; // 조건이 비밀이라 진행률도 안 보여줘요
     default: return null;
   }
 }
@@ -496,6 +590,12 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
       const count = CHALLENGES.filter((c) => cleared[c.id]).length;
       return clampProgress(count, CHALLENGES.length);
     }
+    case 'twins': return clampProgress(stats.duplicateUses, 30);
+    case 'frostbite': return clampProgress(stats.freezeCellUses, 50);
+    case 'swappedFate': return clampProgress(stats.swapUses, 100);
+    case 'taxidermy': return clampProgress(stats.markUses, 30);
+    case 'reverseEngineer': return clampProgress(stats.overwriteUses, 100);
+    case 'errorStone': return null; // 조건이 비밀이라 진행률도 안 보여줘요
     default: return null;
   }
 }

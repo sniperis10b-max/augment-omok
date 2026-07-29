@@ -436,6 +436,18 @@ export default function App() {
         if (cur === 'sanctuary') {
           bumpCounter(user.uid, 'sanctuaryUses', 1).catch(() => {});
         }
+        if (cur === 'alchemy') {
+          bumpCounter(user.uid, 'alchemyUses', 1).catch(() => {});
+        }
+        if (cur === 'corrupt') {
+          bumpCounter(user.uid, 'corruptUses', 1).catch(() => {});
+        }
+        if (cur === 'swap') {
+          bumpCounter(user.uid, 'swapUses', 1).catch(() => {});
+        }
+        if (cur === 'overwrite') {
+          bumpCounter(user.uid, 'overwriteUses', 1).catch(() => {});
+        }
 
         if (destroyDelta > 0) {
           const newTotal = await bumpCounter(user.uid, 'destroyKills', destroyDelta);
@@ -1574,7 +1586,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         </div>
 
         <div className="setup-links-row">
-          <button className="setup-tutorial-link" onClick={() => setStep('tutorial')}>
+          <button
+            className="setup-tutorial-link"
+            onClick={() => {
+              setStep('tutorial');
+              if (user && isFirebaseConfigured()) bumpCounter(user.uid, 'tutorialClicks', 1).catch(() => {});
+            }}
+          >
             <BookOpen size={16} /> 튜토리얼 보기
           </button>
           <button className="setup-tutorial-link" onClick={() => setStep('cardlist')}>
@@ -2731,6 +2749,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     const applyCustomSeconds = () => {
       const v = Math.max(1, parseInt(customSeconds, 10) || 0);
       updateSettings({ timeLimitSec: v });
+      if (v === 369 && user && isFirebaseConfigured()) {
+        bumpCounter(user.uid, 'timeLimit369Count', 1).catch(() => {});
+      }
     };
     const applyCustomCards = () => {
       const cap = isDevAccount(user) ? 999 : 20;
