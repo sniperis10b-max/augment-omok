@@ -186,10 +186,15 @@ export const BOARD_SKINS = [
     id: 'errorBoard',
     name: 'ERROR',
     background:
-      'repeating-linear-gradient(0deg, rgba(0,0,0,0.5) 0 1px, transparent 1px 3px), ' +
-      'repeating-linear-gradient(90deg, #050007 0 6px, #ff003c 6px 8px, #050007 8px 22px, #00fff9 22px 24px, #050007 24px 38px, #050007 38px 46px, #ff003c 46px 47px, #050007 47px 64px)',
-    border: '#ff003c',
-    line: 'rgba(0, 255, 249, 0.35)',
+      'linear-gradient(90deg, transparent 0%, #ff2ec4 12%, transparent 42%) no-repeat 0% 10%/72% 5px, ' +
+      'linear-gradient(90deg, transparent 20%, #2ee6ff 45%, transparent 78%) no-repeat 22% 24%/58% 4px, ' +
+      'linear-gradient(90deg, transparent 0%, #ff2ec4 18%, transparent 52%) no-repeat 8% 40%/55% 5px, ' +
+      'linear-gradient(90deg, transparent 35%, #2ee6ff 60%, transparent 95%) no-repeat 32% 55%/60% 4px, ' +
+      'linear-gradient(90deg, transparent 0%, #ff2ec4 15%, transparent 48%) no-repeat 4% 70%/65% 5px, ' +
+      'linear-gradient(90deg, transparent 25%, #2ee6ff 50%, transparent 85%) no-repeat 18% 85%/62% 4px, ' +
+      'linear-gradient(160deg, #2a0a3a, #180620)',
+    border: '#3a1450',
+    line: 'rgba(255, 46, 196, 0.25)',
     questDesc: '???',
   },
 ];
@@ -391,10 +396,14 @@ export const STONE_SKINS = [
     id: 'errorStone',
     name: 'ERROR',
     black:
-      'repeating-linear-gradient(95deg, #050005 0 3px, #ff003c 3px 4px, #050005 4px 10px, #00fff9 10px 11px, #050005 11px 17px, #050005 17px 22px, #ff003c 22px 23px, #050005 23px 30px)',
+      'linear-gradient(90deg, transparent 10%, #ff2ec4 40%, transparent 70%) no-repeat 0% 30%/100% 15%, ' +
+      'linear-gradient(90deg, transparent 20%, #2ee6ff 55%, transparent 85%) no-repeat 0% 60%/100% 12%, ' +
+      'linear-gradient(160deg, #2a0a3a, #180620)',
     white:
-      'repeating-linear-gradient(95deg, #f5f5f5 0 3px, #ff003c 3px 4px, #f5f5f5 4px 10px, #00fff9 10px 11px, #f5f5f5 11px 17px, #f5f5f5 17px 22px, #ff003c 22px 23px, #f5f5f5 23px 30px)',
-    whiteBorder: '#ff003c',
+      'linear-gradient(90deg, transparent 10%, #ff2ec4 40%, transparent 70%) no-repeat 0% 25%/100% 15%, ' +
+      'linear-gradient(90deg, transparent 20%, #2ee6ff 55%, transparent 85%) no-repeat 0% 55%/100% 12%, ' +
+      'linear-gradient(160deg, #4a2a68, #2f1848)',
+    whiteBorder: '#5a2a78',
     questDesc: '???',
   },
 ];
