@@ -59,10 +59,11 @@ export function isCellInSealedLine(sealedLines, x, y) {
 // x, y에 방금 놓은 player가 승리했는지. 봉인된 라인 위에서만 완성된 5목은 무효 처리.
 // markedStones(낙인)가 있으면, 그 좌표는 어느 쪽 승리 라인에도 포함될 수 없어요 (라인이 그 자리에서 끊겨요).
 export function checkWin(board, x, y, player, options = {}) {
-  const { winLength = 5, sealedLines = [], markedStones = {} } = options;
+  const { winLength = 5, sealedLines = [], markedStones = {}, excludeDiagonal = false } = options;
   const size = board.length;
 
   for (const [dx, dy] of DIRECTIONS) {
+    if (excludeDiagonal && dx === 1 && (dy === 1 || dy === -1)) continue;
     let count = 1;
 
     for (let step = 1; step < 8; step++) {

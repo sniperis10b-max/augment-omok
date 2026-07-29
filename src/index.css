@@ -320,6 +320,17 @@ body {
   border: 1px solid var(--stone-white-border, #8a8678);
 }
 
+.stone-silhouette-fill {
+  background: #111 !important;
+  border: none !important;
+}
+
+.stone-silhouette-ring {
+  background: #111 !important;
+  border: 3px solid #fff !important;
+  box-sizing: border-box;
+}
+
 .stone-wild::before {
   content: '';
   position: absolute;

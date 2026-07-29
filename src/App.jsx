@@ -45,6 +45,7 @@ import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.j
 import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins } from './skins.js';
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
+import { CHALLENGES, getChallengeById, hasCompletedAllChallenges, LADDER_LEVELS } from './challenges.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -307,6 +308,8 @@ export default function App() {
   const [myRankPoints, setMyRankPoints] = useState(null);
   const [lastRankChange, setLastRankChange] = useState(null);
   const [peakTierIndex, setPeakTierIndex] = useState(0);
+  const [challengesCleared, setChallengesCleared] = useState({});
+  const [ladderLevel, setLadderLevel] = useState(1); // 5단 계단 챌린지의 현재 단계(1~5), 새로고침하면 초기화돼요.
   const [reachedTierBadges, setReachedTierBadges] = useState({});
   const [equippedTierId, setEquippedTierId] = useState(null);
   const [myTitles, setMyTitles] = useState({}); // { [titleId]: true }
@@ -594,7 +597,8 @@ export default function App() {
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
       getAchievementData(user.uid)
-        .then(async ({ titles, equippedTitle: eq }) => {
+        .then(async ({ titles, equippedTitle: eq, stats }) => {
+          setChallengesCleared(stats?.challengesCleared || {});
           let finalTitles = titles;
           const dev = isDevAccount(user);
           const bonus = hasAllTitlesBonus(user);
@@ -615,6 +619,7 @@ export default function App() {
     } else {
       setMyTitles({});
       setEquippedTitle(null);
+      setChallengesCleared({});
     }
   }, [user?.uid]);
 
@@ -802,6 +807,33 @@ export default function App() {
                     const newAiWins = await bumpCounter(user.uid, 'aiImpossibleWins', 1);
                     if (checkSimpleThreshold('aiSlayer', newAiWins)) unlockAndNotify('aiSlayer');
                   }
+
+                  // 챌린지(핸디캡) 클리어 기록 - 5단 계단은 별도 effect에서 단계별로 처리해요.
+                  if (state.challengeId && state.challengeId !== 'ladder' && !challengesCleared[state.challengeId]) {
+                    await addToStatSet(user.uid, 'challengesCleared', state.challengeId);
+                    setChallengesCleared((prev) => ({ ...prev, [state.challengeId]: true }));
+                    const challenge = getChallengeById(state.challengeId);
+                    setTitleUnlockToast({ label: '챌린지 클리어!', name: challenge?.name || state.challengeId });
+                  }
+
+                  // 5단 계단: 이번이 마지막 단계(불가능)였으면 챌린지 전체 클리어, 아니면 다음 단계로.
+                  if (state.challengeId === 'ladder') {
+                    if (state.aiDifficulty === LADDER_LEVELS[LADDER_LEVELS.length - 1]) {
+                      if (!challengesCleared.ladder) {
+                        await addToStatSet(user.uid, 'challengesCleared', 'ladder');
+                        setChallengesCleared((prev) => ({ ...prev, ladder: true }));
+                        setTitleUnlockToast({ label: '챌린지 클리어!', name: '5단 계단' });
+                      }
+                      setLadderLevel(1);
+                    } else {
+                      setLadderLevel((lv) => Math.min(LADDER_LEVELS.length, lv + 1));
+                    }
+                  }
+                }
+
+                // 5단 계단인데 이겼어야 할 판에서 지거나 비겼으면 처음부터
+                if (state.challengeId === 'ladder' && result !== 'win') {
+                  setLadderLevel(1);
                 }
 
                 // 무승부 누적 (AI+온라인 전체 - 대리석 스킨 조건)
@@ -1002,6 +1034,8 @@ export default function App() {
         setEquippedTitle={setEquippedTitle}
         unlockAndNotify={unlockAndNotify}
         setTitleUnlockToast={setTitleUnlockToast}
+        challengesCleared={challengesCleared}
+        ladderLevel={ladderLevel}
       />
     );
   } else if (state.phase === 'draft') {
@@ -1171,10 +1205,11 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify, setTitleUnlockToast }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify, setTitleUnlockToast, challengesCleared, ladderLevel }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
+  const [selectedChallenge, setSelectedChallenge] = useState(null);
   const [customSeconds, setCustomSeconds] = useState('30');
   const [customCards, setCustomCards] = useState('3');
   const [joinCode, setJoinCode] = useState('');
@@ -1504,7 +1539,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <div className="setup-card-desc">한 화면에서 번갈아 플레이해요.</div>
           </button>
 
-          <button className="setup-card" onClick={() => { setModeChoice('ai'); setStep('color'); }}>
+          <button className="setup-card" onClick={() => { setModeChoice('ai'); setSelectedChallenge(null); setStep('color'); }}>
             <Bot size={26} strokeWidth={1.6} />
             <div className="setup-card-title">AI와 대국</div>
             <div className="setup-card-desc">내가 할 색과 AI 난이도를 정해요.</div>
@@ -1520,6 +1555,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <Wifi size={26} strokeWidth={1.6} />
             <div className="setup-card-title">온라인 대국</div>
             <div className="setup-card-desc">친구와 플레이하거나, 랜덤으로 매칭돼요.</div>
+          </button>
+
+          <button className="setup-card" onClick={() => setStep('challenge-select')}>
+            <Flame size={26} strokeWidth={1.6} />
+            <div className="setup-card-title">챌린지</div>
+            <div className="setup-card-desc">핸디캡을 걸고 AI와 승부해요.</div>
           </button>
         </div>
 
@@ -3054,6 +3095,46 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     return <ReplayScreen record={selectedRecord} onBack={() => setStep('records')} />;
   }
 
+  if (step === 'challenge-select') {
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">핸디캡을 골라 AI와 대결해요</p>
+
+        <button className="setup-back" onClick={() => setStep('mode')}>
+          <ChevronLeft size={16} /> 뒤로
+        </button>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {CHALLENGES.map((c) => {
+            const cleared = !!challengesCleared[c.id];
+            return (
+              <button
+                key={c.id}
+                className="setup-card"
+                style={{ textAlign: 'left', alignItems: 'flex-start' }}
+                onClick={() => { setSelectedChallenge(c.id); setStep('color'); }}
+              >
+                <div className="setup-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {cleared && <span style={{ color: '#3fae52' }}>✓</span>} {c.name}
+                  {c.id === 'ladder' && <span className="setup-card-desc">(현재 {ladderLevel}/5단계)</span>}
+                </div>
+                <div className="setup-card-desc">{c.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="setup-card-desc" style={{ marginTop: 14 }}>
+          {CHALLENGES.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES.length}개 클리어 —
+          전부 클리어하면 "투명 돌" 스킨을 얻어요.
+        </p>
+      </div>
+    );
+  }
+
   if (step === 'color') {
     return (
       <div className="page">
@@ -3062,18 +3143,52 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         </header>
         <p className="subtitle">어느 색으로 플레이할까요?</p>
 
-        <button className="setup-back" onClick={() => setStep('mode')}>
+        <button className="setup-back" onClick={() => setStep(selectedChallenge ? 'challenge-select' : 'mode')}>
           <ChevronLeft size={16} /> 뒤로
         </button>
 
         <div className="setup-options">
-          <button className="setup-card" onClick={() => { setHumanColor(BLACK); setStep('difficulty'); }}>
+          <button
+            className="setup-card"
+            onClick={() => {
+              setHumanColor(BLACK);
+              if (selectedChallenge === 'ladder') {
+                dispatch({
+                  type: 'START_GAME',
+                  aiPlayer: WHITE,
+                  difficulty: LADDER_LEVELS[ladderLevel - 1],
+                  timeLimitSec: settings.timeLimitSec,
+                  cardsPerPlayer: settings.cardsPerPlayer,
+                  challengeId: 'ladder',
+                });
+              } else {
+                setStep('difficulty');
+              }
+            }}
+          >
             <span className="setup-color-dot setup-color-black" />
             <div className="setup-card-title">흑(선공)으로 플레이</div>
             <div className="setup-card-desc">AI가 백(후공)을 맡아요.</div>
           </button>
 
-          <button className="setup-card" onClick={() => { setHumanColor(WHITE); setStep('difficulty'); }}>
+          <button
+            className="setup-card"
+            onClick={() => {
+              setHumanColor(WHITE);
+              if (selectedChallenge === 'ladder') {
+                dispatch({
+                  type: 'START_GAME',
+                  aiPlayer: BLACK,
+                  difficulty: LADDER_LEVELS[ladderLevel - 1],
+                  timeLimitSec: settings.timeLimitSec,
+                  cardsPerPlayer: settings.cardsPerPlayer,
+                  challengeId: 'ladder',
+                });
+              } else {
+                setStep('difficulty');
+              }
+            }}
+          >
             <span className="setup-color-dot setup-color-white" />
             <div className="setup-card-title">백(후공)으로 플레이</div>
             <div className="setup-card-desc">AI가 흑(선공)을 맡아요.</div>
@@ -3114,6 +3229,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 difficulty: key,
                 timeLimitSec: settings.timeLimitSec,
                 cardsPerPlayer: settings.cardsPerPlayer,
+                challengeId: selectedChallenge,
               })}
             >
               <div className="setup-card-title">{cfg.label}</div>
@@ -3513,6 +3629,7 @@ function DraftScreen({ state, dispatch, online, user }) {
       <div className="draft-options" key={roundNumber}>
         {draft.options.map((cardId, i) => {
           const card = getCardById(cardId);
+          const blind = state.challengeId === 'blindDraft' && !waiting;
           return (
             <button
               key={cardId}
@@ -3522,12 +3639,18 @@ function DraftScreen({ state, dispatch, online, user }) {
               onClick={() => dispatch({ type: 'DRAFT_PICK', cardId })}
             >
               <div className="card-icon"><CardIcon name={card.icon} size={22} /></div>
-              <div className="card-name">{card.name}</div>
-              <div className="card-desc">{card.desc}</div>
+              <div className="card-name">{blind ? '???' : card.name}</div>
+              <div className="card-desc">{blind ? '눈 감고 뽑기: 뭐가 나올지 몰라요.' : card.desc}</div>
             </button>
           );
         })}
       </div>
+
+      {state.challengeId === 'blindDraft' && !waiting && (
+        <p className="setup-card-desc" style={{ marginTop: -6, marginBottom: 10 }}>
+          🙈 눈 감고 뽑기 챌린지: 아이콘만 보고 감으로 골라야 해요.
+        </p>
+      )}
 
       <HandsPreview hands={draft.hands} />
 
@@ -3718,6 +3841,10 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
 
   let modeLabel = '2인 대국';
   if (state.aiPlayer) modeLabel = `AI 대전 · AI는 ${PLAYER_LABEL[state.aiPlayer]} · 난이도 ${DIFFICULTIES[state.aiDifficulty]?.label ?? '보통'}`;
+  if (state.challengeId) {
+    const challenge = getChallengeById(state.challengeId);
+    modeLabel += ` · 챌린지: ${challenge?.name || state.challengeId}${state.challengeId === 'ladder' ? ` (${LADDER_LEVELS.indexOf(state.aiDifficulty) + 1}/5단계)` : ''}`;
+  }
   if (online) {
     const kind = online.ranked ? '랭크전' : '온라인 대전(친선)';
     modeLabel = isSpectator
@@ -4137,7 +4264,9 @@ function Board({ state, dispatch, online, settings }) {
                   <span
                     className={`stone ${
                       value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'
-                    } ${protectedStone ? 'stone-protected' : ''} ${markedStone ? 'stone-marked' : ''} ${isLastMove ? placementEffect.className : ''}`}
+                    } ${protectedStone ? 'stone-protected' : ''} ${markedStone ? 'stone-marked' : ''} ${isLastMove ? placementEffect.className : ''} ${
+                      state.challengeId === 'silhouette' && value !== WILD ? (value === 1 ? 'stone-silhouette-fill' : 'stone-silhouette-ring') : ''
+                    }`}
                   >
                     {isLastMove && <span className="last-move-dot" />}
                     {markedStone && <Stamp size={11} className="marked-badge" />}

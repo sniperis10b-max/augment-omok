@@ -3,6 +3,7 @@
 // "내 계정만 열어준다"는 건 UI에서 개발자 계정일 때만 선택 가능하게 막아둔다는 뜻이에요).
 
 import { CARDS } from './cards.js';
+import { CHALLENGES } from './challenges.js';
 
 export const BOARD_SKINS = [
   {
@@ -304,6 +305,14 @@ export const STONE_SKINS = [
     whiteBorder: '#b8952a',
     questDesc: '불가능 난이도 AI 20연승',
   },
+  {
+    id: 'invisible',
+    name: '투명 돌',
+    black: 'transparent',
+    white: 'transparent',
+    whiteBorder: 'transparent',
+    questDesc: '모든 챌린지(핸디캡) 클리어',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -413,6 +422,10 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'cursedDoll': return (stats.markUses || 0) >= 200;
     case 'obelisk': return (stats.sanctuaryUses || 0) >= 100;
     case 'crown': return (stats.impossibleWinStreak || 0) >= 20;
+    case 'invisible': {
+      const cleared = ctx.challengesCleared || {};
+      return CHALLENGES.every((c) => cleared[c.id]);
+    }
     default: return false;
   }
 }
@@ -478,6 +491,11 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'cursedDoll': return clampProgress(stats.markUses, 200);
     case 'obelisk': return clampProgress(stats.sanctuaryUses, 100);
     case 'crown': return clampProgress(stats.impossibleWinStreak, 20);
+    case 'invisible': {
+      const cleared = ctx.challengesCleared || {};
+      const count = CHALLENGES.filter((c) => cleared[c.id]).length;
+      return clampProgress(count, CHALLENGES.length);
+    }
     default: return null;
   }
 }

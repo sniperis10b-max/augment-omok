@@ -11,6 +11,7 @@ import {
   findOpenThreeFlankCells,
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
+import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS } from './challenges.js';
 
 const STANDALONE = new Set([
   'destroy', 'alchemy', 'swap', 'moveStone', 'reinforce', 'barrier', 'ward',
@@ -102,6 +103,12 @@ function isBlocked(state, x, y) {
   return expire === Infinity || state.ply < expire;
 }
 
+// 챌린지의 "파괴 금지"/"방어 금지" 같은 카드 제한을 사람 플레이어의 드래프트 풀에만 적용해요.
+function draftPoolForChallenge(pool, player, state) {
+  if (!state.challengeCardBan || player !== state.humanColor) return pool;
+  return pool.filter((id) => !state.challengeCardBan[id]);
+}
+
 function buildDraftOrder(cardsPerPlayer) {
   const n = Math.max(1, cardsPerPlayer || 3);
   const order = [];
@@ -154,8 +161,11 @@ export function createInitialState() {
     lastUsedCard: { [BLACK]: null, [WHITE]: null },
     history: [],
     moveLog: [],
-    ruleFlags: { noDoubleThree: false, ignoreDoubleFourOnce: false, allowOverline: false, forceForbiddenFor: null },
+    ruleFlags: { noDoubleThree: false, ignoreDoubleFourOnce: false, allowOverline: false, forceForbiddenFor: null, noDiagonalFor: null },
     winLengthOverride: { [BLACK]: null, [WHITE]: null },
+    humanColor: null,
+    challengeId: null,
+    challengeCardBan: {},
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
     rematchVotes: { [BLACK]: false, [WHITE]: false },
@@ -381,7 +391,8 @@ function tryPlaceStone(state, clickX, clickY) {
 
   const winLength = workingState.buffs.fourToWinActive ? 4 : (workingState.winLengthOverride?.[player] ?? 5);
   const isBonusMove = !!workingState.buffs.doubleMoveBonusPending;
-  const won = !isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones });
+  const excludeDiagonal = workingState.ruleFlags?.noDiagonalFor === player;
+  const won = !isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal });
 
   if (won) {
     const shieldHolder = otherPlayer(player);
@@ -405,7 +416,7 @@ function tryPlaceStone(state, clickX, clickY) {
     return nextState;
   }
 
-  if (isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones })) {
+  if (isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal })) {
     const res = finishTurnAfterPlacement(nextState, player);
     res.message = `연속 두기의 두 번째 수로는 승리할 수 없어요! ${res.message}`;
     return res;
@@ -1239,22 +1250,86 @@ export function gameReducer(state, action) {
       return { ...createInitialState(), ...action.state };
 
     case 'START_GAME': {
-      const { aiPlayer, difficulty, timeLimitSec, cardsPerPlayer } = action;
-      const order = buildDraftOrder(cardsPerPlayer);
+      const { aiPlayer, difficulty, timeLimitSec, cardsPerPlayer, challengeId } = action;
       const fresh = createInitialState();
-      return {
+      const humanColor = aiPlayer ? otherPlayer(aiPlayer) : null;
+
+      const challengeCardBan = {};
+      let ruleFlags = { ...fresh.ruleFlags };
+      let winLengthOverride = { ...fresh.winLengthOverride };
+      let blockedCells = { ...fresh.blockedCells };
+
+      if (challengeId === 'fourVsFive' && aiPlayer) {
+        winLengthOverride = { ...winLengthOverride, [aiPlayer]: 4 };
+      }
+      if (challengeId === 'sixInRow' && humanColor) {
+        winLengthOverride = { ...winLengthOverride, [humanColor]: 6 };
+      }
+      if (challengeId === 'noDiagonal' && humanColor) {
+        ruleFlags = { ...ruleFlags, noDiagonalFor: humanColor };
+      }
+      if (challengeId === 'noDestroy') {
+        for (const id of DESTROY_CARD_IDS) challengeCardBan[id] = true;
+      }
+      if (challengeId === 'noDefense') {
+        for (const id of DEFENSE_CARD_IDS) challengeCardBan[id] = true;
+      }
+      if (challengeId === 'narrowVision') {
+        const size = fresh.board.length;
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            if (x < 3 || x >= size - 3 || y < 3 || y >= size - 3) blockedCells[key(x, y)] = Infinity;
+          }
+        }
+      }
+      if (challengeId === 'doubleForbidden') {
+        const size = fresh.board.length;
+        let placed = 0;
+        let guard = 0;
+        while (placed < 10 && guard < 500) {
+          guard++;
+          const rx = Math.floor(Math.random() * size);
+          const ry = Math.floor(Math.random() * size);
+          const k = key(rx, ry);
+          if (!blockedCells[k]) { blockedCells[k] = Infinity; placed++; }
+        }
+      }
+
+      const base = {
         ...fresh,
-        phase: 'draft',
         aiPlayer: aiPlayer || null,
         aiDifficulty: difficulty || 'normal',
         timeLimitSec: timeLimitSec || 0,
+        humanColor,
+        challengeId: challengeId || null,
+        challengeCardBan,
+        ruleFlags,
+        winLengthOverride,
+        blockedCells,
+      };
+
+      // 무카드 챌린지는 드래프트 자체를 건너뛰고 바로 대국을 시작해요.
+      if (challengeId === 'noCards') {
+        return {
+          ...base,
+          phase: 'play',
+          turn: BLACK,
+          message: '무카드 챌린지! 카드 없이 순수 실력으로 승부해요.',
+          draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
+        };
+      }
+
+      const order = buildDraftOrder(cardsPerPlayer);
+      return {
+        ...base,
+        phase: 'draft',
         message: '카드를 뽑는 중이에요.',
         draft: {
-          pool: poolForPlayer(order[0]),
+          pool: draftPoolForChallenge(poolForPlayer(order[0]), order[0], base),
           hands: { [BLACK]: [], [WHITE]: [] },
           order,
           currentIndex: 0,
-          options: drawRandomCards(poolForPlayer(order[0]), 3),
+          options: drawRandomCards(draftPoolForChallenge(poolForPlayer(order[0]), order[0], base), 3),
         },
       };
     }
@@ -1267,21 +1342,45 @@ export function gameReducer(state, action) {
 
       if (votes[BLACK] && votes[WHITE]) {
         const cardsPerPlayer = state.draft.order.length / 2;
-        const order = buildDraftOrder(cardsPerPlayer);
         const fresh = createInitialState();
-        return {
+        const base = {
           ...fresh,
-          phase: 'draft',
           aiPlayer: state.aiPlayer,
           aiDifficulty: state.aiDifficulty,
           timeLimitSec: state.timeLimitSec,
+          humanColor: state.humanColor,
+          challengeId: state.challengeId,
+          challengeCardBan: state.challengeCardBan || {},
+          ruleFlags: { ...fresh.ruleFlags, noDiagonalFor: state.ruleFlags?.noDiagonalFor || null },
+          winLengthOverride: state.winLengthOverride?.[BLACK] || state.winLengthOverride?.[WHITE]
+            ? { ...state.winLengthOverride }
+            : fresh.winLengthOverride,
+          blockedCells: state.challengeId === 'narrowVision' || state.challengeId === 'doubleForbidden'
+            ? { ...state.blockedCells }
+            : fresh.blockedCells,
+        };
+
+        if (state.challengeId === 'noCards') {
+          return {
+            ...base,
+            phase: 'play',
+            turn: BLACK,
+            message: '무카드 챌린지! 카드 없이 순수 실력으로 승부해요.',
+            draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
+          };
+        }
+
+        const order = buildDraftOrder(cardsPerPlayer);
+        return {
+          ...base,
+          phase: 'draft',
           message: '카드를 뽑는 중이에요.',
           draft: {
-            pool: poolForPlayer(order[0]),
+            pool: draftPoolForChallenge(poolForPlayer(order[0]), order[0], base),
             hands: { [BLACK]: [], [WHITE]: [] },
             order,
             currentIndex: 0,
-            options: drawRandomCards(poolForPlayer(order[0]), 3),
+            options: drawRandomCards(draftPoolForChallenge(poolForPlayer(order[0]), order[0], base), 3),
           },
         };
       }
@@ -1312,7 +1411,7 @@ export function gameReducer(state, action) {
       const nextDrafter = state.draft.order[currentIndex];
       return {
         ...state,
-        draft: { ...state.draft, hands, currentIndex, options: drawRandomCards(poolForPlayer(nextDrafter), 3), lastPick },
+        draft: { ...state.draft, hands, currentIndex, options: drawRandomCards(draftPoolForChallenge(poolForPlayer(nextDrafter), nextDrafter, state), 3), lastPick },
       };
     }
 
