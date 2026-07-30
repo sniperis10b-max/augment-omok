@@ -790,6 +790,77 @@ body {
   cursor: not-allowed;
 }
 
+/* 대국 시작 직전 "매치 인트로" - 상대/내 닉네임과, 스킨이 반반 보였다가 내 스킨으로
+   바뀌는 리빌 애니메이션 */
+.match-intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: radial-gradient(circle at 50% 40%, rgba(40, 40, 60, 0.97), rgba(10, 10, 16, 0.98));
+  color: #fff;
+  animation: matchIntroFade 2.2s ease forwards;
+}
+
+.match-intro-name {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.match-intro-stone-wrap {
+  position: relative;
+  width: 130px;
+  height: 130px;
+}
+
+.match-intro-stone {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-repeat: no-repeat;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.match-intro-stone-mine {
+  z-index: 1;
+}
+
+.match-intro-stone-opp {
+  z-index: 2;
+  clip-path: inset(0 50% 0 0);
+  animation: matchIntroReveal 1.8s ease forwards;
+}
+
+.match-intro-vs {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  letter-spacing: 0.05em;
+}
+
+@keyframes matchIntroReveal {
+  0%, 55% { clip-path: inset(0 50% 0 0); }
+  100% { clip-path: inset(0 100% 0 0); }
+}
+
+@keyframes matchIntroFade {
+  0%, 88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .title-toast {
   position: fixed;
   top: 14px;
@@ -845,6 +916,15 @@ body {
 
 .leaderboard-row:last-child {
   border-bottom: none;
+}
+
+.leaderboard-row-clickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.leaderboard-row-clickable:hover {
+  background: var(--accent-soft);
 }
 
 .leaderboard-rank {

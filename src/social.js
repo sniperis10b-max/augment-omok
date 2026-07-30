@@ -62,6 +62,63 @@ export async function sendFriendRequestByEmail(myUser, targetEmail) {
   return { ok: true };
 }
 
+// 이메일 대신 uid로 바로 친구 요청을 보내요 (순위표나 프로필 화면처럼 이메일을 모르는
+// 상태에서, 상대의 uid만 알고 있을 때 써요).
+export async function sendFriendRequestByUid(myUser, targetUid) {
+  const db = getDb();
+  if (!targetUid) return { ok: false, reason: 'not-found' };
+  if (targetUid === myUser.uid) return { ok: false, reason: 'self' };
+
+  const friendSnap = await get(ref(db, `users/${myUser.uid}/friends/${targetUid}`));
+  if (friendSnap.exists()) return { ok: false, reason: 'already-friend' };
+
+  await set(ref(db, `users/${targetUid}/friendRequests/${myUser.uid}`), {
+    displayName: myUser.displayName || '이름 없음',
+    photoURL: myUser.photoURL || null,
+    at: serverTimestamp(),
+  });
+  return { ok: true };
+}
+
+// 순위표에 저장해둔 닉네임/레이팅/랭크점수/칭호/티어/장착 스킨을 한 번에 모아 보여주는
+// "다른 사람 프로필" 조회예요. leaderboard와 rankLeaderboard 둘 다 공개적으로 읽을 수
+// 있게 설계돼 있어서(이메일 등 민감 정보 없음), 이 둘만 합쳐서 보여줘요.
+export async function getPublicProfile(uid) {
+  const db = getDb();
+  const [lbSnap, rlSnap] = await Promise.all([
+    get(ref(db, `leaderboard/${uid}`)),
+    get(ref(db, `rankLeaderboard/${uid}`)),
+  ]);
+  const lb = lbSnap.val() || {};
+  const rl = rlSnap.val() || {};
+  const found = lbSnap.exists() || rlSnap.exists();
+  if (!found) return null;
+  return {
+    uid,
+    displayName: lb.displayName || rl.displayName || '이름 없음',
+    isDev: !!(lb.isDev || rl.isDev),
+    titleName: lb.titleName || rl.titleName || null,
+    tierBadgeId: lb.tierBadgeId || rl.tierBadgeId || null,
+    rating: lb.rating ?? null,
+    rankPoints: rl.points ?? null,
+    boardSkinId: lb.boardSkinId || rl.boardSkinId || null,
+    stoneSkinId: lb.stoneSkinId || rl.stoneSkinId || null,
+  };
+}
+
+// 지금 장착 중인 바둑판/바둑돌 스킨을 순위표에도 복사해둬요 (다른 사람 프로필이나
+// 대국 시작 화면에서 상대 스킨을 보여줄 수 있게). 스킨은 원래 브라우저 로컬 설정이라
+// 이 값들만 "장착 중인 스킨을 알려주는 용도"로 최소한만 공개해요.
+export async function syncEquippedSkinsToLeaderboard(uid, boardSkinId, stoneSkinId) {
+  const db = getDb();
+  await update(ref(db), {
+    [`leaderboard/${uid}/boardSkinId`]: boardSkinId || null,
+    [`leaderboard/${uid}/stoneSkinId`]: stoneSkinId || null,
+    [`rankLeaderboard/${uid}/boardSkinId`]: boardSkinId || null,
+    [`rankLeaderboard/${uid}/stoneSkinId`]: stoneSkinId || null,
+  }).catch(() => {});
+}
+
 export function subscribeFriendRequests(uid, onChange) {
   const db = getDb();
   const r = ref(db, `users/${uid}/friendRequests`);

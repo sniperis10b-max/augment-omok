@@ -28,10 +28,10 @@ import {
   resendVerificationEmail, signOutUser, mapAuthError, updateUserProfile, deleteAccount,
 } from './auth.js';
 import {
-  upsertUserProfile, sendFriendRequestByEmail, subscribeFriendRequests, acceptFriendRequest,
+  upsertUserProfile, sendFriendRequestByEmail, sendFriendRequestByUid, subscribeFriendRequests, acceptFriendRequest,
   declineFriendRequest, subscribeFriends, inviteFriendToGame, subscribeInvites, clearInvite,
   quickMatch, cancelQuickMatch, setupPresence, subscribeUserStatus, recordGameResult,
-  subscribeStats, deleteUserData,
+  subscribeStats, deleteUserData, getPublicProfile, syncEquippedSkinsToLeaderboard,
 } from './social.js';
 import {
   ensureRatingInitialized, getRating, computeRatingDelta, applyRatingChange, fetchLeaderboard, DEFAULT_RATING, adminSetRating,
@@ -322,6 +322,8 @@ export default function App() {
   const prevRef = useRef({ stoneCount: 0, handTotal: 0, phase: 'setup', message: '' });
   const prevLastUsedRef = useRef({ [BLACK]: null, [WHITE]: null });
   const [cardOverlay, setCardOverlay] = useState(null);
+  const matchIntroShownRef = useRef(false); // 이번 판에서 매치 인트로를 이미 띄웠는지
+  const [matchIntro, setMatchIntro] = useState(null); // { myName, myColorLabel, myStoneSkinId, oppName, oppStoneSkinId } | null
 
   // 카드가 사용될 때마다(어느 쪽이든) 화면 중앙에 잠깐 띄워줘요
   useEffect(() => {
@@ -527,6 +529,64 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme);
   }, [settings.theme]);
+
+  // 장착 중인 바둑판/바둑돌 스킨을 순위표에도 복사해둬요 (다른 사람이 내 프로필을 보거나,
+  // 매치 인트로 화면에서 상대(나)의 스킨을 보여줄 수 있게).
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      syncEquippedSkinsToLeaderboard(user.uid, settings.boardSkin, settings.stoneSkin);
+    }
+  }, [user?.uid, settings.boardSkin, settings.stoneSkin]);
+
+  // 대국이 새로 시작되면(설정 화면을 벗어나면) 닉네임 + 스킨 반반 리빌 인트로를 잠깐 보여줘요.
+  useEffect(() => {
+    if (state.phase === 'setup') {
+      matchIntroShownRef.current = false;
+      return;
+    }
+    if (matchIntroShownRef.current) return;
+    if (state.phase !== 'draft' && state.phase !== 'play') return;
+    matchIntroShownRef.current = true;
+
+    const myColor = online ? online.localColor : (state.aiPlayer ? otherPlayer(state.aiPlayer) : BLACK);
+    const myColorSafe = myColor || BLACK;
+    const myName = user?.displayName || '나';
+    const myStoneSkinId = settings.stoneSkin;
+    const base = { myName, myColorLabel: myColorSafe === BLACK ? '흑' : '백', myStoneSkinId };
+
+    if (state.aiPlayer) {
+      setMatchIntro({
+        ...base,
+        oppName: `AI · ${DIFFICULTIES[state.aiDifficulty]?.label || '보통'}`,
+        oppStoneSkinId: 'classic',
+      });
+    } else if (online && online.role !== 'spectator' && online.code) {
+      setMatchIntro({ ...base, oppName: '상대', oppStoneSkinId: 'classic' });
+      getRoomPlayers(online.code)
+        .then(({ hostUid, guestUid }) => {
+          const oppUid = online.role === 'host' ? guestUid : hostUid;
+          if (!oppUid) return null;
+          return getPublicProfile(oppUid);
+        })
+        .then((profile) => {
+          if (profile) {
+            setMatchIntro((prev) => (prev ? { ...prev, oppName: profile.displayName, oppStoneSkinId: profile.stoneSkinId || 'classic' } : prev));
+          }
+        })
+        .catch(() => {});
+    } else {
+      // 2인이서 같은 화면 대국 - 별도 "상대 스킨" 개념이 없어서 내 스킨을 그대로 보여줘요.
+      setMatchIntro({ ...base, oppName: '상대', oppStoneSkinId: myStoneSkinId });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase]);
+
+  // 매치 인트로는 잠깐 보여주고 자동으로 닫아요.
+  useEffect(() => {
+    if (!matchIntro) return undefined;
+    const t = setTimeout(() => setMatchIntro(null), 2200);
+    return () => clearTimeout(t);
+  }, [matchIntro]);
 
   // 바둑판/바둑돌 스킨 적용 (CSS 변수로 board/stone 색상을 덮어써요)
   useEffect(() => {
@@ -1085,6 +1145,35 @@ export default function App() {
   return (
     <>
       {screen}
+      {matchIntro && (() => {
+        const myStone = getStoneSkinById(matchIntro.myStoneSkinId);
+        const oppStone = getStoneSkinById(matchIntro.oppStoneSkinId);
+        return (
+          <div className="match-intro-overlay">
+            <div className="match-intro-name">{matchIntro.oppName}</div>
+            <div className="match-intro-stone-wrap">
+              <div
+                className="match-intro-stone match-intro-stone-mine"
+                style={{
+                  backgroundImage: toBgImage(myStone.black),
+                  backgroundPosition: myStone.blackPosition || '0 0',
+                  backgroundSize: myStone.blackSize || 'auto',
+                }}
+              />
+              <div
+                className="match-intro-stone match-intro-stone-opp"
+                style={{
+                  backgroundImage: toBgImage(oppStone.black),
+                  backgroundPosition: oppStone.blackPosition || '0 0',
+                  backgroundSize: oppStone.blackSize || 'auto',
+                }}
+              />
+              <div className="match-intro-vs">VS</div>
+            </div>
+            <div className="match-intro-name">{matchIntro.myName} ({matchIntro.myColorLabel})</div>
+          </div>
+        );
+      })()}
       {titleUnlockToast && (
         <div className="title-toast">
           <Medal size={16} />
@@ -1271,6 +1360,32 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [rankLeaderboardLoading, setRankLeaderboardLoading] = useState(false);
   const [rankLeaderboardError, setRankLeaderboardError] = useState('');
   const [leaderboardTab, setLeaderboardTab] = useState('rating'); // 'rating' | 'rank'
+  const [viewedProfile, setViewedProfile] = useState(null);
+  const [viewedProfileLoading, setViewedProfileLoading] = useState(false);
+  const [friendAddNotice, setFriendAddNotice] = useState('');
+
+  async function openProfile(uid) {
+    if (!uid) return;
+    if (user && uid === user.uid) { setStep('profile'); return; }
+    setFriendAddNotice('');
+    setViewedProfile(null);
+    setViewedProfileLoading(true);
+    setStep('view-profile');
+    const p = await getPublicProfile(uid).catch(() => null);
+    setViewedProfile(p);
+    setViewedProfileLoading(false);
+  }
+
+  async function handleAddFriendFromProfile() {
+    if (!user || !viewedProfile) return;
+    setFriendAddNotice('보내는 중...');
+    const res = await sendFriendRequestByUid(user, viewedProfile.uid).catch(() => ({ ok: false, reason: 'error' }));
+    if (res.ok) setFriendAddNotice('친구 요청을 보냈어요.');
+    else if (res.reason === 'already-friend') setFriendAddNotice('이미 친구예요.');
+    else if (res.reason === 'self') setFriendAddNotice('나 자신에게는 보낼 수 없어요.');
+    else setFriendAddNotice('요청을 보내지 못했어요. 다시 시도해주세요.');
+  }
+
   const [titleCounts, setTitleCounts] = useState({});
   const [titleHolders, setTitleHolders] = useState(null);
   const [titleHoldersLoading, setTitleHoldersLoading] = useState(false);
@@ -2107,8 +2222,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 {leaderboard.map((entry, i) => (
                   <div
                     key={entry.uid}
-                    className="leaderboard-row"
+                    className="leaderboard-row leaderboard-row-clickable"
                     style={user && entry.uid === user.uid ? { background: 'var(--accent-soft)' } : undefined}
+                    onClick={() => openProfile(entry.uid)}
                   >
                     <span className="leaderboard-rank">{i + 1}</span>
                     <span className="leaderboard-name">
@@ -2161,8 +2277,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 {rankLeaderboard.map((entry, i) => (
                   <div
                     key={entry.uid}
-                    className="leaderboard-row"
+                    className="leaderboard-row leaderboard-row-clickable"
                     style={user && entry.uid === user.uid ? { background: 'var(--accent-soft)' } : undefined}
+                    onClick={() => openProfile(entry.uid)}
                   >
                     <span className="leaderboard-rank">{i + 1}</span>
                     <TierBadge rating={entry.points} size={20} style={{ marginRight: 2 }} />
@@ -2756,6 +2873,123 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <button className="setup-tutorial-link" onClick={() => setStep('terms')}>이용약관</button>
           <button className="setup-tutorial-link" onClick={() => setStep('privacy')}>개인정보처리방침</button>
         </div>
+      </div>
+    );
+  }
+
+  if (step === 'view-profile') {
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">프로필</p>
+
+        <button className="setup-back" onClick={() => setStep('leaderboard')}>
+          <ChevronLeft size={16} /> 순위표로 돌아가기
+        </button>
+
+        {viewedProfileLoading ? (
+          <p className="setup-card-desc">불러오는 중...</p>
+        ) : !viewedProfile ? (
+          <p className="setup-card-desc">이 사람의 프로필을 찾을 수 없어요.</p>
+        ) : (
+          <>
+            <div className="tutorial-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <UserCircle size={40} />
+                <div>
+                  <div className="tutorial-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {viewedProfile.displayName}
+                    {viewedProfile.titleName && (
+                      <span className="dev-badge title-badge"><Medal size={10} /> {viewedProfile.titleName}</span>
+                    )}
+                    <TierIconBadge tierId={viewedProfile.tierBadgeId} />
+                  </div>
+                  {viewedProfile.isDev && <div className="setup-card-desc">개발자 계정</div>}
+                </div>
+              </div>
+            </div>
+
+            <div className="tutorial-card">
+              <div className="tutorial-title">레이팅 · 랭크</div>
+              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 8 }}>
+                <div>
+                  <div className="setup-card-desc" style={{ marginBottom: 4 }}>일반 레이팅</div>
+                  <div className="card-name" style={{ fontSize: 20 }}>{viewedProfile.rating ?? '-'}</div>
+                </div>
+                <div>
+                  <div className="setup-card-desc" style={{ marginBottom: 4 }}>랭크 점수</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {viewedProfile.rankPoints != null && <TierBadge rating={viewedProfile.rankPoints} size={24} />}
+                    <span className="card-name" style={{ fontSize: 20 }}>{viewedProfile.rankPoints ?? '-'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="tutorial-card">
+              <div className="tutorial-title">장착 스킨</div>
+              {(() => {
+                const boardSkin = getBoardSkinById(viewedProfile.boardSkinId);
+                const stoneSkin = getStoneSkinById(viewedProfile.stoneSkinId);
+                return (
+                  <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginTop: 10 }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: 8, border: `1px solid ${boardSkin.border}`, margin: '0 auto 6px',
+                        backgroundImage: toBgImage(boardSkin.background),
+                        backgroundPosition: boardSkin.backgroundPosition || '0 0',
+                        backgroundSize: boardSkin.backgroundSize || 'auto',
+                        backgroundRepeat: 'no-repeat',
+                      }} />
+                      <div className="setup-card-desc">{boardSkin.name}</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 6 }}>
+                        <span
+                          className={stoneSkin.id === 'errorStone' ? 'stone-swatch-glitch' : undefined}
+                          style={{
+                            width: 28, height: 28, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
+                            backgroundImage: toBgImage(stoneSkin.black),
+                            backgroundPosition: stoneSkin.blackPosition || '0 0',
+                            backgroundSize: stoneSkin.blackSize || 'auto',
+                            backgroundRepeat: 'no-repeat',
+                          }}
+                        />
+                        <span
+                          className={stoneSkin.id === 'errorStone' ? 'stone-swatch-glitch' : undefined}
+                          style={{
+                            width: 28, height: 28, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
+                            border: `1px solid ${stoneSkin.whiteBorder}`,
+                            backgroundImage: toBgImage(stoneSkin.white),
+                            backgroundPosition: stoneSkin.whitePosition || '0 0',
+                            backgroundSize: stoneSkin.whiteSize || 'auto',
+                            backgroundRepeat: 'no-repeat',
+                          }}
+                        />
+                      </div>
+                      <div className="setup-card-desc">{stoneSkin.name}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="tutorial-card">
+              {!user ? (
+                <p className="setup-card-desc">로그인하면 친구를 추가할 수 있어요.</p>
+              ) : (
+                <>
+                  <button className="reset-btn" disabled={busy} onClick={handleAddFriendFromProfile}>
+                    <UserPlus size={14} style={{ verticalAlign: -2, marginRight: 4 }} /> 친구 추가
+                  </button>
+                  {friendAddNotice && <p className="setup-card-desc" style={{ marginTop: 8 }}>{friendAddNotice}</p>}
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
     );
   }
