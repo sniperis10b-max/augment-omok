@@ -4870,6 +4870,22 @@ function ChatPanel({ online, user, unlockAndNotify, equippedTitle, equippedTierI
 
 function GameScreen({ state, dispatch, online, onReset, settings, updateSettings, user, lastRatingChange, lastRankChange, unlockAndNotify, equippedTitle, equippedTierId }) {
   const gameOver = state.phase === 'over';
+  const [showVictoryFx, setShowVictoryFx] = useState(false);
+  const victoryFxShownRef = useRef(false);
+
+  // 승부가 결정된(무승부 아닌) 순간에 한 번만 컨페티 이펙트를 터뜨려요.
+  useEffect(() => {
+    if (state.phase !== 'over') {
+      victoryFxShownRef.current = false;
+      return undefined;
+    }
+    if (state.winner === null || victoryFxShownRef.current) return undefined;
+    victoryFxShownRef.current = true;
+    setShowVictoryFx(true);
+    const t = setTimeout(() => setShowVictoryFx(false), 2600);
+    return () => clearTimeout(t);
+  }, [state.phase, state.winner]);
+
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;
   const isSpectator = online && online.role === 'spectator';
   const isOnlineWaiting = online && !isSpectator && state.turn !== online.localColor && !gameOver;
@@ -4950,6 +4966,23 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       <p className="subtitle">
         {modeLabel}{isSpectator && <span className="spectator-badge"><Eye size={11} style={{ verticalAlign: 'middle' }} /> 관전</span>} · 렌주 금수(3-3, 4-4, 육목)는 흑에게만 적용돼요
       </p>
+
+      {showVictoryFx && (
+        <div className="victory-fx-overlay">
+          {Array.from({ length: 28 }).map((_, i) => (
+            <span
+              key={i}
+              className="victory-fx-piece"
+              style={{
+                left: `${Math.round((i / 28) * 100 + (i % 3) * 2)}%`,
+                background: ['#ff6ec7', '#2ee6ff', '#ffd65a', '#7ee88a', '#ff9d4a', '#c9a6ff'][i % 6],
+                animationDelay: `${(i % 7) * 0.09}s`,
+                animationDuration: `${1.6 + (i % 5) * 0.2}s`,
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="status-row">
         <span key={state.message} className={`status-text ${gameOver ? 'status-win' : ''}`}>
