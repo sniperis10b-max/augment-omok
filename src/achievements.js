@@ -37,6 +37,11 @@ export const TITLES = [
   { id: 'skilled', name: '숙련자', desc: '누적 10승 달성 (2인 대국은 포함되지 않아요)', category: '승리' },
   { id: 'veteran', name: '베테랑', desc: '누적 50승 달성 (2인 대국은 포함되지 않아요)', category: '승리' },
   { id: 'master', name: '거장', desc: '누적 100승 달성 (2인 대국은 포함되지 않아요)', category: '승리' },
+  // 시즌 패스 (2026-08 "불꽃놀이의 밤")
+  { id: 'seasonFireworksPeak', name: '불꽃의 절정', desc: '시즌 패스 30레벨 달성', category: '시즌' },
+  { id: 'nightMarketRegular', name: '야시장 단골', desc: '시즌 상점에서 코인으로 구매 (300코인)', category: '시즌' },
+  { id: 'fuseLighter', name: '도화선', desc: '시즌 상점에서 코인으로 구매 (400코인)', category: '시즌' },
+  { id: 'lastFirework', name: '마지막 폭죽', desc: '시즌 상점에서 코인으로 구매 (500코인)', category: '시즌' },
   { id: 'god', name: '신', desc: '누적 1000승 달성 (2인 대국은 포함되지 않아요)', category: '승리' },
 
   // 레이팅/랭크 (온라인 대전 전용)
@@ -119,6 +124,7 @@ const SIMPLE_THRESHOLDS = {
   stormStreak: 5,
   eternalStreak: 10,
   aiSlayer: 10,
+  seasonFireworksPeak: 30,
 };
 
 export function checkSimpleThreshold(titleId, value) {
@@ -144,6 +150,7 @@ const DESTROYER_FIELD_MAP = {
   stormStreak: 'onlineWinStreak',
   eternalStreak: 'onlineWinStreak',
   aiSlayer: 'aiImpossibleWins',
+  seasonFireworksPeak: 'seasonLevel',
 };
 
 function clampProgress(current, target) {

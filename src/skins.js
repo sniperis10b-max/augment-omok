@@ -303,6 +303,36 @@ export const BOARD_SKINS = [
     line: 'rgba(212, 175, 55, 0.4)',
     questDesc: '카드 총 150회 사용',
   },
+  {
+    id: 'seasonFireworksSky',
+    name: '불꽃놀이 밤하늘',
+    background:
+      'radial-gradient(circle at 25% 30%, rgba(46,230,255,0.5), transparent 25%), '
+      + 'radial-gradient(circle at 70% 60%, rgba(255,110,199,0.5), transparent 22%), '
+      + 'radial-gradient(circle at 55% 20%, rgba(255,214,90,0.45), transparent 20%), '
+      + 'linear-gradient(160deg, #0a1030, #050414)',
+    border: '#2a2050',
+    line: 'rgba(255, 255, 255, 0.25)',
+    questDesc: '시즌 패스 10레벨 달성 (불꽃놀이의 밤)',
+  },
+  {
+    id: 'riverFestival',
+    name: '강변 축제',
+    background:
+      'linear-gradient(180deg, rgba(255,200,120,0.25) 0%, transparent 40%), '
+      + 'linear-gradient(160deg, #16324a, #0a1a2a)',
+    border: '#1e4a5a',
+    line: 'rgba(255, 220, 160, 0.3)',
+    questDesc: '시즌 상점에서 코인으로 구매 (700코인)',
+  },
+  {
+    id: 'fireworkSmoke',
+    name: '폭죽 연기 자국',
+    background: 'radial-gradient(circle at 50% 40%, #4a4a52, #1a1a20 70%)',
+    border: '#2a2a30',
+    line: 'rgba(255, 255, 255, 0.15)',
+    questDesc: '시즌 상점에서 코인으로 구매 (900코인)',
+  },
 ];
 
 export const STONE_SKINS = [
@@ -596,6 +626,34 @@ export const STONE_SKINS = [
     whiteBorder: '#4a90c0',
     questDesc: '누적 플레이 시간 24시간',
   },
+  {
+    id: 'seasonSparkler',
+    name: '스파클러',
+    black: 'radial-gradient(circle at 40% 35%, #6a5a4a, #2a2018 75%)',
+    white:
+      'radial-gradient(circle at 30% 30%, #fff 1px, transparent 1px), '
+      + 'radial-gradient(circle at 65% 25%, #fff 1px, transparent 1px), '
+      + 'radial-gradient(circle at 50% 65%, #fff 1px, transparent 1px), '
+      + 'radial-gradient(circle at 20% 60%, #ffe89a 60%, #ff9d3a 100%)',
+    whiteBorder: '#ffb347',
+    questDesc: '시즌 패스 20레벨 달성 (불꽃놀이의 밤)',
+  },
+  {
+    id: 'firefly',
+    name: '반딧불이',
+    black: 'linear-gradient(160deg, #1a2e18, #08120a)',
+    white: 'radial-gradient(circle at 35% 35%, #e8ffb8, #9fd85a 70%)',
+    whiteBorder: '#b8e06a',
+    questDesc: '시즌 상점에서 코인으로 구매 (700코인)',
+  },
+  {
+    id: 'fuseWick',
+    name: '폭죽 심지',
+    black: 'linear-gradient(160deg, #4a3a2a, #1a1208)',
+    white: 'radial-gradient(circle at 30% 30%, #fff6d0, #ff8a3a 75%)',
+    whiteBorder: '#ff9d4a',
+    questDesc: '시즌 상점에서 코인으로 구매 (900코인)',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -695,6 +753,7 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'frostWindow': return (stats.loginStreak?.streak || 0) >= 14;
     case 'volcanicAsh': return (stats.destroyKills || 0) >= 100;
     case 'libraryArchive': return (stats.totalCardUses || 0) >= 150;
+    case 'seasonFireworksSky': return (stats.seasonLevel || 0) >= 10;
     default: return false;
   }
 }
@@ -739,6 +798,7 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'amethyst': return (stats.alchemyUses || 0) >= 100;
     case 'auroraSilk': return (stats.effectEquippedWins || 0) >= 10;
     case 'timelapse': return (stats.totalPlaySeconds || 0) >= 86400;
+    case 'seasonSparkler': return (stats.seasonLevel || 0) >= 20;
     default: return false;
   }
 }
@@ -786,6 +846,7 @@ export function getBoardSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'frostWindow': return clampProgress(stats.loginStreak?.streak, 14);
     case 'volcanicAsh': return clampProgress(stats.destroyKills, 100);
     case 'libraryArchive': return clampProgress(stats.totalCardUses, 150);
+    case 'seasonFireworksSky': return clampProgress(stats.seasonLevel, 10);
     default: return null;
   }
 }
@@ -843,6 +904,7 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'amethyst': return clampProgress(stats.alchemyUses, 100);
     case 'auroraSilk': return clampProgress(stats.effectEquippedWins, 10);
     case 'timelapse': return clampProgress(stats.totalPlaySeconds, 86400);
+    case 'seasonSparkler': return clampProgress(stats.seasonLevel, 20);
     default: return null;
   }
 }

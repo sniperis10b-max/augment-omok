@@ -46,6 +46,12 @@ import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.j
 import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins, toBgImage } from './skins.js';
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
+import { isSeasonActive } from './seasonPass.js';
+import {
+  CURRENT_SEASON, levelProgress, getDailyMissionProgress, getWeeklyMissionProgress, getSeasonMilestoneProgress,
+  ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
+  SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS,
+} from './seasonPass.js';
 import { CHALLENGES, getChallengeById, hasCompletedAllChallenges, LADDER_LEVELS } from './challenges.js';
 import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
 import {
@@ -453,6 +459,10 @@ export default function App() {
         if (usedCount >= CARDS.length) unlockAndNotify('allRounder');
         bumpNestedCounter(user.uid, 'cardUseCounts', cur, 1).catch(() => {});
         bumpCounter(user.uid, 'totalCardUses', 1).catch(() => {});
+        // 시즌 패스: 이번 시즌 기간에만 누적돼요 (2인 로컬 대국은 위 myColor 체크에서 이미 제외됨).
+        if (isSeasonActive()) {
+          bumpCounter(user.uid, 'seasonCardUses', 1).catch(() => {});
+        }
         if (PROB_CARD_IDS.has(cur)) {
           bumpCounter(user.uid, 'totalProbAttempts', 1).catch(() => {});
         }
@@ -943,6 +953,11 @@ export default function App() {
           const result = state.winner === null ? 'draw' : state.winner === myColor ? 'win' : 'loss';
           recordGameResult(user.uid, result).catch(() => {});
 
+          // 시즌 패스: 대국 판수(승패 무관, 2인 로컬 대국은 myColor가 없어서 이미 제외됨)
+          if (isFirebaseConfigured() && isSeasonActive()) {
+            bumpCounter(user.uid, 'seasonGamesPlayed', 1).catch(() => {});
+          }
+
           // ---- 업적 집계 (2인 대국은 myColor가 null이라 이 블록 자체가 실행 안 돼요) ----
           if (isFirebaseConfigured()) {
             (async () => {
@@ -950,6 +965,10 @@ export default function App() {
                 if (result === 'win') {
                   const newWins = await bumpCounter(user.uid, 'wins', 1);
                   unlockManyAndNotify(computeNewlyUnlockedWinTiers(newWins, myTitles));
+                  // 시즌 패스: 이번 시즌 누적 승수
+                  if (isSeasonActive()) {
+                    bumpCounter(user.uid, 'seasonWins', 1).catch(() => {});
+                  }
 
                   const colorTitle = myColor === BLACK ? 'blackMaster' : 'whiteMaster';
                   const colorField = myColor === BLACK ? 'blackWins' : 'whiteWins';
@@ -1080,6 +1099,10 @@ export default function App() {
                 if (online && online.role !== 'spectator') {
                   const newOnlineGames = await bumpCounter(user.uid, 'onlineGames', 1);
                   if (newOnlineGames >= 1) unlockAndNotify('beginner');
+                  // 시즌 패스: 이번 시즌 온라인 대전 판수 (주간 미션 "온라인 대전 5판"용)
+                  if (isSeasonActive()) {
+                    bumpCounter(user.uid, 'seasonOnlineGames', 1).catch(() => {});
+                  }
 
                   if (result === 'draw' && state.drawByOffer) {
                     const newPacifist = await bumpCounter(user.uid, 'drawOfferSuccesses', 1);
@@ -1530,6 +1553,55 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
   const [myStats, setMyStats] = useState({});
   const [myGrantedSkins, setMyGrantedSkins] = useState({ board: {}, stone: {} });
+  const [seasonProgress, setSeasonProgress] = useState(null);
+  const [seasonBusy, setSeasonBusy] = useState(false);
+  const [seasonNotice, setSeasonNotice] = useState('');
+
+  async function refreshSeasonProgress() {
+    if (!user || !isFirebaseConfigured()) return;
+    const data = await getSeasonProgressData(user.uid);
+    const daily = await ensureSeasonDailyMissions(user.uid, myStats);
+    const weekly = await ensureSeasonWeeklyMissions(user.uid, myStats);
+    setSeasonProgress({ ...data, seasonDaily: daily, seasonWeekly: weekly });
+  }
+
+  useEffect(() => {
+    refreshSeasonProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
+
+  async function handleClaimSeasonMission(periodType, mission) {
+    if (!user || seasonBusy) return;
+    setSeasonBusy(true);
+    try {
+      const res = await claimSeasonMission(user.uid, periodType, mission.id, mission.points, seasonProgress?.seasonPoints || 0);
+      setSeasonNotice(res.leveledUpTo ? `레벨 ${res.leveledUpTo} 달성! 코인 +${res.coinsAwarded}` : `+${mission.points}점 획득!`);
+      await refreshSeasonProgress();
+    } catch {
+      setSeasonNotice('수령하지 못했어요. 다시 시도해주세요.');
+    } finally {
+      setSeasonBusy(false);
+    }
+  }
+
+  async function handlePurchaseShopItem(item) {
+    if (!user || seasonBusy) return;
+    setSeasonBusy(true);
+    try {
+      const res = await purchaseShopItem(user.uid, item.id, seasonProgress?.seasonCoins || 0);
+      if (res.ok) {
+        setSeasonNotice(`'${item.name}' 구매 완료!`);
+        if (item.type === 'boardSkin') setMyGrantedSkins((p) => ({ ...p, board: { ...p.board, [item.id]: true } }));
+        if (item.type === 'stoneSkin') setMyGrantedSkins((p) => ({ ...p, stone: { ...p.stone, [item.id]: true } }));
+        if (item.type === 'title') unlockAndNotify(item.id);
+        await refreshSeasonProgress();
+      } else {
+        setSeasonNotice(res.reason === 'insufficient' ? '코인이 부족해요.' : '구매하지 못했어요.');
+      }
+    } finally {
+      setSeasonBusy(false);
+    }
+  }
 
   // 스킨이 새로 해금되면(퀘스트 달성) 칭호처럼 토스트 알림을 띄워요.
   useEffect(() => {
@@ -1801,6 +1873,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             </button>
             <button className="icon-toggle-btn" onClick={() => setStep('profile')} title="프로필">
               <IdCard size={16} />
+            </button>
+            <button className="icon-toggle-btn" onClick={() => setStep('season')} title="시즌 패스">
+              <Gift size={16} />
             </button>
             <button className="icon-toggle-btn" onClick={() => setStep('skins')} title="스킨">
               <Palette size={16} />
@@ -3297,6 +3372,91 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             </div>
           </>
         )}
+      </div>
+    );
+  }
+
+  if (step === 'season') {
+    if (!user) {
+      return (
+        <div className="page">
+          <header className="header"><h1>증강 오목</h1></header>
+          <p className="subtitle">시즌 패스</p>
+          <button className="setup-back" onClick={() => setStep('mode')}><ChevronLeft size={16} /> 뒤로</button>
+          <p className="setup-card-desc">로그인하면 시즌 패스를 볼 수 있어요.</p>
+        </div>
+      );
+    }
+    const points = seasonProgress?.seasonPoints || 0;
+    const coins = seasonProgress?.seasonCoins || 0;
+    const prog = levelProgress(points);
+    const dailyList = getDailyMissionProgress(seasonProgress?.seasonDaily, myStats);
+    const weeklyList = getWeeklyMissionProgress(seasonProgress?.seasonWeekly, myStats);
+    const seasonList = getSeasonMilestoneProgress(seasonProgress?.seasonMilestoneClaims, myStats);
+
+    const renderMission = (periodType, m) => (
+      <div key={m.id} className="leaderboard-row" style={{ alignItems: 'center' }}>
+        <span className="leaderboard-name">
+          {m.name} <span className="setup-card-desc">({m.current}/{m.target})</span>
+        </span>
+        {m.claimed ? (
+          <span className="setup-card-desc">완료</span>
+        ) : m.done ? (
+          <button className="reset-btn" disabled={seasonBusy} onClick={() => handleClaimSeasonMission(periodType, m)}>
+            +{m.points}점 받기
+          </button>
+        ) : (
+          <span className="leaderboard-score">{m.points}점</span>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="page">
+        <header className="header"><h1>증강 오목</h1></header>
+        <p className="subtitle">시즌 패스 · {CURRENT_SEASON.name}</p>
+        <button className="setup-back" onClick={() => setStep('mode')}><ChevronLeft size={16} /> 뒤로</button>
+
+        {!isSeasonActive() && <p className="setup-warning">지금은 시즌 기간이 아니에요.</p>}
+        {seasonNotice && <p className="setup-card-desc">{seasonNotice}</p>}
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">레벨 {prog.level} / 30 · 코인 {coins}</div>
+          <div className="title-progress-track">
+            <div className="title-progress-fill" style={{ width: `${prog.pct}%` }} />
+            <span className="title-progress-label">{prog.current} / {prog.target}</span>
+          </div>
+          <p className="setup-card-desc" style={{ marginTop: 8 }}>
+            10레벨: {REWARD_LEVELS[10].name} · 20레벨: {REWARD_LEVELS[20].name} · 30레벨: {REWARD_LEVELS[30].name}
+          </p>
+        </div>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">일일 미션</div>
+          {dailyList.map((m) => renderMission('daily', m))}
+        </div>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">주간 미션</div>
+          {weeklyList.map((m) => renderMission('weekly', m))}
+        </div>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">시즌 마일스톤</div>
+          {seasonList.map((m) => renderMission('season', m))}
+        </div>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">시즌 상점</div>
+          {SHOP_ITEMS.map((item) => (
+            <div key={item.id} className="leaderboard-row" style={{ alignItems: 'center' }}>
+              <span className="leaderboard-name">{item.name}</span>
+              <button className="reset-btn" disabled={seasonBusy || coins < item.price} onClick={() => handlePurchaseShopItem(item)}>
+                {item.price}코인
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
