@@ -869,6 +869,15 @@ body {
   100% { opacity: 0; }
 }
 
+.roulette-spin-icon {
+  animation: rouletteSpin 0.5s linear infinite;
+}
+
+@keyframes rouletteSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .title-toast {
   position: fixed;
   top: 14px;

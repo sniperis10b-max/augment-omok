@@ -231,9 +231,9 @@ export async function clearInvite(myUid, fromUid) {
 // 다음 사람이 그 자리를 발견하면 방에 참가한 뒤 자리를 비워요. 트랜잭션으로 동시 접속을
 // 안전하게 처리해요.
 
-export async function quickMatch(timeLimitSec, cardsPerPlayer, hostUid, ranked = false) {
+export async function quickMatch(timeLimitSec, cardsPerPlayer, hostUid, ranked = false, rouletteMode = false) {
   const db = getDb();
-  const queueKey = `${ranked ? 'ranked' : 'casual'}_${timeLimitSec || 0}_${cardsPerPlayer || 3}`;
+  const queueKey = `${ranked ? 'ranked' : 'casual'}_${timeLimitSec || 0}_${cardsPerPlayer || 3}_${rouletteMode ? 'roulette' : 'normal'}`;
   const waitingRef = ref(db, `matchmaking/waiting/${queueKey}`);
 
   // 오래된(2분 이상) 대기 정보는 무효로 취급해서 매칭이 영영 막히지 않게 해요.
@@ -253,13 +253,13 @@ export async function quickMatch(timeLimitSec, cardsPerPlayer, hostUid, ranked =
     });
 
     if (result.committed && !result.snapshot.val()) {
-      return { role: 'guest', code: existingVal.code, hostColor: existingVal.hostColor, queueKey, ranked };
+      return { role: 'guest', code: existingVal.code, hostColor: existingVal.hostColor, queueKey, ranked, rouletteMode };
     }
     // 다른 사람이 먼저 가져갔으면 아래로 내려가서 새로 방을 만들어요.
   }
 
   const hostColor = Math.random() < 0.5 ? BLACK : WHITE;
-  const code = await createRoom(hostColor, timeLimitSec, cardsPerPlayer, hostUid, ranked);
+  const code = await createRoom(hostColor, timeLimitSec, cardsPerPlayer, hostUid, ranked, rouletteMode);
 
   const claim = await runTransaction(waitingRef, (current) => {
     if (current && current.at && now - current.at < STALE_MS) {
@@ -269,7 +269,7 @@ export async function quickMatch(timeLimitSec, cardsPerPlayer, hostUid, ranked =
   });
 
   if (claim.committed && claim.snapshot.val() && claim.snapshot.val().code === code) {
-    return { role: 'host', code, hostColor, queueKey, ranked };
+    return { role: 'host', code, hostColor, queueKey, ranked, rouletteMode };
   }
 
   // 경합에서 밀렸으면, 그 사이 자리를 차지한 사람의 방으로 게스트 참가
@@ -277,11 +277,11 @@ export async function quickMatch(timeLimitSec, cardsPerPlayer, hostUid, ranked =
   const latestVal = latest.val();
   if (latestVal) {
     await runTransaction(waitingRef, (current) => (current && current.code === latestVal.code ? null : current));
-    return { role: 'guest', code: latestVal.code, hostColor: latestVal.hostColor, queueKey, ranked };
+    return { role: 'guest', code: latestVal.code, hostColor: latestVal.hostColor, queueKey, ranked, rouletteMode };
   }
 
   // 극히 드문 경우: 그냥 내가 만든 방으로 다시 시도
-  return { role: 'host', code, hostColor, queueKey, ranked };
+  return { role: 'host', code, hostColor, queueKey, ranked, rouletteMode };
 }
 
 export async function cancelQuickMatch(code, queueKey) {

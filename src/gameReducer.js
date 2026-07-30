@@ -12,6 +12,7 @@ import {
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
 import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS } from './challenges.js';
+import { pickRandomRouletteRule } from './roulette.js';
 
 const STANDALONE = new Set([
   'destroy', 'alchemy', 'swap', 'moveStone', 'reinforce', 'barrier', 'ward',
@@ -48,6 +49,12 @@ function bumpDestroyCount(next, player, amount = 1) {
     ...next.stoneDestroyCount,
     [player]: (next.stoneDestroyCount?.[player] || 0) + amount,
   };
+  // 룰렛 "파괴전 승리": 상대 돌 10개를 파괴하면 오목과 무관하게 즉시 승리해요.
+  if (next.rouletteRule === 'destroyWin' && next.phase !== 'over' && next.stoneDestroyCount[player] >= 10) {
+    next.phase = 'over';
+    next.winner = player;
+    next.message = `상대 돌 10개를 파괴해서 ${player === BLACK ? '흑' : '백'} 승리!`;
+  }
 }
 
 // 업적 집계용: player가 사용한 확률형 카드의 성공/실패를 누적해요.
@@ -109,6 +116,25 @@ function draftPoolForChallenge(pool, player, state) {
   return pool.filter((id) => !state.challengeCardBan[id]);
 }
 
+// 룰렛 "파괴전": 드래프트 풀을 파괴 계열 카드로만 제한해요 (챌린지와 달리 양쪽 다 적용돼요).
+function draftPoolForRoulette(pool, state) {
+  if (state.rouletteRule !== 'destroyOnly') return pool;
+  const filtered = pool.filter((id) => DESTROY_CARD_IDS.has(id));
+  return filtered.length > 0 ? filtered : pool;
+}
+
+// 게임 중 카드 효과(머릿수 싸움/리롤/복제 등)가 무작위로 카드를 뽑을 때도, 룰렛
+// "파괴전"이 켜져 있으면 그 풀 안에서만 뽑히게 해요.
+function effectivePool(player, state) {
+  return draftPoolForRoulette(poolForPlayer(player), state);
+}
+
+// 룰렛 "승리조건 롤링": 5수마다 4목 -> 5목 -> 6목 순서로 순환해요.
+function rollingWinLength(ply) {
+  const bucket = Math.floor(ply / 5) % 3;
+  return [4, 5, 6][bucket];
+}
+
 function buildDraftOrder(cardsPerPlayer) {
   const n = Math.max(1, cardsPerPlayer || 3);
   const order = [];
@@ -166,6 +192,11 @@ export function createInitialState() {
     humanColor: null,
     challengeId: null,
     challengeCardBan: {},
+    rouletteRule: null,
+    pendingPhase: null,
+    cardUsedThisTurn: { [BLACK]: false, [WHITE]: false },
+    stoneBirthPly: {},
+    canyonRing: 0,
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
     rematchVotes: { [BLACK]: false, [WHITE]: false },
@@ -231,7 +262,11 @@ function withDeadline(state) {
   if (state.phase !== 'play' || !state.timeLimitSec) {
     return { ...state, turnDeadline: null };
   }
-  return { ...state, turnDeadline: Date.now() + state.timeLimitSec * 1000 };
+  // 룰렛 "점점 짧아지는 시간": 한 수마다 0.5초씩 줄어들고, 최소 1초는 보장돼요.
+  const effectiveSec = state.rouletteRule === 'shrinkingTime'
+    ? Math.max(1, state.timeLimitSec - state.ply * 0.5)
+    : state.timeLimitSec;
+  return { ...state, turnDeadline: Date.now() + effectiveSec * 1000 };
 }
 
 // player가 지금 합법적으로 놓을 수 있는 칸이 하나라도 있는지 확인.
@@ -280,6 +315,20 @@ function advanceTurn(state, fromPlayer) {
     next.message = `${candidate === BLACK ? '흑' : '백'} 차례예요.`;
   }
 
+  // 룰렛 "강제 카드 턴": 새로 턴을 받는 쪽의 "이번 턴에 카드 썼는지" 표시를 초기화해요.
+  if (next.rouletteRule === 'forceCardTurn') {
+    next.cardUsedThisTurn = { ...next.cardUsedThisTurn, [next.turn]: false };
+  }
+
+  // 룰렛 "매턴 카드 자동 지급": 새로 턴을 받는 쪽에게 무작위 카드 1장을 자동으로 줘요.
+  if (next.rouletteRule === 'autoCardPerTurn') {
+    const pool = effectivePool(next.turn, next);
+    if (pool.length > 0) {
+      const randomId = pool[Math.floor(Math.random() * pool.length)];
+      next.draft = { ...next.draft, hands: { ...next.draft.hands, [next.turn]: [...next.draft.hands[next.turn], randomId] } };
+    }
+  }
+
   return withDeadline(endIfStalemated(next));
 }
 
@@ -292,6 +341,67 @@ function finishTurnAfterPlacement(state, placingPlayer) {
   }
   if (next.ruleFlags.forceForbiddenFor === placingPlayer) {
     next.ruleFlags = { ...next.ruleFlags, forceForbiddenFor: null };
+  }
+
+  // 룰렛 "번개 결착": 40수 안에 승부가 안 나면 무조건 무승부로 끝나요.
+  if (next.rouletteRule === 'suddenDeath' && next.phase === 'play' && next.ply >= 40) {
+    next.phase = 'over';
+    next.winner = null;
+    next.message = '번개 결착! 40수 안에 승부가 나지 않아 무승부로 끝났어요.';
+    return next;
+  }
+
+  // 룰렛 "협곡 붕괴": 10수마다 판 바깥 테두리를 한 줄씩 영구히 막아요.
+  if (next.rouletteRule === 'canyonCollapse' && next.ply % 10 === 0) {
+    const size = next.board.length;
+    const ring = next.canyonRing + 1;
+    if (ring * 2 < size) {
+      const blockedCells = { ...next.blockedCells };
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (x < ring || x >= size - ring || y < ring || y >= size - ring) {
+            blockedCells[key(x, y)] = Infinity;
+          }
+        }
+      }
+      next.blockedCells = blockedCells;
+      next.canyonRing = ring;
+      next.message = `협곡이 붕괴돼서 바깥 ${ring}줄이 막혔어요! ${next.message}`;
+    }
+  }
+
+  // 룰렛 "자동 소멸": 놓은 지 12수가 지난 돌은 사라져요.
+  if (next.rouletteRule === 'autoDecay') {
+    const size = next.board.length;
+    const birth = next.stoneBirthPly || {};
+    const decayed = [];
+    let changed = false;
+    const newBoard = next.board.map((row) => row.slice());
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (newBoard[y][x] === 0) continue;
+        const k = key(x, y);
+        const bornAt = birth[k];
+        if (bornAt != null && next.ply - bornAt >= 12) {
+          newBoard[y][x] = 0;
+          decayed.push(k);
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      next.board = newBoard;
+      const newBirth = { ...birth };
+      for (const k of decayed) delete newBirth[k];
+      next.stoneBirthPly = newBirth;
+      next.message = `오래된 돌이 자동으로 사라졌어요! ${next.message}`;
+    }
+  }
+
+  // 룰렛 "색깔 교대전": 10수마다 판 위 모든 돌의 흑/백이 뒤바뀌어요.
+  if (next.rouletteRule === 'colorSwap' && next.ply % 10 === 0) {
+    next.board = next.board.map((row) => row.map((v) => (v === BLACK ? WHITE : v === WHITE ? BLACK : v)));
+    next.message = `색깔이 서로 뒤바뀌었어요! ${next.message}`;
   }
 
   if (next.buffs.doubleMoveRemaining > 0) {
@@ -317,6 +427,15 @@ function tryPlaceStone(state, clickX, clickY) {
   let x = clickX;
   let y = clickY;
   let workingState = state;
+
+  // 룰렛 "강제 카드 턴": 손에 카드가 있는데 아직 이번 턴에 카드를 안 썼으면 착수를 거부해요.
+  if (
+    workingState.rouletteRule === 'forceCardTurn'
+    && !workingState.cardUsedThisTurn[player]
+    && workingState.draft.hands[player].length > 0
+  ) {
+    return { ...workingState, message: '이번 턴엔 카드를 먼저 써야 착수할 수 있어요.' };
+  }
 
   // 혼란: 클릭한 위치는 무시되고 지정된 anchor 주변 무작위 칸에 놓여요.
   if (workingState.confusion && workingState.confusion.player === player) {
@@ -363,11 +482,24 @@ function tryPlaceStone(state, clickX, clickY) {
   }
 
   const nextBoard = cloneBoard(board);
-  nextBoard[y][x] = player;
+
+  // 룰렛 "배신": 50% 확률로 방금 놓은 돌이 상대 돌로 바뀌어요.
+  let placedColor = player;
+  let betrayed = false;
+  if (workingState.rouletteRule === 'betrayal' && Math.random() < 0.5) {
+    placedColor = otherPlayer(player);
+    betrayed = true;
+  }
+  nextBoard[y][x] = placedColor;
 
   let nextState = { ...workingState, board: nextBoard, lastMove: { x, y } };
   nextState.history = [...workingState.history, nextBoard];
   nextState = pushMoveLog(nextState, { type: 'place', player, x, y, board: nextBoard });
+
+  // 룰렛 "자동 소멸"을 위해 이 칸이 언제(몇 수째) 놓였는지 기억해둬요.
+  if (workingState.rouletteRule === 'autoDecay') {
+    nextState.stoneBirthPly = { ...workingState.stoneBirthPly, [key(x, y)]: workingState.ply };
+  }
 
   if (nextState.forcedZone && nextState.forcedZone.player === player) {
     nextState.forcedZone = null;
@@ -389,22 +521,40 @@ function tryPlaceStone(state, clickX, clickY) {
     }
   }
 
-  const winLength = workingState.buffs.fourToWinActive ? 4 : (workingState.winLengthOverride?.[player] ?? 5);
+  const winLength = workingState.rouletteRule === 'rollingWin'
+    ? rollingWinLength(workingState.ply)
+    : (workingState.buffs.fourToWinActive ? 4 : (workingState.winLengthOverride?.[placedColor] ?? 5));
   const isBonusMove = !!workingState.buffs.doubleMoveBonusPending;
-  const excludeDiagonal = workingState.ruleFlags?.noDiagonalFor === player;
-  const won = !isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal });
+  const excludeDiagonal = workingState.ruleFlags?.noDiagonalFor === placedColor;
+
+  // 룰렛 "연속 두기 상시": 이번 수가 이 턴의 첫 수라면, 언제나 한 번 더 놓을 수 있게 예약해요.
+  if (workingState.rouletteRule === 'doubleMoveAlways' && !isBonusMove) {
+    nextState.buffs = { ...nextState.buffs, doubleMoveRemaining: 1 };
+  }
+
+  const won = !isBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal });
 
   if (won) {
-    const shieldHolder = otherPlayer(player);
+    // 룰렛 "역전 오목": 완성한 쪽이 오히려 패배해요.
+    const winner = workingState.rouletteRule === 'reverseWin' ? otherPlayer(placedColor) : placedColor;
+    const shieldHolder = otherPlayer(winner);
     if (nextState.winShield[shieldHolder]) {
       nextState.winShield = { ...nextState.winShield, [shieldHolder]: false };
       const res = finishTurnAfterPlacement(nextState, player);
       res.message = `${shieldHolder === BLACK ? '흑' : '백'}의 방어 카드가 승리를 무효화했어요! ${res.message}`;
       return res;
     }
+    // 룰렛 "승리 무효 룰렛": 50% 확률로 승리가 무효 처리되고 대국이 계속돼요.
+    if (workingState.rouletteRule === 'voidWinRoulette' && Math.random() < 0.5) {
+      const res = finishTurnAfterPlacement(nextState, player);
+      res.message = `오목을 완성했지만 룰렛 판정으로 무효 처리됐어요! ${res.message}`;
+      return res;
+    }
     nextState.phase = 'over';
-    nextState.winner = player;
-    nextState.message = `${player === BLACK ? '흑' : '백'} 승리!`;
+    nextState.winner = winner;
+    nextState.message = betrayed
+      ? `배신으로 돌이 뒤바뀌면서 ${winner === BLACK ? '흑' : '백'} 승리!`
+      : `${winner === BLACK ? '흑' : '백'} 승리!`;
     nextState = explodeBombs(nextState);
     return nextState;
   }
@@ -416,7 +566,7 @@ function tryPlaceStone(state, clickX, clickY) {
     return nextState;
   }
 
-  if (isBonusMove && checkWin(nextBoard, x, y, player, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal })) {
+  if (isBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal })) {
     const res = finishTurnAfterPlacement(nextState, player);
     res.message = `연속 두기의 두 번째 수로는 승리할 수 없어요! ${res.message}`;
     return res;
@@ -426,11 +576,32 @@ function tryPlaceStone(state, clickX, clickY) {
 }
 
 function removeFromHand(state, player, cardId) {
-  const hand = state.draft.hands[player].filter((id, idx, arr) => {
+  let next = state;
+
+  // 룰렛 "카드 강탈": 상대가 카드를 쓰면 나도 같은 카드를 하나 더 얻어요.
+  if (next.rouletteRule === 'cardSteal') {
+    const opponent = otherPlayer(player);
+    next = {
+      ...next,
+      draft: { ...next.draft, hands: { ...next.draft.hands, [opponent]: [...next.draft.hands[opponent], cardId] } },
+    };
+  }
+
+  // 룰렛 "강제 카드 턴": 이번 턴에 카드를 썼다고 기록해요.
+  if (next.rouletteRule === 'forceCardTurn') {
+    next = { ...next, cardUsedThisTurn: { ...next.cardUsedThisTurn, [player]: true } };
+  }
+
+  // 룰렛 "카드 소모 없음": 손에서 실제로 빼지 않아요.
+  if (next.rouletteRule === 'noCardConsumption') {
+    return next;
+  }
+
+  const hand = next.draft.hands[player].filter((id, idx, arr) => {
     const firstIdx = arr.indexOf(cardId);
     return !(idx === firstIdx && id === cardId);
   });
-  return { ...state, draft: { ...state.draft, hands: { ...state.draft.hands, [player]: hand } } };
+  return { ...next, draft: { ...next.draft, hands: { ...next.draft.hands, [player]: hand } } };
 }
 
 function resolveTargetedEffect(state, cardId, targets) {
@@ -772,6 +943,11 @@ function resolveTargetedEffect(state, cardId, targets) {
   next.board = board;
   next = removeFromHand(next, player, cardId);
   next.activeCard = null;
+
+  // 룰렛 "파괴전 승리"가 방금 발동해서 게임이 끝났으면, 아래의 턴 진행 로직으로
+  // 넘어가지 않고 여기서 바로 반환해요 (안 그러면 advanceTurn이 승리 메시지를 덮어써요).
+  if (next.phase === 'over') return next;
+
   if (cardId === 'overwrite' || cardId === 'wildcard') {
     next.lastMove = { x: targets[0].x, y: targets[0].y };
   }
@@ -1277,7 +1453,7 @@ export function gameReducer(state, action) {
       return { ...createInitialState(), ...action.state };
 
     case 'START_GAME': {
-      const { aiPlayer, difficulty, timeLimitSec, cardsPerPlayer, challengeId } = action;
+      const { aiPlayer, difficulty, timeLimitSec, cardsPerPlayer, challengeId, rouletteMode } = action;
       const fresh = createInitialState();
       const humanColor = aiPlayer ? otherPlayer(aiPlayer) : null;
 
@@ -1325,6 +1501,9 @@ export function gameReducer(state, action) {
         }
       }
 
+      // 룰렛 모드: 챌린지와는 함께 쓰지 않고, 켜져 있으면 이번 판에 적용할 특수 규칙을 하나 뽑아요.
+      const rouletteRule = (rouletteMode && !challengeId) ? pickRandomRouletteRule() : null;
+
       const base = {
         ...fresh,
         aiPlayer: aiPlayer || null,
@@ -1336,6 +1515,7 @@ export function gameReducer(state, action) {
         ruleFlags,
         winLengthOverride,
         blockedCells,
+        rouletteRule,
       };
 
       // 무카드 챌린지는 드래프트 자체를 건너뛰고 바로 대국을 시작해요.
@@ -1349,18 +1529,52 @@ export function gameReducer(state, action) {
         };
       }
 
+      // 룰렛 "매턴 카드 자동 지급"도 드래프트를 건너뛰고, 대신 매 턴마다 카드를 자동으로 받아요.
+      if (rouletteRule === 'autoCardPerTurn') {
+        return {
+          ...base,
+          phase: 'roulette',
+          pendingPhase: 'play',
+          turn: BLACK,
+          message: '룰렛으로 특수 규칙이 정해졌어요!',
+          draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
+        };
+      }
+
       const order = buildDraftOrder(cardsPerPlayer);
+      const draftPool = draftPoolForRoulette(draftPoolForChallenge(poolForPlayer(order[0]), order[0], base), base);
+      const draft = {
+        pool: draftPool,
+        hands: { [BLACK]: [], [WHITE]: [] },
+        order,
+        currentIndex: 0,
+        options: drawRandomCards(draftPool, 3),
+      };
+
+      if (rouletteRule) {
+        return {
+          ...base,
+          phase: 'roulette',
+          pendingPhase: 'draft',
+          message: '룰렛으로 특수 규칙이 정해졌어요!',
+          draft,
+        };
+      }
+
       return {
         ...base,
         phase: 'draft',
         message: '카드를 뽑는 중이에요.',
-        draft: {
-          pool: draftPoolForChallenge(poolForPlayer(order[0]), order[0], base),
-          hands: { [BLACK]: [], [WHITE]: [] },
-          order,
-          currentIndex: 0,
-          options: drawRandomCards(draftPoolForChallenge(poolForPlayer(order[0]), order[0], base), 3),
-        },
+        draft,
+      };
+    }
+
+    case 'ROULETTE_CONTINUE': {
+      if (state.phase !== 'roulette') return state;
+      return {
+        ...state,
+        phase: state.pendingPhase || 'draft',
+        pendingPhase: null,
       };
     }
 
@@ -1388,6 +1602,10 @@ export function gameReducer(state, action) {
             nextAiDifficulty = LADDER_LEVELS[0];
           }
         }
+        // 룰렛 모드로 진행한 판이었다면, 재대국에서도 새로 규칙을 하나 뽑아요.
+        const wasRoulette = !!state.rouletteRule;
+        const rouletteRule = wasRoulette ? pickRandomRouletteRule() : null;
+
         const base = {
           ...fresh,
           aiPlayer: state.aiPlayer,
@@ -1396,6 +1614,7 @@ export function gameReducer(state, action) {
           humanColor: state.humanColor,
           challengeId: state.challengeId,
           challengeCardBan: state.challengeCardBan || {},
+          rouletteRule,
           ruleFlags: {
             ...fresh.ruleFlags,
             noDiagonalFor: state.ruleFlags?.noDiagonalFor || null,
@@ -1422,18 +1641,42 @@ export function gameReducer(state, action) {
           };
         }
 
+        if (rouletteRule === 'autoCardPerTurn') {
+          return {
+            ...base,
+            phase: 'roulette',
+            pendingPhase: 'play',
+            turn: BLACK,
+            message: '룰렛으로 특수 규칙이 정해졌어요!',
+            draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
+          };
+        }
+
         const order = buildDraftOrder(cardsPerPlayer);
+        const draftPool = draftPoolForRoulette(draftPoolForChallenge(poolForPlayer(order[0]), order[0], base), base);
+        const draft = {
+          pool: draftPool,
+          hands: { [BLACK]: [], [WHITE]: [] },
+          order,
+          currentIndex: 0,
+          options: drawRandomCards(draftPool, 3),
+        };
+
+        if (rouletteRule) {
+          return {
+            ...base,
+            phase: 'roulette',
+            pendingPhase: 'draft',
+            message: '룰렛으로 특수 규칙이 정해졌어요!',
+            draft,
+          };
+        }
+
         return {
           ...base,
           phase: 'draft',
           message: '카드를 뽑는 중이에요.',
-          draft: {
-            pool: draftPoolForChallenge(poolForPlayer(order[0]), order[0], base),
-            hands: { [BLACK]: [], [WHITE]: [] },
-            order,
-            currentIndex: 0,
-            options: drawRandomCards(draftPoolForChallenge(poolForPlayer(order[0]), order[0], base), 3),
-          },
+          draft,
         };
       }
 

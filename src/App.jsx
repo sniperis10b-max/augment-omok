@@ -47,6 +47,7 @@ import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSk
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
 import { CHALLENGES, getChallengeById, hasCompletedAllChallenges, LADDER_LEVELS } from './challenges.js';
+import { ROULETTE_RULES, getRouletteRuleById } from './roulette.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -878,6 +879,7 @@ export default function App() {
           difficulty: 'normal',
           timeLimitSec: online.timeLimitSec || 0,
           cardsPerPlayer: online.cardsPerPlayer || 3,
+          rouletteMode: !!online.rouletteMode,
         });
       }
     });
@@ -1241,6 +1243,8 @@ export default function App() {
     );
   } else if (state.phase === 'draft') {
     screen = <DraftScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} online={online} user={user} />;
+  } else if (state.phase === 'roulette') {
+    screen = <RouletteScreen state={state} dispatch={online && online.role !== 'spectator' ? localDispatch : dispatch} />;
   } else {
     screen = (
       <GameScreen
@@ -1619,13 +1623,14 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     setBusy(true);
     setErrorMsg('');
     try {
-      const code = await createRoom(hostColor, settings.timeLimitSec, settings.cardsPerPlayer, user.uid);
+      const code = await createRoom(hostColor, settings.timeLimitSec, settings.cardsPerPlayer, user.uid, false, settings.rouletteMode);
       setOnline({
         code,
         localColor: hostColor,
         role: 'host',
         timeLimitSec: settings.timeLimitSec,
         cardsPerPlayer: settings.cardsPerPlayer,
+        rouletteMode: settings.rouletteMode,
       });
       setStep('online-waiting');
     } catch {
@@ -1687,6 +1692,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       aiPlayer: null,
       timeLimitSec: settings.timeLimitSec,
       cardsPerPlayer: settings.cardsPerPlayer,
+      rouletteMode: settings.rouletteMode,
     });
   }
 
@@ -1744,7 +1750,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     setMatchmaking(true);
     setErrorMsg('');
     try {
-      const res = await quickMatch(timeLimitSec, settings.cardsPerPlayer, user.uid, ranked);
+      const res = await quickMatch(timeLimitSec, settings.cardsPerPlayer, user.uid, ranked, settings.rouletteMode);
       if (res.role === 'host') {
         setOnline({
           code: res.code,
@@ -1755,12 +1761,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           timeLimitSec,
           cardsPerPlayer: settings.cardsPerPlayer,
           ranked: res.ranked,
+          rouletteMode: res.rouletteMode,
         });
         setStep('online-waiting');
       } else {
         const guestColor = res.hostColor === BLACK ? WHITE : BLACK;
         await joinRoom(res.code, user.uid);
-        setOnline({ code: res.code, localColor: guestColor, role: 'guest', ranked: res.ranked });
+        setOnline({ code: res.code, localColor: guestColor, role: 'guest', ranked: res.ranked, rouletteMode: res.rouletteMode });
         setStep('online-waiting');
       }
     } catch {
@@ -3457,6 +3464,34 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     );
   }
 
+  if (step === 'roulette-list') {
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">룰렛 규칙 목록</p>
+
+        <button className="setup-back" onClick={() => setStep('settings')}>
+          <ChevronLeft size={16} /> 뒤로
+        </button>
+
+        <p className="setup-card-desc" style={{ marginBottom: 10 }}>
+          대국 하나마다 아래 {ROULETTE_RULES.length}개 중 하나가 무작위로 뽑혀서 그 판 내내 적용돼요.
+        </p>
+
+        <div className="tutorial-card" style={{ padding: 0, overflow: 'hidden' }}>
+          {ROULETTE_RULES.map((r) => (
+            <div key={r.id} className="leaderboard-row" style={{ alignItems: 'flex-start', gap: 4, flexDirection: 'column' }}>
+              <div className="card-name">{r.name}</div>
+              <div className="setup-card-desc">{r.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (step === 'settings') {
     const applyCustomSeconds = () => {
       const v = Math.max(1, parseInt(customSeconds, 10) || 0);
@@ -3481,6 +3516,35 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <button className="setup-back" onClick={() => setStep('mode')}>
           <ChevronLeft size={16} /> 뒤로
         </button>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">룰렛 모드</div>
+          <p className="setup-card-desc" style={{ marginBottom: 8 }}>
+            켜면 대국을 시작할 때(카드를 뽑기 전) 무작위 특수 규칙이 하나 뽑혀서 그 판 내내 적용돼요.
+            온라인 대전에서는 룰렛 모드를 켠 사람끼리만 매칭돼요 (친구와 플레이는 예외).
+          </p>
+          <div className="setup-options" style={{ gridTemplateColumns: '1fr 1fr', display: 'grid' }}>
+            <button
+              className="card-option"
+              style={{ borderColor: settings.rouletteMode ? 'var(--accent)' : undefined }}
+              onClick={() => updateSettings({ rouletteMode: true })}
+            >
+              <Dice5 size={18} />
+              <div className="card-name">켜기</div>
+            </button>
+            <button
+              className="card-option"
+              style={{ borderColor: !settings.rouletteMode ? 'var(--accent)' : undefined }}
+              onClick={() => updateSettings({ rouletteMode: false })}
+            >
+              <XIcon size={18} />
+              <div className="card-name">끄기</div>
+            </button>
+          </div>
+          <button className="setup-tutorial-link" style={{ marginTop: 10 }} onClick={() => setStep('roulette-list')}>
+            <ListOrdered size={16} /> 룰렛 규칙 목록 보기
+          </button>
+        </div>
 
         <div className="tutorial-card">
           <div className="tutorial-title">화면 테마</div>
@@ -3778,6 +3842,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   timeLimitSec: settings.timeLimitSec,
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: 'ladder',
+                  rouletteMode: settings.rouletteMode,
                 });
               } else if (selectedChallenge) {
                 dispatch({
@@ -3787,6 +3852,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   timeLimitSec: settings.timeLimitSec,
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: selectedChallenge,
+                  rouletteMode: settings.rouletteMode,
                 });
               } else {
                 setStep('difficulty');
@@ -3810,6 +3876,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   timeLimitSec: settings.timeLimitSec,
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: 'ladder',
+                  rouletteMode: settings.rouletteMode,
                 });
               } else if (selectedChallenge) {
                 dispatch({
@@ -3819,6 +3886,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   timeLimitSec: settings.timeLimitSec,
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: selectedChallenge,
+                  rouletteMode: settings.rouletteMode,
                 });
               } else {
                 setStep('difficulty');
@@ -3866,6 +3934,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 timeLimitSec: settings.timeLimitSec,
                 cardsPerPlayer: settings.cardsPerPlayer,
                 challengeId: selectedChallenge,
+                rouletteMode: settings.rouletteMode,
               })}
             >
               <div className="setup-card-title">{cfg.label}</div>
@@ -4259,6 +4328,53 @@ function ReplayScreen({ record, onBack }) {
   );
 }
 
+// 대국 시작 직후, 카드를 뽑기 전에 잠깐 보여주는 룰렛 화면이에요.
+// 실제 규칙은 이미 리듀서에서 정해져 있고(state.rouletteRule), 여기서는 그 결과를
+// "슬롯머신처럼 여러 개를 훑다가 멈추는" 연출만 담당해요 (온라인이어도 결과는 이미 동일).
+function RouletteScreen({ state, dispatch }) {
+  const [spinIndex, setSpinIndex] = useState(0);
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    const spinTimer = setInterval(() => {
+      setSpinIndex((i) => (i + 1) % ROULETTE_RULES.length);
+    }, 90);
+    const stopTimer = setTimeout(() => {
+      clearInterval(spinTimer);
+      setSettled(true);
+    }, 1800);
+    const continueTimer = setTimeout(() => {
+      dispatch({ type: 'ROULETTE_CONTINUE' });
+    }, 3200);
+    return () => {
+      clearInterval(spinTimer);
+      clearTimeout(stopTimer);
+      clearTimeout(continueTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const finalRule = getRouletteRuleById(state.rouletteRule);
+  const shown = settled ? finalRule : ROULETTE_RULES[spinIndex];
+
+  return (
+    <div className="page">
+      <header className="header">
+        <h1>증강 오목</h1>
+      </header>
+      <p className="subtitle">룰렛 모드</p>
+
+      <div className="tutorial-card" style={{ textAlign: 'center', padding: '2rem 1.25rem' }}>
+        <Dices size={32} className={settled ? '' : 'roulette-spin-icon'} style={{ marginBottom: 10 }} />
+        <div className="tutorial-title" style={{ fontSize: 20, marginBottom: 6 }}>
+          {shown?.name}
+        </div>
+        <p className="setup-card-desc">{settled ? shown?.desc : '규칙을 뽑는 중...'}</p>
+      </div>
+    </div>
+  );
+}
+
 function DraftScreen({ state, dispatch, online, user }) {
   const { draft, aiPlayer } = state;
   const currentPlayer = draft.order[draft.currentIndex];
@@ -4532,6 +4648,10 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       ? `${kind} · 방 ${online.code} · 관전 중`
       : `${kind} · 방 ${online.code} · 나는 ${PLAYER_LABEL[online.localColor]}`;
   }
+  if (state.rouletteRule) {
+    const rule = getRouletteRuleById(state.rouletteRule);
+    modeLabel += ` · 🎲 ${rule?.name || state.rouletteRule}`;
+  }
 
   function resignPlayer() {
     if (online && !isSpectator) return online.localColor;
@@ -4555,6 +4675,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       difficulty: state.aiDifficulty,
       timeLimitSec: state.timeLimitSec,
       cardsPerPlayer: state.draft.order.length / 2,
+      rouletteMode: settings.rouletteMode,
     });
   }
 
@@ -4903,6 +5024,18 @@ function Board({ state, dispatch, online, settings }) {
   const confusionZone = state.confusion && state.confusion.player === state.turn ? state.confusion.anchor : null;
   const placementEffect = getPlacementEffectById(settings?.placementEffect);
 
+  // 룰렛 "안개 전장": 상대 돌이 안 보여요 (내 색을 알 수 있는 경우에만 - 2인 로컬은 예외).
+  const myColorForFog = online && !isSpectator ? online.localColor : (state.aiPlayer ? otherPlayer(state.aiPlayer) : null);
+  const fogActive = state.rouletteRule === 'fogOfWar' && myColorForFog != null;
+
+  // 룰렛 "최근 3수만 표시": 최근에 놓인 돌 3개만 보여요.
+  const recentOnlyActive = state.rouletteRule === 'recentOnly';
+  let recentCellKeys = null;
+  if (recentOnlyActive) {
+    const placements = (state.moveLog || []).filter((m) => m.type === 'place').slice(-3);
+    recentCellKeys = new Set(placements.map((m) => `${m.x},${m.y}`));
+  }
+
   return (
     <div className="board">
       <div className="grid-area">
@@ -4926,6 +5059,10 @@ function Board({ state, dispatch, online, settings }) {
             const inForcedZone = forcedZone && x >= forcedZone.x0 && x <= forcedZone.x1 && y >= forcedZone.y0 && y <= forcedZone.y1;
             const inConfusionZone = confusionZone && Math.abs(x - confusionZone.x) <= 1 && Math.abs(y - confusionZone.y) <= 1;
             const isLastMove = state.lastMove && state.lastMove.x === x && state.lastMove.y === y;
+            const hideStone = value !== 0 && (
+              (fogActive && value !== WILD && value !== myColorForFog)
+              || (recentOnlyActive && !recentCellKeys.has(`${x},${y}`))
+            );
 
             return (
               <button
@@ -4941,7 +5078,7 @@ function Board({ state, dispatch, online, settings }) {
                 onClick={() => dispatch({ type: 'SELECT_CELL', x, y })}
                 aria-label={`${x + 1}, ${y + 1} 교차점`}
               >
-                {value !== 0 && (
+                {value !== 0 && !hideStone && (
                   <span
                     className={`stone ${
                       value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'
