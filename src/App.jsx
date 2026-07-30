@@ -2960,7 +2960,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             >
               장착 안 함
             </button>
-            {['승리', '랭크', '카드', '소셜', '스타일', '특별'].map((category) => (
+            {['승리', '랭크', '카드', '소셜', '스타일', '시즌', '특별'].map((category) => (
               <div key={category} style={{ marginTop: 10 }}>
                 <div className="setup-card-desc" style={{ fontWeight: 700, marginBottom: 6 }}>{category}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -3478,7 +3478,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
         <div className="tutorial-card">
           <div className="tutorial-title">시즌 상점</div>
-          {SHOP_ITEMS.map((item) => (
+          {SHOP_ITEMS.filter((item) => {
+            if (item.type === 'title') return !myTitles[item.id];
+            if (item.type === 'boardSkin') return !myGrantedSkins.board[item.id];
+            if (item.type === 'stoneSkin') return !myGrantedSkins.stone[item.id];
+            return true;
+          }).map((item) => (
             <div key={item.id} className="leaderboard-row" style={{ alignItems: 'center' }}>
               <span className="leaderboard-name">{item.name}</span>
               <button className="reset-btn" disabled={seasonBusy || (!devUnlimited && coins < item.price)} onClick={() => handlePurchaseShopItem(item)}>
@@ -3486,6 +3491,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
               </button>
             </div>
           ))}
+          {SHOP_ITEMS.every((item) => {
+            if (item.type === 'title') return !!myTitles[item.id];
+            if (item.type === 'boardSkin') return !!myGrantedSkins.board[item.id];
+            if (item.type === 'stoneSkin') return !!myGrantedSkins.stone[item.id];
+            return false;
+          }) && <p className="setup-card-desc">전부 구매했어요!</p>}
         </div>
       </div>
     );
