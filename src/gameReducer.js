@@ -12,7 +12,7 @@ import {
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
 import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS } from './challenges.js';
-import { pickRandomRouletteRule, rollingWinLength } from './roulette.js';
+import { pickRandomRouletteRule, rollingWinLength, getRouletteRuleById } from './roulette.js';
 
 const STANDALONE = new Set([
   'destroy', 'alchemy', 'swap', 'moveStone', 'reinforce', 'barrier', 'ward',
@@ -1496,7 +1496,10 @@ export function gameReducer(state, action) {
       }
 
       // 룰렛 모드: 챌린지와는 함께 쓰지 않고, 켜져 있으면 이번 판에 적용할 특수 규칙을 하나 뽑아요.
-      const rouletteRule = (rouletteMode && !challengeId) ? pickRandomRouletteRule() : null;
+      // 개발자 계정 전용: 특정 규칙으로 결과를 고정할 수 있어요 (없거나 잘못된 id면 무작위).
+      const rouletteRule = (rouletteMode && !challengeId)
+        ? (getRouletteRuleById(action.forcedRouletteRule) ? action.forcedRouletteRule : pickRandomRouletteRule())
+        : null;
 
       const base = {
         ...fresh,

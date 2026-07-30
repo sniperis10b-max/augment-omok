@@ -880,6 +880,7 @@ export default function App() {
           timeLimitSec: online.timeLimitSec || 0,
           cardsPerPlayer: online.cardsPerPlayer || 3,
           rouletteMode: !!online.rouletteMode,
+          forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
         });
       }
     });
@@ -1697,6 +1698,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       timeLimitSec: settings.timeLimitSec,
       cardsPerPlayer: settings.cardsPerPlayer,
       rouletteMode: settings.rouletteMode,
+      forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
     });
   }
 
@@ -3480,6 +3482,22 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <ChevronLeft size={16} /> 뒤로
         </button>
 
+        {isDevAccount(user) && (
+          <div className="tutorial-card">
+            <div className="tutorial-title">개발자 전용: 다음 판 룰렛 결과 고정</div>
+            <p className="setup-card-desc" style={{ marginBottom: 8 }}>
+              현재: {settings.forcedRouletteRule ? getRouletteRuleById(settings.forcedRouletteRule)?.name : '랜덤(고정 안 함)'}
+            </p>
+            <button
+              className="reset-btn"
+              style={{ marginBottom: 8 }}
+              onClick={() => updateSettings({ forcedRouletteRule: null })}
+            >
+              고정 해제 (랜덤으로)
+            </button>
+          </div>
+        )}
+
         <p className="setup-card-desc" style={{ marginBottom: 10 }}>
           대국 하나마다 아래 {ROULETTE_RULES.length}개 중 하나가 무작위로 뽑혀서 그 판 내내 적용돼요.
         </p>
@@ -3487,7 +3505,19 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <div className="tutorial-card" style={{ padding: 0, overflow: 'hidden' }}>
           {ROULETTE_RULES.map((r) => (
             <div key={r.id} className="leaderboard-row" style={{ alignItems: 'flex-start', gap: 4, flexDirection: 'column' }}>
-              <div className="card-name">{r.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                <div className="card-name" style={{ flex: 1 }}>{r.name}</div>
+                {isDevAccount(user) && (
+                  <button
+                    className="icon-toggle-btn"
+                    title="이 규칙으로 고정"
+                    style={{ borderColor: settings.forcedRouletteRule === r.id ? 'var(--accent)' : undefined }}
+                    onClick={() => updateSettings({ forcedRouletteRule: r.id })}
+                  >
+                    <Dices size={14} />
+                  </button>
+                )}
+              </div>
               <div className="setup-card-desc">{r.desc}</div>
             </div>
           ))}
@@ -3847,6 +3877,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: 'ladder',
                   rouletteMode: settings.rouletteMode,
+                  forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
                 });
               } else if (selectedChallenge) {
                 dispatch({
@@ -3857,6 +3888,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: selectedChallenge,
                   rouletteMode: settings.rouletteMode,
+                  forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
                 });
               } else {
                 setStep('difficulty');
@@ -3881,6 +3913,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: 'ladder',
                   rouletteMode: settings.rouletteMode,
+                  forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
                 });
               } else if (selectedChallenge) {
                 dispatch({
@@ -3891,6 +3924,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   cardsPerPlayer: settings.cardsPerPlayer,
                   challengeId: selectedChallenge,
                   rouletteMode: settings.rouletteMode,
+                  forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
                 });
               } else {
                 setStep('difficulty');
@@ -3939,6 +3973,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 cardsPerPlayer: settings.cardsPerPlayer,
                 challengeId: selectedChallenge,
                 rouletteMode: settings.rouletteMode,
+                forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
               })}
             >
               <div className="setup-card-title">{cfg.label}</div>
@@ -4680,6 +4715,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       timeLimitSec: state.timeLimitSec,
       cardsPerPlayer: state.draft.order.length / 2,
       rouletteMode: settings.rouletteMode,
+      forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
     });
   }
 

@@ -23,6 +23,7 @@ const DEFAULTS = {
   stoneSkin: 'classic', // 바둑돌 스킨 (지금은 개발자 계정만 바꿀 수 있어요)
   placementEffect: 'none', // 착수 이펙트 (지금은 개발자 계정 전용)
   rouletteMode: false, // 룰렛 모드: 켜면 대국 시작 시 무작위 특수 규칙이 하나 적용돼요
+  forcedRouletteRule: null, // 개발자 계정 전용: 다음 판 룰렛 결과를 특정 규칙으로 고정
 };
 
 export function loadSettings() {
