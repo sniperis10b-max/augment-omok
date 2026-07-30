@@ -2845,21 +2845,27 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                         onClick={() => updateSettings({ stoneSkin: skin.id })}
                       >
                         <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 6 }}>
-                          <span style={{
-                            width: 20, height: 20, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
-                            backgroundImage: toBgImage(skin.black),
-                            backgroundPosition: skin.blackPosition || '0 0',
-                            backgroundSize: skin.blackSize || 'auto',
-                            backgroundRepeat: 'no-repeat',
-                          }} />
-                          <span style={{
-                            width: 20, height: 20, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
-                            border: `1px solid ${skin.whiteBorder}`,
-                            backgroundImage: toBgImage(skin.white),
-                            backgroundPosition: skin.whitePosition || '0 0',
-                            backgroundSize: skin.whiteSize || 'auto',
-                            backgroundRepeat: 'no-repeat',
-                          }} />
+                          <span
+                            className={skin.id === 'errorStone' ? 'stone-swatch-glitch' : undefined}
+                            style={{
+                              width: 20, height: 20, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
+                              backgroundImage: toBgImage(skin.black),
+                              backgroundPosition: skin.blackPosition || '0 0',
+                              backgroundSize: skin.blackSize || 'auto',
+                              backgroundRepeat: 'no-repeat',
+                            }}
+                          />
+                          <span
+                            className={skin.id === 'errorStone' ? 'stone-swatch-glitch' : undefined}
+                            style={{
+                              width: 20, height: 20, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
+                              border: `1px solid ${skin.whiteBorder}`,
+                              backgroundImage: toBgImage(skin.white),
+                              backgroundPosition: skin.whitePosition || '0 0',
+                              backgroundSize: skin.whiteSize || 'auto',
+                              backgroundRepeat: 'no-repeat',
+                            }}
+                          />
                         </div>
                         <div className="card-name">{skin.name}</div>
                         <div className="setup-card-desc" style={{ fontSize: 10 }}>{skin.questDesc}</div>
