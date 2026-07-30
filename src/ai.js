@@ -328,7 +328,7 @@ export function findOpponentWinningCell(board, aiPlayer) {
 // 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를, 점수와 함께 찾음.
 // protectedStones가 주어지면 강화(연마)로 보호된 돌은 후보에서 제외해요 - 파괴/변환
 // 대상으로 골라봤자 게임에서 거부당하기 때문이에요.
-function findMostConnectedStoneWithScore(board, player, protectedStones = {}) {
+function findMostConnectedStoneWithScore(board, player, protectedStones = {}, exclude = null) {
   const size = board.length;
   let best = null;
   let bestScore = -Infinity;
@@ -336,6 +336,7 @@ function findMostConnectedStoneWithScore(board, player, protectedStones = {}) {
     for (let x = 0; x < size; x++) {
       if (board[y][x] !== player) continue;
       if (protectedStones[`${x},${y}`]) continue;
+      if (exclude && exclude.has(`${x},${y}`)) continue;
       let score = 0;
       for (const [dx, dy] of DIRECTIONS) {
         const { count, openEnds } = lineStrength(board, x, y, dx, dy, player);
@@ -348,8 +349,8 @@ function findMostConnectedStoneWithScore(board, player, protectedStones = {}) {
 }
 
 // 보드에서 player의 돌 중 가장 위협적인(연결이 많은) 돌 하나를 찾음 (보호된 돌 제외)
-function findMostConnectedStone(board, player, protectedStones = {}) {
-  const result = findMostConnectedStoneWithScore(board, player, protectedStones);
+function findMostConnectedStone(board, player, protectedStones = {}, exclude = null) {
+  const result = findMostConnectedStoneWithScore(board, player, protectedStones, exclude);
   return result ? { x: result.x, y: result.y } : null;
 }
 
@@ -416,8 +417,16 @@ const AI_CARD_HANDLERS = {
 };
 // 연쇄 파괴는 첫 타겟 선정 방식이 파괴와 동일해요 (인접 돌 제거는 게임 로직이 자동으로 처리).
 AI_CARD_HANDLERS.destroyChain = AI_CARD_HANDLERS.destroy;
-// 동전 던지기도 파괴/낙인과 같은 방식으로 대상을 찾아요 (성공 여부는 게임 로직이 알아서 굴려요).
-AI_CARD_HANDLERS.coinFlip = AI_CARD_HANDLERS.mark;
+// 동전 던지기는 이제 상대 돌 2개를 고르는 카드라서, 이미 고른 대상(pending)은 피해서
+// 두 번째 대상을 찾아요. 첫 번째는 낙인/파괴처럼 위협 라인 위주로 고르고, 두 번째는
+// 그다음으로 위협적인 상대 돌을 골라요 (마땅한 게 없으면 null을 반환해 카드를 취소해요).
+AI_CARD_HANDLERS.coinFlip = (board, ai, blockedFn = () => false, protectedStones = {}, pending = []) => {
+  const exclude = new Set(pending.map((p) => `${p.x},${p.y}`));
+  if (pending.length === 0) {
+    return AI_CARD_HANDLERS.mark(board, ai, blockedFn, protectedStones);
+  }
+  return findMostConnectedStone(board, otherPlayer(ai), protectedStones, exclude);
+};
 // 주사위도 마찬가지로 위협 라인 위주 상대 돌을 노려요.
 AI_CARD_HANDLERS.dice = AI_CARD_HANDLERS.mark;
 // 낙뢰/해일은 상대 돌이 가장 많이 몰려있는 세로줄/가로줄을 노려요.
@@ -658,10 +667,10 @@ export function pickDraftCard(options) {
   return options[options.length - 1];
 }
 
-export function computeAITarget(cardId, board, aiPlayer, blockedFn = () => false, protectedStones = {}) {
+export function computeAITarget(cardId, board, aiPlayer, blockedFn = () => false, protectedStones = {}, pending = []) {
   const handler = AI_CARD_HANDLERS[cardId];
   if (!handler) return null;
-  return handler(board, aiPlayer, blockedFn, protectedStones);
+  return handler(board, aiPlayer, blockedFn, protectedStones, pending);
 }
 
 export { BOARD_SIZE };

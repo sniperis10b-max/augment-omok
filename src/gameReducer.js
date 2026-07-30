@@ -564,24 +564,45 @@ function resolveTargetedEffect(state, cardId, targets) {
       break;
     }
     case 'coinFlip': {
-      const [t] = targets;
-      if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
-      const success = Math.random() < 0.5;
-      next.coinFlipResult = success ? 'success' : 'fail';
-      bumpProbTally(next, player, success);
-      if (success) {
+      let attemptCount = 0;
+      let successCount = 0;
+      let destroyedCount = 0;
+      let blockedByDefense = false;
+
+      for (const t of targets) {
+        if (next.protectedStones[key(t.x, t.y)]) continue; // 강화된 돌은 애초에 던질 수 없어요
+        attemptCount++;
+        const success = Math.random() < 0.5;
+        bumpProbTally(next, player, success);
+        if (!success) continue;
+        successCount++;
         const defense = tryDefend(next, board, player, t);
         if (defense) {
-          next.message = `동전 던지기 성공! 하지만 ${defense.message}`;
+          blockedByDefense = true;
         } else {
           next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
           board[t.y][t.x] = 0;
           bumpDestroyCount(next, player, 1);
-          next.message = '동전 던지기 성공! 상대 돌이 파괴됐어요.';
+          destroyedCount++;
         }
+      }
+
+      next.coinFlipResult = successCount > 0 ? 'success' : 'fail';
+
+      if (attemptCount === 0) {
+        next.message = '고른 돌이 전부 강화된 돌이라 동전을 던질 수 없었어요.';
+      } else if (successCount === 0) {
+        next.message = attemptCount === 2 ? '동전 던지기 2번 다 실패... 아무 돌도 파괴하지 못했어요.' : '동전 던지기 실패... 아무 일도 일어나지 않았어요.';
+      } else if (destroyedCount === 0) {
+        next.message = `동전 던지기 ${successCount}번 성공! 하지만 방어 효과로 무효화됐어요.`;
+      } else if (successCount === 1) {
+        next.message = '동전 던지기 1번 성공! 상대 돌 1개가 파괴됐어요.';
       } else {
-        next.message = '동전 던지기 실패... 아무 일도 일어나지 않았어요.';
+        next.message = '동전 던지기 2번 다 성공! 상대 돌 2개가 파괴됐어요.';
+      }
+      if (blockedByDefense && destroyedCount > 0) {
+        next.message += ' (일부는 방어로 막혔어요.)';
       }
       break;
     }
@@ -882,13 +903,19 @@ function resolveStandaloneNoTarget(state, cardId) {
       }
       if (myCount < oppCount) {
         const pool = poolForPlayer(player);
-        const randomId = pool[Math.floor(Math.random() * pool.length)];
+        const pickedCards = [];
+        let hand = next.draft.hands[player];
+        for (let i = 0; i < 2; i++) {
+          const randomId = pool[Math.floor(Math.random() * pool.length)];
+          hand = [...hand, randomId];
+          const picked = CARDS.find((c) => c.id === randomId);
+          pickedCards.push(picked ? picked.name : randomId);
+        }
         next.draft = {
           ...next.draft,
-          hands: { ...next.draft.hands, [player]: [...next.draft.hands[player], randomId] },
+          hands: { ...next.draft.hands, [player]: hand },
         };
-        const picked = CARDS.find((c) => c.id === randomId);
-        next.message = `돌 개수가 더 적어서 '${picked ? picked.name : randomId}' 카드를 얻었어요!`;
+        next.message = `돌 개수가 더 적어서 '${pickedCards[0]}', '${pickedCards[1]}' 카드를 얻었어요!`;
       } else {
         next.message = '돌 개수가 상대보다 적지 않아서 효과가 발동하지 않았어요.';
       }
@@ -1223,7 +1250,7 @@ const TARGET_STEPS = {
   vortex: ['emptyOrAnyCell'],
   mark: ['enemyStone'],
   sanctuary: ['ownStone'],
-  coinFlip: ['enemyStone'],
+  coinFlip: ['enemyStone', 'enemyStone'],
   lightning: ['emptyOrAnyCell'],
   tsunami: ['emptyOrAnyCell'],
   blackhole: ['emptyOrAnyCell'],
@@ -1528,6 +1555,9 @@ export function gameReducer(state, action) {
 
         if (!cellMatchesStep(state, x, y, step)) {
           return { ...state, message: '유효하지 않은 대상이에요.' };
+        }
+        if (pending.some((p) => p.x === x && p.y === y)) {
+          return { ...state, message: '이미 선택한 칸이에요. 다른 칸을 선택하세요.' };
         }
 
         const nextPending = [...pending, { x, y }];

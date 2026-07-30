@@ -1366,7 +1366,7 @@ function useAIDriver(state, dispatch, online) {
         const blockedFn = (x, y) => isBlocked(state, x, y);
 
         if (state.activeCard) {
-          const target = computeAITarget(state.activeCard.id, state.board, state.aiPlayer, blockedFn, state.protectedStones);
+          const target = computeAITarget(state.activeCard.id, state.board, state.aiPlayer, blockedFn, state.protectedStones, state.activeCard.pending);
           if (target) {
             dispatch({ type: 'SELECT_CELL', x: target.x, y: target.y });
           } else {

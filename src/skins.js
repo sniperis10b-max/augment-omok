@@ -244,7 +244,7 @@ export const BOARD_SKINS = [
     background: 'linear-gradient(135deg, #1a0b2e, #2e0a3d)',
     border: '#ff2ec4',
     line: 'rgba(46, 230, 255, 0.35)',
-    questDesc: '온라인 대전 40판 완료',
+    questDesc: '온라인 대전 200판 완료',
   },
   {
     id: 'parchmentMap',
@@ -688,7 +688,7 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'cherryBlossom': return (stats.noTimeLimitGames || 0) >= 50;
     case 'inkWash': return (stats.drawOfferSuccesses || 0) >= 15;
     case 'abyss': return (stats.darkThemeGames || 0) >= 50;
-    case 'cyberpunk': return (stats.onlineGames || 0) >= 40;
+    case 'cyberpunk': return (stats.onlineGames || 0) >= 200;
     case 'parchmentMap': return (stats.longMoveWins150 || 0) >= 3;
     case 'crackedGlass': return (stats.lastSecondWins || 0) >= 5;
     case 'rainforest': return (stats.resurrectionSuccesses || 0) >= 15;
@@ -779,7 +779,7 @@ export function getBoardSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'cherryBlossom': return clampProgress(stats.noTimeLimitGames, 50);
     case 'inkWash': return clampProgress(stats.drawOfferSuccesses, 15);
     case 'abyss': return clampProgress(stats.darkThemeGames, 50);
-    case 'cyberpunk': return clampProgress(stats.onlineGames, 40);
+    case 'cyberpunk': return clampProgress(stats.onlineGames, 200);
     case 'parchmentMap': return clampProgress(stats.longMoveWins150, 3);
     case 'crackedGlass': return clampProgress(stats.lastSecondWins, 5);
     case 'rainforest': return clampProgress(stats.resurrectionSuccesses, 15);
