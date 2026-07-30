@@ -1459,6 +1459,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [friendEmail, setFriendEmail] = useState('');
   const [friendNotice, setFriendNotice] = useState('');
   const [matchmaking, setMatchmaking] = useState(false);
+  const [pendingRanked, setPendingRanked] = useState(false); // 시간제한 선택 화면에서, 어느 모드(랭크전/친선)를 고르고 온 건지
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -1738,12 +1739,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     await handleJoinRoom(invite.code);
   }
 
-  async function handleQuickMatch(ranked = false) {
+  async function handleQuickMatch(ranked = false, timeLimitSec = settings.timeLimitSec) {
     if (!user) { setLoginNotice('온라인 플레이는 로그인 후에 쓸 수 있어요.'); setStep('account'); return; }
     setMatchmaking(true);
     setErrorMsg('');
     try {
-      const res = await quickMatch(settings.timeLimitSec, settings.cardsPerPlayer, user.uid, ranked);
+      const res = await quickMatch(timeLimitSec, settings.cardsPerPlayer, user.uid, ranked);
       if (res.role === 'host') {
         setOnline({
           code: res.code,
@@ -1751,7 +1752,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           role: 'host',
           viaQuickMatch: true,
           queueKey: res.queueKey,
-          timeLimitSec: settings.timeLimitSec,
+          timeLimitSec,
           cardsPerPlayer: settings.cardsPerPlayer,
           ranked: res.ranked,
         });
@@ -3924,17 +3925,62 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <div className="setup-card-desc">방을 만들거나, 받은 코드로 참가·관전해요.</div>
           </button>
 
-          <button className="setup-card" disabled={matchmaking} onClick={() => handleQuickMatch(false)}>
+          <button
+            className="setup-card"
+            disabled={matchmaking}
+            onClick={() => { setPendingRanked(false); setStep('quickmatch-timelimit'); }}
+          >
             <Dice5 size={22} strokeWidth={1.6} />
-            <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : '랜덤 매칭 (친선)'}</div>
-            <div className="setup-card-desc">아무나와 바로 매칭돼요. 레이팅에는 영향 없어요.</div>
+            <div className="setup-card-title">랜덤 매칭 (친선)</div>
+            <div className="setup-card-desc">한 수당 제한시간을 고르면, 같은 시간을 고른 사람과 매칭돼요. 레이팅에는 영향 없어요.</div>
           </button>
 
-          <button className="setup-card" disabled={matchmaking} onClick={() => handleQuickMatch(true)}>
+          <button
+            className="setup-card"
+            disabled={matchmaking}
+            onClick={() => { setPendingRanked(true); setStep('quickmatch-timelimit'); }}
+          >
             <TierBadge rating={myRankPoints ?? DEFAULT_RANK_POINTS} size={22} />
-            <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : '랭크전'}</div>
-            <div className="setup-card-desc">비공개 매칭이에요. 결과에 따라 레이팅과 티어가 변해요.</div>
+            <div className="setup-card-title">랭크전</div>
+            <div className="setup-card-desc">한 수당 제한시간을 고르면, 같은 시간을 고른 사람과 매칭돼요. 결과에 따라 레이팅과 티어가 변해요.</div>
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 'quickmatch-timelimit') {
+    const TIME_OPTIONS = [
+      { sec: 15, label: '15초' },
+      { sec: 30, label: '30초' },
+      { sec: 60, label: '1분' },
+    ];
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">한 수당 제한시간을 고르세요</p>
+
+        <button className="setup-back" disabled={matchmaking} onClick={() => setStep('online-menu')}>
+          <ChevronLeft size={16} /> 뒤로
+        </button>
+
+        <p className="setup-card-desc" style={{ marginBottom: 12 }}>
+          같은 시간을 고른 사람끼리만 매칭돼요. (친구와 플레이는 이 화면을 거치지 않아요)
+        </p>
+
+        <div className="setup-options">
+          {TIME_OPTIONS.map((opt) => (
+            <button
+              key={opt.sec}
+              className="setup-card"
+              disabled={matchmaking}
+              onClick={() => handleQuickMatch(pendingRanked, opt.sec)}
+            >
+              <div className="setup-card-title">{matchmaking ? '상대를 찾는 중...' : opt.label}</div>
+            </button>
+          ))}
         </div>
       </div>
     );
