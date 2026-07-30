@@ -11,7 +11,7 @@ import {
   findOpenThreeFlankCells,
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
-import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS } from './challenges.js';
+import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS } from './challenges.js';
 
 const STANDALONE = new Set([
   'destroy', 'alchemy', 'swap', 'moveStone', 'reinforce', 'barrier', 'ward',
@@ -1346,10 +1346,25 @@ export function gameReducer(state, action) {
       if (votes[BLACK] && votes[WHITE]) {
         const cardsPerPlayer = state.draft.order.length / 2;
         const fresh = createInitialState();
+        // 5단 계단 챌린지는 재대국해도 같은 난이도를 반복하면 안 되고, 이겼으면 다음 단계로,
+        // 졌거나 비겼으면 1단계로 되돌아가야 해요. (안 그러면 5단계를 다 이겨도 매번 처음
+        // 난이도만 재대국으로 반복하게 되어 최종 클리어 판정이 절대 안 나는 버그가 생겨요.)
+        let nextAiDifficulty = state.aiDifficulty;
+        if (state.challengeId === 'ladder') {
+          const won = state.winner != null && state.winner === state.humanColor;
+          const curIndex = Math.max(0, LADDER_LEVELS.indexOf(state.aiDifficulty));
+          if (won) {
+            nextAiDifficulty = curIndex >= LADDER_LEVELS.length - 1
+              ? LADDER_LEVELS[0]
+              : LADDER_LEVELS[curIndex + 1];
+          } else {
+            nextAiDifficulty = LADDER_LEVELS[0];
+          }
+        }
         const base = {
           ...fresh,
           aiPlayer: state.aiPlayer,
-          aiDifficulty: state.aiDifficulty,
+          aiDifficulty: nextAiDifficulty,
           timeLimitSec: state.timeLimitSec,
           humanColor: state.humanColor,
           challengeId: state.challengeId,

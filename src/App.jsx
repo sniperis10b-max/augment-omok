@@ -1301,6 +1301,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       friendsPlayedCount: Object.keys(myStats.friendsPlayed || {}).length,
       titleCount: Object.keys(myTitles).length,
       cardUseCounts: myStats.cardUseCounts || {},
+      challengesCleared,
     };
     const currentUnlocked = new Set();
     BOARD_SKINS.forEach((s) => {
@@ -2806,6 +2807,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             friendsPlayedCount: Object.keys(myStats.friendsPlayed || {}).length,
             titleCount: Object.keys(myTitles).length,
             cardUseCounts: myStats.cardUseCounts || {},
+            challengesCleared,
           };
           const dev = isDevAccount(user);
           const unlockedSkinCount = BOARD_SKINS.filter((s) => isBoardSkinUnlocked(s.id, myStats, skinCtx)).length
