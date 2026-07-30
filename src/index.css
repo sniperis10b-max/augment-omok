@@ -806,6 +806,12 @@ body {
   animation: matchIntroFade 2.2s ease forwards;
 }
 
+.match-intro-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .match-intro-name {
   font-size: 18px;
   font-weight: 700;

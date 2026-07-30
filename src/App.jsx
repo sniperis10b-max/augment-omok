@@ -596,18 +596,20 @@ export default function App() {
     const myColorSafe = myColor || BLACK;
     const myName = user?.displayName || '나';
     const myStoneSkinId = settings.stoneSkin;
-    const base = { myName, myColorLabel: myColorSafe === BLACK ? '흑' : '백', myStoneSkinId };
+    const base = { myName, myColorLabel: myColorSafe === BLACK ? '흑' : '백', myStoneSkinId, myPhoto };
 
-    setMatchIntro({ ...base, oppName: '상대', oppStoneSkinId: 'classic' });
+    setMatchIntro({ ...base, oppName: '상대', oppStoneSkinId: 'classic', oppPhoto: null });
     getRoomPlayers(online.code)
       .then(({ hostUid, guestUid }) => {
         const oppUid = online.role === 'host' ? guestUid : hostUid;
         if (!oppUid) return null;
-        return getPublicProfile(oppUid);
+        return Promise.all([getPublicProfile(oppUid), getMyProfilePhoto(oppUid).catch(() => null)]);
       })
-      .then((profile) => {
+      .then((result) => {
+        if (!result) return;
+        const [profile, oppPhoto] = result;
         if (profile) {
-          setMatchIntro((prev) => (prev ? { ...prev, oppName: profile.displayName, oppStoneSkinId: profile.stoneSkinId || 'classic' } : prev));
+          setMatchIntro((prev) => (prev ? { ...prev, oppName: profile.displayName, oppStoneSkinId: profile.stoneSkinId || 'classic', oppPhoto } : prev));
         }
       })
       .catch(() => {});
@@ -1194,7 +1196,10 @@ export default function App() {
         const oppStone = getStoneSkinById(matchIntro.oppStoneSkinId);
         return (
           <div className="match-intro-overlay">
-            <div className="match-intro-name">{matchIntro.oppName}</div>
+            <div className="match-intro-row">
+              <Avatar photo={matchIntro.oppPhoto} size={28} />
+              <div className="match-intro-name">{matchIntro.oppName}</div>
+            </div>
             <div className="match-intro-stone-wrap">
               <div
                 className="match-intro-stone match-intro-stone-mine"
@@ -1214,7 +1219,10 @@ export default function App() {
               />
               <div className="match-intro-vs">VS</div>
             </div>
-            <div className="match-intro-name">{matchIntro.myName} ({matchIntro.myColorLabel})</div>
+            <div className="match-intro-row">
+              <Avatar photo={matchIntro.myPhoto} size={28} />
+              <div className="match-intro-name">{matchIntro.myName} ({matchIntro.myColorLabel})</div>
+            </div>
           </div>
         );
       })()}
