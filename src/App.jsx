@@ -314,6 +314,7 @@ export default function App() {
   const [reachedTierBadges, setReachedTierBadges] = useState({});
   const [equippedTierId, setEquippedTierId] = useState(null);
   const [myTitles, setMyTitles] = useState({}); // { [titleId]: true }
+  const [titlesLoaded, setTitlesLoaded] = useState(false); // myTitles/challengesCleared가 실제로 로딩됐는지 (스킨 오탐 알림 방지용)
   const [equippedTitle, setEquippedTitle] = useState(null);
   const [titleUnlockToast, setTitleUnlockToast] = useState(null); // { name } | null
   const pendingLocalRef = useRef(false);
@@ -618,6 +619,7 @@ export default function App() {
   // 모든 칭호를 자동으로 해금해요 (장착은 다른 칭호들과 똑같이 계정 화면에서 골라요).
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
+      setTitlesLoaded(false);
       getAchievementData(user.uid)
         .then(async ({ titles, equippedTitle: eq, stats }) => {
           setChallengesCleared(stats?.challengesCleared || {});
@@ -636,12 +638,14 @@ export default function App() {
           }
           setMyTitles(finalTitles);
           setEquippedTitle(eq);
+          setTitlesLoaded(true);
         })
-        .catch(() => {});
+        .catch(() => { setTitlesLoaded(true); });
     } else {
       setMyTitles({});
       setEquippedTitle(null);
       setChallengesCleared({});
+      setTitlesLoaded(false);
     }
   }, [user?.uid]);
 
@@ -1290,11 +1294,21 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
   const [myStats, setMyStats] = useState({});
   const [myGrantedSkins, setMyGrantedSkins] = useState({ board: {}, stone: {} });
+  const [grantedSkinsLoaded, setGrantedSkinsLoaded] = useState(false); // 지급 스킨 로딩 완료 여부 (스킨 오탐 알림 방지용)
+
+  // 계정이 바뀔 때마다(로그아웃뿐 아니라 다른 계정으로 전환할 때도) 기준선을 새로 잡아야
+  // 해요. 안 그러면 이전 계정의 해금 목록과 비교하게 돼서 오탐 팝업이 뜰 수 있어요.
+  useEffect(() => {
+    knownUnlockedSkinsRef.current = null;
+  }, [user?.uid]);
 
   // 스킨이 새로 해금되면(퀘스트 달성) 칭호처럼 토스트 알림을 띄워요.
   useEffect(() => {
     if (!user) { knownUnlockedSkinsRef.current = null; return; }
-    if (!statsLoaded) return; // 통계가 아직 로딩 전(빈 값)이면 그 상태를 기준으로 삼으면 안 돼요.
+    // 통계·타이틀(챌린지 클리어 포함)·지급 스킨이 전부 로딩되기 전 상태를 기준으로 삼으면,
+    // 나중에 각 값이 뒤늦게 채워질 때마다 "예전부터 이미 해금돼 있던 스킨"이 새로 해금된
+    // 것처럼 오인돼서 접속할 때마다 팝업이 잘못 뜨는 버그가 생겨요.
+    if (!statsLoaded || !titlesLoaded || !grantedSkinsLoaded) return;
     const dev = isDevAccount(user);
     const skinCtx = {
       peakTierIndex,
@@ -1330,14 +1344,18 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         count: newlyUnlocked.length,
       });
     }
-  }, [myStats, peakTierIndex, myTitles, myGrantedSkins, user, statsLoaded]);
+  }, [myStats, peakTierIndex, myTitles, myGrantedSkins, user, statsLoaded, titlesLoaded, grantedSkinsLoaded]);
 
 
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
-      getGrantedSkins(user.uid).then(setMyGrantedSkins).catch(() => {});
+      setGrantedSkinsLoaded(false);
+      getGrantedSkins(user.uid)
+        .then((v) => { setMyGrantedSkins(v); setGrantedSkinsLoaded(true); })
+        .catch(() => setGrantedSkinsLoaded(true));
     } else {
       setMyGrantedSkins({ board: {}, stone: {} });
+      setGrantedSkinsLoaded(false);
     }
   }, [user?.uid]);
 
@@ -1362,7 +1380,12 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       setDailyQuestState(null);
       setStatsLoaded(true);
     }
-  }, [user?.uid, myTitles]);
+    // 예전엔 [user?.uid, myTitles]였는데, myTitles가 로그인 직후 한 번 더 갱신되면서
+    // 이 effect가 불필요하게 재실행돼 통계를 두 번 불러오고 있었어요. 그 과정에서
+    // "스킨 새로 해금" 판정의 기준선이 titleCount 등이 아직 덜 채워진 중간 상태로
+    // 잘못 잡혀서, 실제로는 예전에 이미 해금된 스킨인데도 접속할 때마다 "새 스킨 획득!"
+    // 팝업이 잘못 뜨는 버그가 있었어요. 이 effect는 로그인(uid 변경)당 한 번이면 충분해요.
+  }, [user?.uid]);
 
   useEffect(() => {
     if (!user || !isFirebaseConfigured()) return undefined;
