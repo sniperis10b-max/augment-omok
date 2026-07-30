@@ -30,7 +30,9 @@ function emailKey(email) {
 // 로그인할 때마다 내 프로필을 저장해요 (다른 사람이 나를 찾을 수 있도록).
 export async function upsertUserProfile(user) {
   const db = getDb();
-  await set(ref(db, `users/${user.uid}/profile`), {
+  // set()이 아니라 update()를 써요. set()은 이 경로 전체를 통째로 덮어써서
+  // customPhoto(프로필 사진)처럼 여기 같이 저장된 다른 필드를 매번 지워버려요.
+  await update(ref(db, `users/${user.uid}/profile`), {
     displayName: user.displayName || '이름 없음',
     email: user.email || null,
     photoURL: user.photoURL || null,
