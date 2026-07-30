@@ -1884,9 +1884,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   ∞
                 </span>
               )}
-              {user && !isDevAccount(user) && (seasonProgress?.seasonCoins || 0) > 0 && (
+              {user && !isDevAccount(user) && (
                 <span className="dev-badge" style={{ position: 'absolute', top: -8, right: -10, fontSize: 9, padding: '1px 4px' }}>
-                  {seasonProgress.seasonCoins}
+                  {seasonProgress?.seasonCoins || 0}
                 </span>
               )}
             </button>
