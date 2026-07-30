@@ -439,6 +439,9 @@ export default function App() {
       ? online.localColor
       : state.aiPlayer ? otherPlayer(state.aiPlayer) : null;
     if (!myColor) return;
+    // 룰렛 모드는 카드 강탈/카드 소모 없음/매턴 자동 지급 등으로 카드 사용 횟수가 비정상적으로
+    // 불어날 수 있어서, 스킨/칭호/시즌 패스에 쓰이는 카드 사용 누적 통계는 전혀 반영 안 해요.
+    if (state.rouletteRule) return;
 
     const prev = prevCardTrackRef.current;
     const cur = state.lastUsedCard[myColor];
