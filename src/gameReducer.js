@@ -1264,6 +1264,9 @@ export function gameReducer(state, action) {
       }
       if (challengeId === 'sixInRow' && humanColor) {
         winLengthOverride = { ...winLengthOverride, [humanColor]: 6 };
+        // 흑이 6목을 만들어야 하는데 렌주 금수(장목/육목)가 그대로면 정작 6목을
+        // 완성하는 수 자체가 금수로 막혀서 승리가 불가능해지므로 이 챌린지에서는 해제해요.
+        ruleFlags = { ...ruleFlags, allowOverline: true };
       }
       if (challengeId === 'noDiagonal' && humanColor) {
         ruleFlags = { ...ruleFlags, noDiagonalFor: humanColor };
@@ -1351,8 +1354,15 @@ export function gameReducer(state, action) {
           humanColor: state.humanColor,
           challengeId: state.challengeId,
           challengeCardBan: state.challengeCardBan || {},
-          ruleFlags: { ...fresh.ruleFlags, noDiagonalFor: state.ruleFlags?.noDiagonalFor || null },
-          winLengthOverride: state.winLengthOverride?.[BLACK] || state.winLengthOverride?.[WHITE]
+          ruleFlags: {
+            ...fresh.ruleFlags,
+            noDiagonalFor: state.ruleFlags?.noDiagonalFor || null,
+            // 6목 챌린지는 재대국해도 계속 이 챌린지이므로 장목 금수 해제를 유지해요.
+            allowOverline: state.challengeId === 'sixInRow' ? true : fresh.ruleFlags.allowOverline,
+          },
+          // '단축 승리'/'연장 승리' 카드 효과는 "이번 판 끝까지"만 적용되는 일회성 효과라
+          // 재대국하면 초기화돼야 해요. 챌린지(6목/4목 승리) 자체의 규칙만 재대국에도 이어져요.
+          winLengthOverride: (state.challengeId === 'sixInRow' || state.challengeId === 'fourVsFive')
             ? { ...state.winLengthOverride }
             : fresh.winLengthOverride,
           blockedCells: state.challengeId === 'narrowVision' || state.challengeId === 'doubleForbidden'
