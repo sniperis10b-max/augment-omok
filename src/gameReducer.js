@@ -12,7 +12,7 @@ import {
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
 import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS } from './challenges.js';
-import { pickRandomRouletteRule } from './roulette.js';
+import { pickRandomRouletteRule, rollingWinLength } from './roulette.js';
 
 const STANDALONE = new Set([
   'destroy', 'alchemy', 'swap', 'moveStone', 'reinforce', 'barrier', 'ward',
@@ -127,12 +127,6 @@ function draftPoolForRoulette(pool, state) {
 // "파괴전"이 켜져 있으면 그 풀 안에서만 뽑히게 해요.
 function effectivePool(player, state) {
   return draftPoolForRoulette(poolForPlayer(player), state);
-}
-
-// 룰렛 "승리조건 롤링": 5수마다 4목 -> 5목 -> 6목 순서로 순환해요.
-function rollingWinLength(ply) {
-  const bucket = Math.floor(ply / 5) % 3;
-  return [4, 5, 6][bucket];
 }
 
 function buildDraftOrder(cardsPerPlayer) {
@@ -1530,14 +1524,24 @@ export function gameReducer(state, action) {
       }
 
       // 룰렛 "매턴 카드 자동 지급"도 드래프트를 건너뛰고, 대신 매 턴마다 카드를 자동으로 받아요.
+      // (선공인 흑도 형평성 있게 첫 턴에 카드 1장을 미리 받아요 - 안 그러면 advanceTurn을
+      // 한 번도 안 거치는 첫 턴만 카드 없이 시작해서 백보다 불리해요.)
       if (rouletteRule === 'autoCardPerTurn') {
+        const firstPool = draftPoolForRoulette(poolForPlayer(BLACK), base);
+        const firstCard = firstPool.length > 0 ? firstPool[Math.floor(Math.random() * firstPool.length)] : null;
         return {
           ...base,
           phase: 'roulette',
           pendingPhase: 'play',
           turn: BLACK,
           message: '룰렛으로 특수 규칙이 정해졌어요!',
-          draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
+          draft: {
+            pool: [],
+            hands: { [BLACK]: firstCard ? [firstCard] : [], [WHITE]: [] },
+            order: [],
+            currentIndex: 0,
+            options: [],
+          },
         };
       }
 
@@ -1642,13 +1646,21 @@ export function gameReducer(state, action) {
         }
 
         if (rouletteRule === 'autoCardPerTurn') {
+          const firstPool = draftPoolForRoulette(poolForPlayer(BLACK), base);
+          const firstCard = firstPool.length > 0 ? firstPool[Math.floor(Math.random() * firstPool.length)] : null;
           return {
             ...base,
             phase: 'roulette',
             pendingPhase: 'play',
             turn: BLACK,
             message: '룰렛으로 특수 규칙이 정해졌어요!',
-            draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
+            draft: {
+              pool: [],
+              hands: { [BLACK]: firstCard ? [firstCard] : [], [WHITE]: [] },
+              order: [],
+              currentIndex: 0,
+              options: [],
+            },
           };
         }
 
@@ -1704,9 +1716,10 @@ export function gameReducer(state, action) {
       }
 
       const nextDrafter = state.draft.order[currentIndex];
+      const nextPool = draftPoolForRoulette(draftPoolForChallenge(poolForPlayer(nextDrafter), nextDrafter, state), state);
       return {
         ...state,
-        draft: { ...state.draft, hands, currentIndex, options: drawRandomCards(draftPoolForChallenge(poolForPlayer(nextDrafter), nextDrafter, state), 3), lastPick },
+        draft: { ...state.draft, hands, currentIndex, options: drawRandomCards(nextPool, 3), lastPick },
       };
     }
 

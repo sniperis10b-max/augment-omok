@@ -11,6 +11,8 @@ import {
   checkWin,
   findOpenThreeFlankCells,
 } from './gameLogic.js';
+import { CARDS } from './cards.js';
+import { rollingWinLength } from './roulette.js';
 
 // 난이도별 조절값. blockChance: 상대 위협을 알아채고 막을 확률.
 // cardUseChance: 여유 있을 때 카드를 섞어 쓸 확률. noise: 수 선택에 섞는 무작위성.
@@ -113,7 +115,7 @@ function findOpponentForcingCell(board, aiPlayer, ruleFlags) {
 }
 
 // player가 지금 바로(이 한 수로) 이길 수 있는 칸이 있으면 반환
-function findWinningCellFor(board, player, blockedFn, ruleFlags) {
+function findWinningCellFor(board, player, blockedFn, ruleFlags, winLength = 5) {
   const size = board.length;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
@@ -121,19 +123,19 @@ function findWinningCellFor(board, player, blockedFn, ruleFlags) {
       if (player === BLACK && isForbiddenMove(board, x, y, BLACK, ruleFlags)) continue;
       const trial = board.map((row) => row.slice());
       trial[y][x] = player;
-      if (checkWin(trial, x, y, player, {})) return { x, y };
+      if (checkWin(trial, x, y, player, { winLength })) return { x, y };
     }
   }
   return null;
 }
 
 // 보드에서 둘 만한 칸 하나를 골라요. 내 공격과 상대 방어를 함께 고려.
-export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'normal') {
+export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'normal', winLength = 5) {
   const cfg = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
   const opponent = otherPlayer(me);
 
   // 0) 내가 지금 바로 이길 수 있으면 최우선으로 그 자리를 선택 (다른 어떤 평가보다 우선)
-  const myWin = findWinningCellFor(board, me, blockedFn, ruleFlags);
+  const myWin = findWinningCellFor(board, me, blockedFn, ruleFlags, winLength);
   if (myWin) return myWin;
 
   // 1) 상대가 바로 이길 수 있는 자리가 있으면, 점수 계산과 무관하게 반드시 막아요
@@ -141,7 +143,7 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
   // 주의: 그 자리가 하필 나(흑)에게 금수라면 실제로는 거기 둘 수 없어요. 그런 경우 그냥
   // 넘어가서(카드로 막거나, 안 되면 다른 자리를 찾도록) 아래로 흘려보내야 해요 - 안 그러면
   // 매번 같은 금수 자리를 골랐다가 거부당하는 무한 반복에 빠져요.
-  const oppWin = findOpponentWinningCell(board, me);
+  const oppWin = findOpponentWinningCell(board, me, winLength);
   const oppWinBlockable = oppWin
     && isUsable(board, blockedFn, oppWin.x, oppWin.y)
     && !(me === BLACK && isForbiddenMove(board, oppWin.x, oppWin.y, BLACK, ruleFlags));
@@ -311,7 +313,7 @@ function chooseBestCellDeep(board, me, blockedFn, ruleFlags, width, depth) {
 }
 
 // 상대가 다음 한 수로 바로 이길 수 있는 칸이 있는지 찾음 (있으면 그 칸을 반환)
-export function findOpponentWinningCell(board, aiPlayer) {
+export function findOpponentWinningCell(board, aiPlayer, winLength = 5) {
   const opponent = otherPlayer(aiPlayer);
   const size = board.length;
   for (let y = 0; y < size; y++) {
@@ -319,7 +321,7 @@ export function findOpponentWinningCell(board, aiPlayer) {
       if (board[y][x] !== 0) continue;
       const trial = board.map((row) => row.slice());
       trial[y][x] = opponent;
-      if (checkWin(trial, x, y, opponent, {})) return { x, y };
+      if (checkWin(trial, x, y, opponent, { winLength })) return { x, y };
     }
   }
   return null;
@@ -486,7 +488,25 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
   const { blockChance, cardUseChance } = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
   const board = state.board;
   const protectedStones = state.protectedStones ?? {};
-  const opponentThreat = findOpponentWinningCell(board, aiPlayer);
+  const winLength = state.rouletteRule === 'rollingWin' ? rollingWinLength(state.ply) : 5;
+
+  // 룰렛 "강제 카드 턴": 카드를 먼저 안 쓰면 착수 자체가 거부돼서, 그냥 놔두면 AI가
+  // "카드는 안 쓰겠다"고 판단할 때마다 착수 거부 -> 재시도를 무한 반복하게 돼요.
+  // 그래서 카드가 있으면 무조건(선택이 아니라 필수로) 하나를 골라 쓰게 만들어요.
+  if (state.rouletteRule === 'forceCardTurn' && !state.cardUsedThisTurn?.[aiPlayer] && hand.length > 0) {
+    const noTargetCard = hand.find((id) => CARDS.find((c) => c.id === id)?.targetType === 'none');
+    if (noTargetCard) return { cardId: noTargetCard };
+    for (const cardId of hand) {
+      const handler = AI_CARD_HANDLERS[cardId];
+      if (!handler) continue;
+      const target = handler(board, aiPlayer, blockedFn, protectedStones);
+      if (target) return { cardId, target };
+    }
+    // 대상을 못 찾은 카드뿐이라도, 일단 하나를 골라서 시도는 해봐요(무한 루프보다는 나아요).
+    return { cardId: hand[0] };
+  }
+
+  const opponentThreat = findOpponentWinningCell(board, aiPlayer, winLength);
   const forcingCell = opponentThreat ? null : findOpponentForcingCell(board, aiPlayer, state.ruleFlags);
   const urgentFlanks = (opponentThreat || forcingCell)
     ? []

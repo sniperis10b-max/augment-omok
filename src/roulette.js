@@ -30,3 +30,10 @@ export function getRouletteRuleById(id) {
 export function pickRandomRouletteRule() {
   return ROULETTE_RULES[Math.floor(Math.random() * ROULETTE_RULES.length)].id;
 }
+
+// 룰렛 "승리조건 롤링": 5수마다 4목 -> 5목 -> 6목 순서로 순환해요.
+// gameReducer.js(실제 승리 판정)와 ai.js(AI의 승패 위협 감지) 양쪽에서 같이 써요.
+export function rollingWinLength(ply) {
+  const bucket = Math.floor(ply / 5) % 3;
+  return [4, 5, 6][bucket];
+}

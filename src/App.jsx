@@ -47,7 +47,7 @@ import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSk
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
 import { CHALLENGES, getChallengeById, hasCompletedAllChallenges, LADDER_LEVELS } from './challenges.js';
-import { ROULETTE_RULES, getRouletteRuleById } from './roulette.js';
+import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
   getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
@@ -1395,7 +1395,11 @@ function useAIDriver(state, dispatch, online) {
           ? (x, y) => isBlocked(state, x, y) || x < zone.x0 || x > zone.x1 || y < zone.y0 || y > zone.y1
           : blockedFn;
 
-        const best = chooseBestCell(state.board, state.aiPlayer, placementBlockedFn, state.ruleFlags, state.aiDifficulty);
+        // 룰렛 "승리조건 롤링": 지금 몇 목이 승리 조건인지 계산해서 AI의 공격/방어
+        // 판단에 그대로 반영해요 (안 그러면 4목/6목 구간에서 위협을 잘못 판단해요).
+        const winLength = state.rouletteRule === 'rollingWin' ? rollingWinLength(state.ply) : 5;
+
+        const best = chooseBestCell(state.board, state.aiPlayer, placementBlockedFn, state.ruleFlags, state.aiDifficulty, winLength);
         if (best) dispatch({ type: 'SELECT_CELL', x: best.x, y: best.y });
       }, 650);
       return () => clearTimeout(t);
