@@ -10,7 +10,7 @@ import {
   Landmark, Infinity as InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins, Medal,
   Shield, Hexagon, Gem, Flame, Octagon, Crown,
   Wind, CloudLightning, Waves, Orbit, Feather, Heart, Gift, Dice6,
-  ListOrdered,
+  ListOrdered, Palette,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer, isCellInSealedLine } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -1555,6 +1555,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <button className="icon-toggle-btn" onClick={() => setStep('account')} title="계정">
               <UserCircle size={16} />
             </button>
+            <button className="icon-toggle-btn" onClick={() => setStep('skins')} title="스킨">
+              <Palette size={16} />
+            </button>
             <button className="icon-toggle-btn" onClick={() => setStep('settings')} title="설정">
               <Settings size={16} />
             </button>
@@ -2754,52 +2757,17 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     );
   }
 
-  if (step === 'settings') {
-    const applyCustomSeconds = () => {
-      const v = Math.max(1, parseInt(customSeconds, 10) || 0);
-      updateSettings({ timeLimitSec: v });
-      if (v === 369 && user && isFirebaseConfigured()) {
-        bumpCounter(user.uid, 'timeLimit369Count', 1).catch(() => {});
-      }
-    };
-    const applyCustomCards = () => {
-      const cap = isDevAccount(user) ? 999 : 20;
-      const v = Math.min(cap, Math.max(1, parseInt(customCards, 10) || 3));
-      updateSettings({ cardsPerPlayer: v });
-    };
-
+  if (step === 'skins') {
     return (
       <div className="page">
         <header className="header">
           <h1>증강 오목</h1>
         </header>
-        <p className="subtitle">설정</p>
+        <p className="subtitle">돌 · 판 · 착수 이펙트</p>
 
         <button className="setup-back" onClick={() => setStep('mode')}>
           <ChevronLeft size={16} /> 뒤로
         </button>
-
-        <div className="tutorial-card">
-          <div className="tutorial-title">화면 테마</div>
-          <div className="setup-options" style={{ gridTemplateColumns: '1fr 1fr', display: 'grid' }}>
-            <button
-              className="card-option"
-              style={{ borderColor: settings.theme === 'light' ? 'var(--accent)' : undefined }}
-              onClick={() => updateSettings({ theme: 'light' })}
-            >
-              <Sun size={18} />
-              <div className="card-name">밝게</div>
-            </button>
-            <button
-              className="card-option"
-              style={{ borderColor: settings.theme === 'dark' ? 'var(--accent)' : undefined }}
-              onClick={() => updateSettings({ theme: 'dark' })}
-            >
-              <Moon size={18} />
-              <div className="card-name">어둡게</div>
-            </button>
-          </div>
-        </div>
 
         {(() => {
           const skinCtx = {
@@ -2948,6 +2916,56 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             </>
           );
         })()}
+      </div>
+    );
+  }
+
+  if (step === 'settings') {
+    const applyCustomSeconds = () => {
+      const v = Math.max(1, parseInt(customSeconds, 10) || 0);
+      updateSettings({ timeLimitSec: v });
+      if (v === 369 && user && isFirebaseConfigured()) {
+        bumpCounter(user.uid, 'timeLimit369Count', 1).catch(() => {});
+      }
+    };
+    const applyCustomCards = () => {
+      const cap = isDevAccount(user) ? 999 : 20;
+      const v = Math.min(cap, Math.max(1, parseInt(customCards, 10) || 3));
+      updateSettings({ cardsPerPlayer: v });
+    };
+
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">설정</p>
+
+        <button className="setup-back" onClick={() => setStep('mode')}>
+          <ChevronLeft size={16} /> 뒤로
+        </button>
+
+        <div className="tutorial-card">
+          <div className="tutorial-title">화면 테마</div>
+          <div className="setup-options" style={{ gridTemplateColumns: '1fr 1fr', display: 'grid' }}>
+            <button
+              className="card-option"
+              style={{ borderColor: settings.theme === 'light' ? 'var(--accent)' : undefined }}
+              onClick={() => updateSettings({ theme: 'light' })}
+            >
+              <Sun size={18} />
+              <div className="card-name">밝게</div>
+            </button>
+            <button
+              className="card-option"
+              style={{ borderColor: settings.theme === 'dark' ? 'var(--accent)' : undefined }}
+              onClick={() => updateSettings({ theme: 'dark' })}
+            >
+              <Moon size={18} />
+              <div className="card-name">어둡게</div>
+            </button>
+          </div>
+        </div>
 
         <div className="tutorial-card">
           <div className="tutorial-title">효과음</div>
