@@ -87,6 +87,15 @@ function isDevAccount(user) {
   return !!user?.email && user.email.toLowerCase() === DEV_ACCOUNT_EMAIL;
 }
 
+// 프로필 사진이 없을 때 대신 보여줄 기본 아바타 그림 (매치 인트로의 큰 원에서 써요).
+const DEFAULT_AVATAR_URI = 'data:image/svg+xml,' + encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+  + "<rect width='100' height='100' fill='#94a3b8'/>"
+  + "<circle cx='50' cy='38' r='18' fill='#e2e8f0'/>"
+  + "<path d='M50 60c-24 0-38 15-38 30v10h76v-10c0-15-14-30-38-30z' fill='#e2e8f0'/>"
+  + "</svg>"
+);
+
 // 프로필 사진이 있으면 그 이미지를, 없으면 기존처럼 사람 아이콘을 보여줘요.
 function Avatar({ photo, size = 40 }) {
   if (photo) {
@@ -365,7 +374,7 @@ export default function App() {
   const prevLastUsedRef = useRef({ [BLACK]: null, [WHITE]: null });
   const [cardOverlay, setCardOverlay] = useState(null);
   const matchIntroShownRef = useRef(false); // 이번 판에서 매치 인트로를 이미 띄웠는지
-  const [matchIntro, setMatchIntro] = useState(null); // { myName, myColorLabel, myStoneSkinId, oppName, oppStoneSkinId } | null
+  const [matchIntro, setMatchIntro] = useState(null); // { myName, myColorLabel, myPhoto, oppName, oppPhoto } | null
 
   // 카드가 사용될 때마다(어느 쪽이든) 화면 중앙에 잠깐 띄워줘요
   useEffect(() => {
@@ -595,10 +604,9 @@ export default function App() {
     const myColor = online.localColor;
     const myColorSafe = myColor || BLACK;
     const myName = user?.displayName || '나';
-    const myStoneSkinId = settings.stoneSkin;
-    const base = { myName, myColorLabel: myColorSafe === BLACK ? '흑' : '백', myStoneSkinId, myPhoto };
+    const base = { myName, myColorLabel: myColorSafe === BLACK ? '흑' : '백', myPhoto };
 
-    setMatchIntro({ ...base, oppName: '상대', oppStoneSkinId: 'classic', oppPhoto: null });
+    setMatchIntro({ ...base, oppName: '상대', oppPhoto: null });
     getRoomPlayers(online.code)
       .then(({ hostUid, guestUid }) => {
         const oppUid = online.role === 'host' ? guestUid : hostUid;
@@ -609,7 +617,7 @@ export default function App() {
         if (!result) return;
         const [profile, oppPhoto] = result;
         if (profile) {
-          setMatchIntro((prev) => (prev ? { ...prev, oppName: profile.displayName, oppStoneSkinId: profile.stoneSkinId || 'classic', oppPhoto } : prev));
+          setMatchIntro((prev) => (prev ? { ...prev, oppName: profile.displayName, oppPhoto } : prev));
         }
       })
       .catch(() => {});
@@ -1191,41 +1199,27 @@ export default function App() {
   return (
     <>
       {screen}
-      {matchIntro && (() => {
-        const myStone = getStoneSkinById(matchIntro.myStoneSkinId);
-        const oppStone = getStoneSkinById(matchIntro.oppStoneSkinId);
-        return (
-          <div className="match-intro-overlay">
-            <div className="match-intro-row">
-              <Avatar photo={matchIntro.oppPhoto} size={28} />
-              <div className="match-intro-name">{matchIntro.oppName}</div>
-            </div>
-            <div className="match-intro-stone-wrap">
-              <div
-                className="match-intro-stone match-intro-stone-mine"
-                style={{
-                  backgroundImage: toBgImage(myStone.black),
-                  backgroundPosition: myStone.blackPosition || '0 0',
-                  backgroundSize: myStone.blackSize || 'auto',
-                }}
-              />
-              <div
-                className="match-intro-stone match-intro-stone-opp"
-                style={{
-                  backgroundImage: toBgImage(oppStone.black),
-                  backgroundPosition: oppStone.blackPosition || '0 0',
-                  backgroundSize: oppStone.blackSize || 'auto',
-                }}
-              />
-              <div className="match-intro-vs">VS</div>
-            </div>
-            <div className="match-intro-row">
-              <Avatar photo={matchIntro.myPhoto} size={28} />
-              <div className="match-intro-name">{matchIntro.myName} ({matchIntro.myColorLabel})</div>
-            </div>
+      {matchIntro && (
+        <div className="match-intro-overlay">
+          <div className="match-intro-row">
+            <div className="match-intro-name">{matchIntro.oppName}</div>
           </div>
-        );
-      })()}
+          <div className="match-intro-stone-wrap">
+            <div
+              className="match-intro-stone match-intro-stone-mine"
+              style={{ backgroundImage: `url(${matchIntro.myPhoto || DEFAULT_AVATAR_URI})` }}
+            />
+            <div
+              className="match-intro-stone match-intro-stone-opp"
+              style={{ backgroundImage: `url(${matchIntro.oppPhoto || DEFAULT_AVATAR_URI})` }}
+            />
+            <div className="match-intro-vs">VS</div>
+          </div>
+          <div className="match-intro-row">
+            <div className="match-intro-name">{matchIntro.myName} ({matchIntro.myColorLabel})</div>
+          </div>
+        </div>
+      )}
       {titleUnlockToast && (
         <div className="title-toast">
           <Medal size={16} />
