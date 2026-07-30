@@ -385,6 +385,50 @@ body {
   }
 }
 
+/* ERROR 바둑판 전용: 돌과 같은 방식으로 불규칙한 타이밍에 글리치가 튀었다 돌아와요 */
+[data-board-skin="errorBoard"] .board {
+  animation: pageFadeIn 0.45s ease-out, boardGlitchFlicker 3.2s infinite;
+}
+
+@keyframes boardGlitchFlicker {
+  0%, 5%, 11%, 34%, 40%, 63%, 69%, 91%, 100% {
+    filter: brightness(1) contrast(1) hue-rotate(0deg) saturate(1);
+    transform: translate(0, 0);
+  }
+  6% {
+    filter: brightness(1.4) contrast(1.3) hue-rotate(20deg) saturate(1.5);
+    transform: translate(3px, 0);
+  }
+  7% {
+    filter: brightness(0.75) contrast(1.15) hue-rotate(-15deg) saturate(0.7);
+    transform: translate(-3px, 1px);
+  }
+  8% {
+    filter: brightness(1.2) hue-rotate(8deg);
+    transform: translate(1px, -1px);
+  }
+  35% {
+    filter: brightness(1.5) contrast(1.4) hue-rotate(30deg) saturate(1.6);
+    transform: translate(-4px, 0);
+  }
+  36% {
+    filter: brightness(0.8) hue-rotate(-12deg);
+    transform: translate(2px, 1px);
+  }
+  64% {
+    filter: brightness(1.35) contrast(1.25) hue-rotate(-25deg) saturate(1.4);
+    transform: translate(3px, -1px);
+  }
+  65% {
+    filter: brightness(0.8) hue-rotate(18deg);
+    transform: translate(-2px, 1px);
+  }
+  92% {
+    filter: brightness(1.45) contrast(1.3) hue-rotate(12deg) saturate(1.5);
+    transform: translate(4px, 0);
+  }
+}
+
 .stone-wild::before {
   content: '';
   position: absolute;

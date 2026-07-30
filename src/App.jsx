@@ -42,7 +42,7 @@ import {
   forceSetPeakTierIndex, adminSetRankPoints, getReachedTierBadges, adminRevokeTierBadges, adminGrantTierBadges,
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
-import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins } from './skins.js';
+import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins, toBgImage } from './skins.js';
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
 import { CHALLENGES, getChallengeById, hasCompletedAllChallenges, LADDER_LEVELS } from './challenges.js';
@@ -533,10 +533,6 @@ export default function App() {
     const board = getBoardSkinById(settings.boardSkin);
     const stone = getStoneSkinById(settings.stoneSkin);
     const root = document.documentElement.style;
-    // background-image는 색상값(#fff 같은)을 그대로 못 받아서, 단색 스킨은 그라데이션으로 감싸줘요.
-    const toBgImage = (value) => (
-      /gradient|url\(/.test(value) ? value : `linear-gradient(${value}, ${value})`
-    );
     root.setProperty('--board-bg', toBgImage(board.background));
     root.setProperty('--board-bg-pos', board.backgroundPosition || '0 0');
     root.setProperty('--board-bg-size', board.backgroundSize || 'auto');
@@ -551,6 +547,7 @@ export default function App() {
     root.setProperty('--stone-white-border', stone.whiteBorder);
     root.setProperty('--stone-black-shadow', stone.id === 'invisible' ? 'none' : 'inset 0 1px 2px rgba(255, 255, 255, 0.15)');
     document.documentElement.setAttribute('data-stone-skin', stone.id);
+    document.documentElement.setAttribute('data-board-skin', board.id);
   }, [settings.boardSkin, settings.stoneSkin]);
 
   // 사운드 on/off 반영
@@ -2834,7 +2831,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                         }}
                         onClick={() => updateSettings({ boardSkin: skin.id })}
                       >
-                        <div style={{ width: 28, height: 28, borderRadius: 6, background: skin.background, border: `1px solid ${skin.border}`, margin: '0 auto 6px', position: 'relative' }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: 6, border: `1px solid ${skin.border}`, margin: '0 auto 6px', position: 'relative', overflow: 'hidden',
+                          backgroundImage: toBgImage(skin.background),
+                          backgroundPosition: skin.backgroundPosition || '0 0',
+                          backgroundSize: skin.backgroundSize || 'auto',
+                          backgroundRepeat: 'no-repeat',
+                        }}>
                           {!unlocked && <ShieldQuestion size={14} style={{ position: 'absolute', top: 6, left: 6, color: '#fff' }} />}
                         </div>
                         <div className="card-name">{skin.name}</div>
@@ -2872,8 +2875,21 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                         onClick={() => updateSettings({ stoneSkin: skin.id })}
                       >
                         <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 6 }}>
-                          <span style={{ width: 20, height: 20, borderRadius: '50%', background: skin.black, display: 'inline-block' }} />
-                          <span style={{ width: 20, height: 20, borderRadius: '50%', background: skin.white, border: `1px solid ${skin.whiteBorder}`, display: 'inline-block' }} />
+                          <span style={{
+                            width: 20, height: 20, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
+                            backgroundImage: toBgImage(skin.black),
+                            backgroundPosition: skin.blackPosition || '0 0',
+                            backgroundSize: skin.blackSize || 'auto',
+                            backgroundRepeat: 'no-repeat',
+                          }} />
+                          <span style={{
+                            width: 20, height: 20, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
+                            border: `1px solid ${skin.whiteBorder}`,
+                            backgroundImage: toBgImage(skin.white),
+                            backgroundPosition: skin.whitePosition || '0 0',
+                            backgroundSize: skin.whiteSize || 'auto',
+                            backgroundRepeat: 'no-repeat',
+                          }} />
                         </div>
                         <div className="card-name">{skin.name}</div>
                         <div className="setup-card-desc" style={{ fontSize: 10 }}>{skin.questDesc}</div>

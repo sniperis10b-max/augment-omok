@@ -5,6 +5,12 @@
 import { CARDS } from './cards.js';
 import { CHALLENGES } from './challenges.js';
 
+// background-image는 색상값(#fff 같은)을 그대로 못 받아서, 단색 스킨은 그라데이션으로 감싸줘요.
+// (실제 게임판/돌 렌더링과 설정 화면의 미리보기 스와치 둘 다 이 함수로 통일해서 써요.)
+export function toBgImage(value) {
+  return /gradient|url\(/.test(value) ? value : `linear-gradient(${value}, ${value})`;
+}
+
 export const BOARD_SKINS = [
   {
     id: 'classic',
