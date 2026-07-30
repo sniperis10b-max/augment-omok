@@ -50,7 +50,7 @@ import { isSeasonActive } from './seasonPass.js';
 import {
   CURRENT_SEASON, levelProgress, getDailyMissionProgress, getWeeklyMissionProgress, getSeasonMilestoneProgress,
   ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
-  SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS,
+  SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS, devSetSeasonLevel,
 } from './seasonPass.js';
 import { CHALLENGES, getChallengeById, hasCompletedAllChallenges, LADDER_LEVELS } from './challenges.js';
 import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
@@ -1588,7 +1588,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     if (!user || seasonBusy) return;
     setSeasonBusy(true);
     try {
-      const res = await purchaseShopItem(user.uid, item.id, seasonProgress?.seasonCoins || 0);
+      const res = await purchaseShopItem(user.uid, item.id, seasonProgress?.seasonCoins || 0, isDevAccount(user));
       if (res.ok) {
         setSeasonNotice(`'${item.name}' 구매 완료!`);
         if (item.type === 'boardSkin') setMyGrantedSkins((p) => ({ ...p, board: { ...p.board, [item.id]: true } }));
@@ -1874,8 +1874,18 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <button className="icon-toggle-btn" onClick={() => setStep('profile')} title="프로필">
               <IdCard size={16} />
             </button>
-            <button className="icon-toggle-btn" onClick={() => setStep('season')} title="시즌 패스">
+            <button className="icon-toggle-btn" onClick={() => setStep('season')} title="시즌 패스" style={{ position: 'relative' }}>
               <Gift size={16} />
+              {user && isDevAccount(user) && (
+                <span className="dev-badge" style={{ position: 'absolute', top: -8, right: -10, fontSize: 9, padding: '1px 4px' }}>
+                  ∞
+                </span>
+              )}
+              {user && !isDevAccount(user) && (seasonProgress?.seasonCoins || 0) > 0 && (
+                <span className="dev-badge" style={{ position: 'absolute', top: -8, right: -10, fontSize: 9, padding: '1px 4px' }}>
+                  {seasonProgress.seasonCoins}
+                </span>
+              )}
             </button>
             <button className="icon-toggle-btn" onClick={() => setStep('skins')} title="스킨">
               <Palette size={16} />
@@ -3389,6 +3399,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     }
     const points = seasonProgress?.seasonPoints || 0;
     const coins = seasonProgress?.seasonCoins || 0;
+    const devUnlimited = isDevAccount(user);
     const prog = levelProgress(points);
     const dailyList = getDailyMissionProgress(seasonProgress?.seasonDaily, myStats);
     const weeklyList = getWeeklyMissionProgress(seasonProgress?.seasonWeekly, myStats);
@@ -3420,8 +3431,24 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         {!isSeasonActive() && <p className="setup-warning">지금은 시즌 기간이 아니에요.</p>}
         {seasonNotice && <p className="setup-card-desc">{seasonNotice}</p>}
 
+        {isDevAccount(user) && (
+          <button
+            className="reset-btn"
+            disabled={seasonBusy}
+            onClick={async () => {
+              setSeasonBusy(true);
+              await devSetSeasonLevel(user.uid, 30);
+              await refreshSeasonProgress();
+              setSeasonBusy(false);
+              setSeasonNotice('개발자 전용: 30레벨로 설정했어요.');
+            }}
+          >
+            개발자 전용: 30레벨로 설정
+          </button>
+        )}
+
         <div className="tutorial-card">
-          <div className="tutorial-title">레벨 {prog.level} / 30 · 코인 {coins}</div>
+          <div className="tutorial-title">레벨 {prog.level} / 30 · 코인 {devUnlimited ? '∞' : coins}</div>
           <div className="title-progress-track">
             <div className="title-progress-fill" style={{ width: `${prog.pct}%` }} />
             <span className="title-progress-label">{prog.current} / {prog.target}</span>
@@ -3451,7 +3478,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           {SHOP_ITEMS.map((item) => (
             <div key={item.id} className="leaderboard-row" style={{ alignItems: 'center' }}>
               <span className="leaderboard-name">{item.name}</span>
-              <button className="reset-btn" disabled={seasonBusy || coins < item.price} onClick={() => handlePurchaseShopItem(item)}>
+              <button className="reset-btn" disabled={seasonBusy || (!devUnlimited && coins < item.price)} onClick={() => handlePurchaseShopItem(item)}>
                 {item.price}코인
               </button>
             </div>

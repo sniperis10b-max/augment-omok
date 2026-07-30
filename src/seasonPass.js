@@ -184,6 +184,18 @@ export function getSeasonMilestoneProgress(seasonMilestoneClaims, stats) {
 
 export { isFirebaseConfigured };
 
+// 개발자 계정 전용: 시즌 레벨을 특정 레벨로 강제 설정해요 (코인도 그 레벨만큼 채워줘요).
+export async function devSetSeasonLevel(uid, level) {
+  const db = getDb();
+  const points = pointsRequiredForLevel(level);
+  const coins = level * COINS_PER_LEVEL_UP;
+  await update(ref(db), {
+    [`users/${uid}/seasonPoints`]: points,
+    [`users/${uid}/seasonCoins`]: coins,
+    [`users/${uid}/achievementStats/seasonLevel`]: level,
+  });
+}
+
 // 화면에서 한 번에 불러다 쓰기 좋게, 시즌 관련 필드를 통째로 읽어와요.
 export async function getSeasonProgressData(uid) {
   const db = getDb();
@@ -218,14 +230,18 @@ export function getShopItemById(id) {
 
 // 이미 산 아이템인지는 화면 쪽에서 myTitles/myGrantedSkins로 확인해서 버튼을 막아주세요
 // (여기서는 코인만 확인하고 중복 구매 자체를 막지는 않아요).
-export async function purchaseShopItem(uid, itemId, currentCoins) {
+export async function purchaseShopItem(uid, itemId, currentCoins, unlimited = false) {
   const item = getShopItemById(itemId);
   if (!item) return { ok: false, reason: 'not-found' };
-  if ((currentCoins || 0) < item.price) return { ok: false, reason: 'insufficient' };
+  if (!unlimited && (currentCoins || 0) < item.price) return { ok: false, reason: 'insufficient' };
 
   const db = getDb();
-  const newCoins = currentCoins - item.price;
-  const updates = { [`users/${uid}/seasonCoins`]: newCoins };
+  const updates = {};
+  let newCoins = currentCoins;
+  if (!unlimited) {
+    newCoins = currentCoins - item.price;
+    updates[`users/${uid}/seasonCoins`] = newCoins;
+  }
   if (item.type === 'title') {
     updates[`users/${uid}/titles/${item.id}`] = true;
   } else if (item.type === 'boardSkin') {
