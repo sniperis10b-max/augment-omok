@@ -539,6 +539,7 @@ export default function App() {
   }, [user?.uid, settings.boardSkin, settings.stoneSkin]);
 
   // 대국이 새로 시작되면(설정 화면을 벗어나면) 닉네임 + 스킨 반반 리빌 인트로를 잠깐 보여줘요.
+  // 온라인 대전에서만 의미가 있어서(2인 로컬/AI 대전은 "상대"라는 개념이 딱히 없어요), 그때만 띄워요.
   useEffect(() => {
     if (state.phase === 'setup') {
       matchIntroShownRef.current = false;
@@ -546,38 +547,28 @@ export default function App() {
     }
     if (matchIntroShownRef.current) return;
     if (state.phase !== 'draft' && state.phase !== 'play') return;
+    if (!online || online.role === 'spectator' || !online.code) return;
     matchIntroShownRef.current = true;
 
-    const myColor = online ? online.localColor : (state.aiPlayer ? otherPlayer(state.aiPlayer) : BLACK);
+    const myColor = online.localColor;
     const myColorSafe = myColor || BLACK;
     const myName = user?.displayName || '나';
     const myStoneSkinId = settings.stoneSkin;
     const base = { myName, myColorLabel: myColorSafe === BLACK ? '흑' : '백', myStoneSkinId };
 
-    if (state.aiPlayer) {
-      setMatchIntro({
-        ...base,
-        oppName: `AI · ${DIFFICULTIES[state.aiDifficulty]?.label || '보통'}`,
-        oppStoneSkinId: 'classic',
-      });
-    } else if (online && online.role !== 'spectator' && online.code) {
-      setMatchIntro({ ...base, oppName: '상대', oppStoneSkinId: 'classic' });
-      getRoomPlayers(online.code)
-        .then(({ hostUid, guestUid }) => {
-          const oppUid = online.role === 'host' ? guestUid : hostUid;
-          if (!oppUid) return null;
-          return getPublicProfile(oppUid);
-        })
-        .then((profile) => {
-          if (profile) {
-            setMatchIntro((prev) => (prev ? { ...prev, oppName: profile.displayName, oppStoneSkinId: profile.stoneSkinId || 'classic' } : prev));
-          }
-        })
-        .catch(() => {});
-    } else {
-      // 2인이서 같은 화면 대국 - 별도 "상대 스킨" 개념이 없어서 내 스킨을 그대로 보여줘요.
-      setMatchIntro({ ...base, oppName: '상대', oppStoneSkinId: myStoneSkinId });
-    }
+    setMatchIntro({ ...base, oppName: '상대', oppStoneSkinId: 'classic' });
+    getRoomPlayers(online.code)
+      .then(({ hostUid, guestUid }) => {
+        const oppUid = online.role === 'host' ? guestUid : hostUid;
+        if (!oppUid) return null;
+        return getPublicProfile(oppUid);
+      })
+      .then((profile) => {
+        if (profile) {
+          setMatchIntro((prev) => (prev ? { ...prev, oppName: profile.displayName, oppStoneSkinId: profile.stoneSkinId || 'classic' } : prev));
+        }
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 

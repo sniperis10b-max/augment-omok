@@ -116,7 +116,11 @@ export async function syncEquippedSkinsToLeaderboard(uid, boardSkinId, stoneSkin
     [`leaderboard/${uid}/stoneSkinId`]: stoneSkinId || null,
     [`rankLeaderboard/${uid}/boardSkinId`]: boardSkinId || null,
     [`rankLeaderboard/${uid}/stoneSkinId`]: stoneSkinId || null,
-  }).catch(() => {});
+  }).catch((err) => {
+    // 여기서 실패가 조용히 묻히면 "장착 스킨이 프로필에 안 뜨는" 버그를 진단할 방법이
+    // 없어지니, 콘솔에는 남겨둬요 (Firebase 보안 규칙이 새 필드를 막고 있을 수 있어요).
+    console.warn('장착 스킨을 순위표에 동기화하지 못했어요:', err);
+  });
 }
 
 export function subscribeFriendRequests(uid, onChange) {
