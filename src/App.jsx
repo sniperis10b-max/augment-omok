@@ -10,7 +10,7 @@ import {
   Landmark, Infinity as InfinityIcon, FlipHorizontal, ArrowDownToLine, ArrowUpToLine, Coins, Medal,
   Shield, Hexagon, Gem, Flame, Octagon, Crown,
   Wind, CloudLightning, Waves, Orbit, Feather, Heart, Gift, Dice6,
-  ListOrdered, Palette,
+  ListOrdered, Palette, IdCard,
 } from 'lucide-react';
 import { BOARD_SIZE, otherPlayer, isCellInSealedLine } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
@@ -1555,6 +1555,9 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <button className="icon-toggle-btn" onClick={() => setStep('account')} title="계정">
               <UserCircle size={16} />
             </button>
+            <button className="icon-toggle-btn" onClick={() => setStep('profile')} title="프로필">
+              <IdCard size={16} />
+            </button>
             <button className="icon-toggle-btn" onClick={() => setStep('skins')} title="스킨">
               <Palette size={16} />
             </button>
@@ -2753,6 +2756,130 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <button className="setup-tutorial-link" onClick={() => setStep('terms')}>이용약관</button>
           <button className="setup-tutorial-link" onClick={() => setStep('privacy')}>개인정보처리방침</button>
         </div>
+      </div>
+    );
+  }
+
+  if (step === 'profile') {
+    const total = stats.wins + stats.losses + stats.draws;
+    const winRate = total > 0 ? Math.round((stats.wins / total) * 100) : 0;
+    const boardSkin = getBoardSkinById(settings.boardSkin);
+    const stoneSkin = getStoneSkinById(settings.stoneSkin);
+    const fx = getPlacementEffectById(settings.placementEffect);
+    const clearedCount = Object.keys(challengesCleared).filter((k) => challengesCleared[k]).length;
+
+    return (
+      <div className="page">
+        <header className="header">
+          <h1>증강 오목</h1>
+        </header>
+        <p className="subtitle">프로필</p>
+
+        <button className="setup-back" onClick={() => setStep('mode')}>
+          <ChevronLeft size={16} /> 뒤로
+        </button>
+
+        {!user ? (
+          <p className="setup-card-desc">로그인하면 프로필을 볼 수 있어요.</p>
+        ) : (
+          <>
+            <div className="tutorial-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <UserCircle size={40} />
+                <div>
+                  <div className="tutorial-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {user.displayName || '이름 없음'}
+                    <TitleBadge titleId={equippedTitle} />
+                    <TierIconBadge tierId={equippedTierId} />
+                  </div>
+                  <div className="setup-card-desc">{user.email}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="tutorial-card">
+              <div className="tutorial-title">레이팅 · 랭크</div>
+              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 8 }}>
+                <div>
+                  <div className="setup-card-desc" style={{ marginBottom: 4 }}>일반 레이팅</div>
+                  <div className="card-name" style={{ fontSize: 20 }}>{myRating ?? '-'}</div>
+                </div>
+                <div>
+                  <div className="setup-card-desc" style={{ marginBottom: 4 }}>랭크 점수</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {myRankPoints != null && <TierBadge rating={myRankPoints} size={24} />}
+                    <span className="card-name" style={{ fontSize: 20 }}>{myRankPoints ?? '-'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="tutorial-card">
+              <div className="tutorial-title">전적</div>
+              <p className="setup-card-desc" style={{ marginTop: 6 }}>
+                총 {total}판 · {stats.wins}승 {stats.losses}패 {stats.draws}무 · 승률 {winRate}%
+              </p>
+              <p className="setup-card-desc">AI 대전과 온라인 대전 결과만 반영돼요.</p>
+            </div>
+
+            <div className="tutorial-card">
+              <div className="tutorial-title">현재 장착 스킨</div>
+              <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginTop: 10 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 8, border: `1px solid ${boardSkin.border}`, margin: '0 auto 6px',
+                    backgroundImage: toBgImage(boardSkin.background),
+                    backgroundPosition: boardSkin.backgroundPosition || '0 0',
+                    backgroundSize: boardSkin.backgroundSize || 'auto',
+                    backgroundRepeat: 'no-repeat',
+                  }} />
+                  <div className="setup-card-desc">{boardSkin.name}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 6 }}>
+                    <span
+                      className={stoneSkin.id === 'errorStone' ? 'stone-swatch-glitch' : undefined}
+                      style={{
+                        width: 28, height: 28, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
+                        backgroundImage: toBgImage(stoneSkin.black),
+                        backgroundPosition: stoneSkin.blackPosition || '0 0',
+                        backgroundSize: stoneSkin.blackSize || 'auto',
+                        backgroundRepeat: 'no-repeat',
+                      }}
+                    />
+                    <span
+                      className={stoneSkin.id === 'errorStone' ? 'stone-swatch-glitch' : undefined}
+                      style={{
+                        width: 28, height: 28, borderRadius: '50%', display: 'inline-block', overflow: 'hidden',
+                        border: `1px solid ${stoneSkin.whiteBorder}`,
+                        backgroundImage: toBgImage(stoneSkin.white),
+                        backgroundPosition: stoneSkin.whitePosition || '0 0',
+                        backgroundSize: stoneSkin.whiteSize || 'auto',
+                        backgroundRepeat: 'no-repeat',
+                      }}
+                    />
+                  </div>
+                  <div className="setup-card-desc">{stoneSkin.name}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div className="card-name" style={{ marginBottom: 6 }}>{fx.name}</div>
+                  <div className="setup-card-desc">착수 이펙트</div>
+                </div>
+              </div>
+              <button className="setup-tutorial-link" style={{ marginTop: 12 }} onClick={() => setStep('skins')}>
+                <Palette size={16} /> 스킨 바꾸러 가기
+              </button>
+            </div>
+
+            <div className="tutorial-card">
+              <div className="tutorial-title">챌린지</div>
+              <p className="setup-card-desc" style={{ marginTop: 6 }}>
+                클리어한 챌린지: {clearedCount} / {CHALLENGES.length}
+                {hasCompletedAllChallenges(challengesCleared) && ' (전체 클리어!)'}
+              </p>
+            </div>
+          </>
+        )}
       </div>
     );
   }
