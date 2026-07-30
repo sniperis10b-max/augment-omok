@@ -86,6 +86,7 @@ export const TITLES = [
 
   // 특별 (자동 해금)
   { id: 'developer', name: '개발자', desc: '이 게임을 만든 사람에게 자동으로 주어지는 칭호', category: '특별' },
+  { id: 'debugger', name: '디버거', desc: '버그를 제보해서 게임을 더 좋게 만들어준 사람에게 주어지는 칭호', category: '특별' },
 ];
 
 export function getTitleById(id) {
