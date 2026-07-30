@@ -214,6 +214,95 @@ export const BOARD_SKINS = [
     line: 'rgba(255, 46, 196, 0.25)',
     questDesc: '???',
   },
+  {
+    id: 'cherryBlossom',
+    name: '벚꽃놀이',
+    background: 'linear-gradient(135deg, #ffd9e8, #ffb6d0)',
+    border: '#e8829f',
+    line: 'rgba(140, 40, 80, 0.3)',
+    questDesc: '시간제한 없는 모드로 50판 플레이',
+  },
+  {
+    id: 'inkWash',
+    name: '먹물',
+    background: 'radial-gradient(circle at 30% 30%, #3a3a3a, #efe9da 70%)',
+    border: '#2a2a2a',
+    line: 'rgba(0, 0, 0, 0.4)',
+    questDesc: '무승부 제안 성공 15회',
+  },
+  {
+    id: 'abyss',
+    name: '심해',
+    background: 'linear-gradient(160deg, #0a1a2e, #000208)',
+    border: '#04101c',
+    line: 'rgba(100, 200, 255, 0.15)',
+    questDesc: '다크 테마로 50판 플레이',
+  },
+  {
+    id: 'cyberpunk',
+    name: '사이버펑크',
+    background: 'linear-gradient(135deg, #1a0b2e, #2e0a3d)',
+    border: '#ff2ec4',
+    line: 'rgba(46, 230, 255, 0.35)',
+    questDesc: '온라인 대전 40판 완료',
+  },
+  {
+    id: 'parchmentMap',
+    name: '양피지 지도',
+    background: 'linear-gradient(135deg, #d9c39a, #a9814f)',
+    border: '#7a5c34',
+    line: 'rgba(90, 60, 20, 0.4)',
+    questDesc: '150수 이상 진행된 대국에서 승리 3회',
+  },
+  {
+    id: 'crackedGlass',
+    name: '균열 유리',
+    background:
+      'linear-gradient(105deg, rgba(255,255,255,0.55), rgba(255,255,255,0.55)), '
+      + 'linear-gradient(15deg, rgba(255,255,255,0.4), rgba(255,255,255,0.4)), '
+      + 'linear-gradient(160deg, #dce8f0, #a9c2d1)',
+    backgroundPosition: '20% 30%, 60% 62%, 0 0',
+    backgroundSize: '60% 2px, 45% 2px, 100% 100%',
+    border: '#7fa0b5',
+    line: 'rgba(255, 255, 255, 0.5)',
+    questDesc: '제한시간 5초 이하로 남았을 때 승리 5회',
+  },
+  {
+    id: 'rainforest',
+    name: '열대우림',
+    background: 'linear-gradient(160deg, #1f5c3a, #0a2b1a)',
+    border: '#0d3a22',
+    line: 'rgba(180, 255, 200, 0.2)',
+    questDesc: "'재림' 카드 성공 15회",
+  },
+  {
+    id: 'frostWindow',
+    name: '서리꽃 창문',
+    background: 'linear-gradient(160deg, #eaf6ff, #b8dcf0)',
+    border: '#8fc0dd',
+    line: 'rgba(255, 255, 255, 0.6)',
+    questDesc: '연속 접속 14일',
+  },
+  {
+    id: 'volcanicAsh',
+    name: '화산재',
+    background:
+      'linear-gradient(100deg, rgba(255, 90, 30, 0.55), rgba(255, 90, 30, 0.55)), '
+      + 'linear-gradient(160deg, #4a4a4a, #1a1a1a)',
+    backgroundPosition: '0 55%, 0 0',
+    backgroundSize: '100% 3px, 100% 100%',
+    border: '#2a2a2a',
+    line: 'rgba(255, 120, 50, 0.35)',
+    questDesc: '파괴 카드로 돌 100개 파괴',
+  },
+  {
+    id: 'libraryArchive',
+    name: '도서관 서고',
+    background: 'linear-gradient(135deg, #5a3a1e, #2e1c0d)',
+    border: '#d4af37',
+    line: 'rgba(212, 175, 55, 0.4)',
+    questDesc: '카드 총 150회 사용',
+  },
 ];
 
 export const STONE_SKINS = [
@@ -421,6 +510,92 @@ export const STONE_SKINS = [
     whiteBorder: '#d9b8ff',
     questDesc: '???',
   },
+  {
+    id: 'sunMoon',
+    name: '해와 달',
+    black: 'radial-gradient(circle at 35% 35%, #5a6a7a, #1a2230 70%)',
+    white: 'radial-gradient(circle at 35% 35%, #fff6d9, #ffb347 80%)',
+    whiteBorder: '#e8952e',
+    questDesc: '흑으로 25승 + 백으로 25승 모두 달성',
+  },
+  {
+    id: 'inkDrop',
+    name: '잉크방울',
+    black: 'radial-gradient(circle at 40% 40%, #3a3a3a, #050505 75%)',
+    white: 'radial-gradient(circle at 40% 40%, #fffdf6, #efe6cf 80%)',
+    whiteBorder: '#d8cca8',
+    questDesc: '기보 40개 시청',
+  },
+  {
+    id: 'gemstoneRough',
+    name: '보석 원석',
+    black: 'linear-gradient(145deg, #2a2a3a, #08080f)',
+    white: 'linear-gradient(145deg, #e8e4f0, #b8b0c8)',
+    whiteBorder: '#9088a0',
+    questDesc: '랭크전 60판 완료',
+  },
+  {
+    id: 'magnetic',
+    name: '자기장',
+    black: 'radial-gradient(circle, #8a8a8a, #2a2a2a 70%)',
+    white: 'radial-gradient(circle, #f0f0f0, #b0b0b0 70%)',
+    whiteBorder: '#9a9a9a',
+    questDesc: '봉인선 카드 50회 사용',
+  },
+  {
+    id: 'constellation',
+    name: '별자리',
+    black:
+      'radial-gradient(circle at 20% 30%, #fff 1px, transparent 1px), '
+      + 'radial-gradient(circle at 60% 60%, #fff 1px, transparent 1px), '
+      + 'radial-gradient(circle at 80% 20%, #fff 1px, transparent 1px), '
+      + 'linear-gradient(160deg, #1a1a3a, #050510)',
+    white:
+      'radial-gradient(circle at 30% 40%, #94a3b8 1px, transparent 1px), '
+      + 'linear-gradient(160deg, #f5f5f5, #dcdcdc)',
+    whiteBorder: '#c8c8c8',
+    questDesc: 'AI 불가능 난이도 상대로 30연승',
+  },
+  {
+    id: 'dragonScale',
+    name: '용의 비늘',
+    black: 'linear-gradient(145deg, #0a4a3a, #052a20)',
+    white: 'linear-gradient(145deg, #bfe8d8, #7ecbb0)',
+    whiteBorder: '#5aab8f',
+    questDesc: '카드 없이 승리 30회',
+  },
+  {
+    id: 'teaLeaf',
+    name: '찻잎',
+    black: 'linear-gradient(160deg, #6b4226, #3a2314)',
+    white: 'linear-gradient(160deg, #d8e8c8, #a8c890)',
+    whiteBorder: '#8fae70',
+    questDesc: '친구와 함께 50판 플레이',
+  },
+  {
+    id: 'amethyst',
+    name: '자수정',
+    black: 'linear-gradient(145deg, #6a3fa0, #2e1a50)',
+    white: 'linear-gradient(145deg, #e8d9f7, #c4a8e0)',
+    whiteBorder: '#b090cf',
+    questDesc: "'연금술' 카드 100회 사용",
+  },
+  {
+    id: 'auroraSilk',
+    name: '오로라 실크',
+    black: 'linear-gradient(120deg, #1a2a4a, #2a4a6a, #1a3a5a)',
+    white: 'linear-gradient(120deg, #d8f0ff, #c8e8d8, #e8d8f0)',
+    whiteBorder: '#a8c8d8',
+    questDesc: '착수 이펙트를 장착한 채로 승리 10회',
+  },
+  {
+    id: 'timelapse',
+    name: '타임랩스',
+    black: 'linear-gradient(160deg, #0a0a2a, #000010)',
+    white: 'linear-gradient(160deg, #aee0ff, #5fa8e0)',
+    whiteBorder: '#4a90c0',
+    questDesc: '누적 플레이 시간 24시간',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -510,6 +685,16 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'alchemistBench': return (stats.alchemyUses || 0) >= 100;
     case 'plagueGround': return (stats.corruptUses || 0) >= 100;
     case 'errorBoard': return (stats.tutorialClicks || 0) >= 100;
+    case 'cherryBlossom': return (stats.noTimeLimitGames || 0) >= 50;
+    case 'inkWash': return (stats.drawOfferSuccesses || 0) >= 15;
+    case 'abyss': return (stats.darkThemeGames || 0) >= 50;
+    case 'cyberpunk': return (stats.onlineGames || 0) >= 40;
+    case 'parchmentMap': return (stats.longMoveWins150 || 0) >= 3;
+    case 'crackedGlass': return (stats.lastSecondWins || 0) >= 5;
+    case 'rainforest': return (stats.resurrectionSuccesses || 0) >= 15;
+    case 'frostWindow': return (stats.loginStreak?.streak || 0) >= 14;
+    case 'volcanicAsh': return (stats.destroyKills || 0) >= 100;
+    case 'libraryArchive': return (stats.totalCardUses || 0) >= 150;
     default: return false;
   }
 }
@@ -544,6 +729,16 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'taxidermy': return (stats.markUses || 0) >= 30;
     case 'reverseEngineer': return (stats.overwriteUses || 0) >= 100;
     case 'errorStone': return (stats.timeLimit369Count || 0) >= 2;
+    case 'sunMoon': return (stats.blackWins || 0) >= 25 && (stats.whiteWins || 0) >= 25;
+    case 'inkDrop': return (stats.replayViewCount || 0) >= 40;
+    case 'gemstoneRough': return (stats.rankedGamesPlayed || 0) >= 60;
+    case 'magnetic': return (stats.sealLineUses || 0) >= 50;
+    case 'constellation': return (stats.impossibleWinStreak || 0) >= 30;
+    case 'dragonScale': return (stats.flawlessVictories || 0) >= 30;
+    case 'teaLeaf': return (stats.friendGamesPlayed || 0) >= 50;
+    case 'amethyst': return (stats.alchemyUses || 0) >= 100;
+    case 'auroraSilk': return (stats.effectEquippedWins || 0) >= 10;
+    case 'timelapse': return (stats.totalPlaySeconds || 0) >= 86400;
     default: return false;
   }
 }
@@ -581,6 +776,16 @@ export function getBoardSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'alchemistBench': return clampProgress(stats.alchemyUses, 100);
     case 'plagueGround': return clampProgress(stats.corruptUses, 100);
     case 'errorBoard': return null; // 조건이 비밀이라 진행률도 안 보여줘요
+    case 'cherryBlossom': return clampProgress(stats.noTimeLimitGames, 50);
+    case 'inkWash': return clampProgress(stats.drawOfferSuccesses, 15);
+    case 'abyss': return clampProgress(stats.darkThemeGames, 50);
+    case 'cyberpunk': return clampProgress(stats.onlineGames, 40);
+    case 'parchmentMap': return clampProgress(stats.longMoveWins150, 3);
+    case 'crackedGlass': return clampProgress(stats.lastSecondWins, 5);
+    case 'rainforest': return clampProgress(stats.resurrectionSuccesses, 15);
+    case 'frostWindow': return clampProgress(stats.loginStreak?.streak, 14);
+    case 'volcanicAsh': return clampProgress(stats.destroyKills, 100);
+    case 'libraryArchive': return clampProgress(stats.totalCardUses, 150);
     default: return null;
   }
 }
@@ -624,6 +829,20 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'taxidermy': return clampProgress(stats.markUses, 30);
     case 'reverseEngineer': return clampProgress(stats.overwriteUses, 100);
     case 'errorStone': return null; // 조건이 비밀이라 진행률도 안 보여줘요
+    case 'sunMoon': {
+      const p1 = clampProgress(stats.blackWins, 25).pct;
+      const p2 = clampProgress(stats.whiteWins, 25).pct;
+      return { current: null, target: null, pct: Math.min(p1, p2) };
+    }
+    case 'inkDrop': return clampProgress(stats.replayViewCount, 40);
+    case 'gemstoneRough': return clampProgress(stats.rankedGamesPlayed, 60);
+    case 'magnetic': return clampProgress(stats.sealLineUses, 50);
+    case 'constellation': return clampProgress(stats.impossibleWinStreak, 30);
+    case 'dragonScale': return clampProgress(stats.flawlessVictories, 30);
+    case 'teaLeaf': return clampProgress(stats.friendGamesPlayed, 50);
+    case 'amethyst': return clampProgress(stats.alchemyUses, 100);
+    case 'auroraSilk': return clampProgress(stats.effectEquippedWins, 10);
+    case 'timelapse': return clampProgress(stats.totalPlaySeconds, 86400);
     default: return null;
   }
 }

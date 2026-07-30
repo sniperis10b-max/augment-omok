@@ -32,7 +32,7 @@ import {
   declineFriendRequest, subscribeFriends, inviteFriendToGame, subscribeInvites, clearInvite,
   quickMatch, cancelQuickMatch, setupPresence, subscribeUserStatus, recordGameResult,
   subscribeStats, deleteUserData, getPublicProfile, syncEquippedSkinsToLeaderboard,
-  uploadProfilePhoto, removeProfilePhoto, getMyProfilePhoto,
+  uploadProfilePhoto, removeProfilePhoto, getMyProfilePhoto, isFriend,
 } from './social.js';
 import {
   ensureRatingInitialized, getRating, computeRatingDelta, applyRatingChange, fetchLeaderboard, DEFAULT_RATING, adminSetRating,
@@ -374,6 +374,9 @@ export default function App() {
   const prevLastUsedRef = useRef({ [BLACK]: null, [WHITE]: null });
   const [cardOverlay, setCardOverlay] = useState(null);
   const matchIntroShownRef = useRef(false); // 이번 판에서 매치 인트로를 이미 띄웠는지
+  const gameStartTimeRef = useRef(null); // 이번 판이 시작된 시각 (타임랩스 스킨: 누적 플레이 시간 집계용)
+  const prevTurnDeadlineRef = useRef(null); // 직전 수를 두기 전의 제한시간 마감 시각
+  const lastMoveRemainingSecRef = useRef(null); // 마지막 수를 둘 때 남아있던 시간(초) - 균열 유리 스킨 조건용
   const [matchIntro, setMatchIntro] = useState(null); // { myName, myColorLabel, myPhoto, oppName, oppPhoto } | null
 
   // 카드가 사용될 때마다(어느 쪽이든) 화면 중앙에 잠깐 띄워줘요
@@ -520,6 +523,9 @@ export default function App() {
         if (cur === 'echo' && state.echoResult === 'success') {
           bumpCounter(user.uid, 'echoSuccesses', 1).catch(() => {});
         }
+        if (cur === 'resurrection' && state.resurrectionResult === 'success') {
+          bumpCounter(user.uid, 'resurrectionSuccesses', 1).catch(() => {});
+        }
       } catch {
         // 업적 집계 실패는 게임 진행에 영향 없어야 해요
       }
@@ -624,7 +630,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
-  // 매치 인트로는 잠깐 보여주고 자동으로 닫아요.
+  // 타임랩스 스킨: 이번 판이 언제 시작됐는지 기억해뒀다가, 끝날 때 누적 플레이 시간에 더해요.
+  useEffect(() => {
+    if (state.phase === 'setup') {
+      gameStartTimeRef.current = null;
+    } else if (gameStartTimeRef.current === null) {
+      gameStartTimeRef.current = Date.now();
+    }
+  }, [state.phase]);
+
+  // 균열 유리 스킨: 수를 둘 때마다 "그 수를 두기 직전에 남아있던 시간"을 스냅샷 해둬요.
+  // (state.turnDeadline은 다음 수를 위한 마감시각으로 바로 갱신되기 때문에, 갱신되기
+  // 직전의 값을 기준으로 계산해야 "방금 둔 수"의 잔여시간을 알 수 있어요.)
+  useEffect(() => {
+    if (state.phase !== 'play' || !state.timeLimitSec) {
+      prevTurnDeadlineRef.current = null;
+      return;
+    }
+    if (prevTurnDeadlineRef.current != null) {
+      lastMoveRemainingSecRef.current = Math.max(0, Math.round((prevTurnDeadlineRef.current - Date.now()) / 1000));
+    }
+    prevTurnDeadlineRef.current = state.turnDeadline;
+  }, [state.history?.length, state.phase, state.timeLimitSec]);
+
+
   useEffect(() => {
     if (!matchIntro) return undefined;
     const t = setTimeout(() => setMatchIntro(null), 2200);
@@ -930,6 +959,21 @@ export default function App() {
                     bumpCounter(user.uid, 'longGameWins', 1).catch(() => {});
                   }
 
+                  // 양피지 지도 스킨: 150수 이상 진행된 대국에서 승리
+                  if (state.ply >= 150) {
+                    bumpCounter(user.uid, 'longMoveWins150', 1).catch(() => {});
+                  }
+
+                  // 균열 유리 스킨: 제한시간이 5초 이하로 남았을 때 둔 수로 승리
+                  if (state.timeLimitSec && lastMoveRemainingSecRef.current != null && lastMoveRemainingSecRef.current <= 5) {
+                    bumpCounter(user.uid, 'lastSecondWins', 1).catch(() => {});
+                  }
+
+                  // 오로라 실크 스킨: 착수 이펙트를 장착한 채로 승리
+                  if (settings.placementEffect && settings.placementEffect !== 'none') {
+                    bumpCounter(user.uid, 'effectEquippedWins', 1).catch(() => {});
+                  }
+
                   // 풀 하우스: 판이 90% 이상 찬 뒤 승리
                   const size = state.board.length;
                   let stoneCount = 0;
@@ -998,6 +1042,22 @@ export default function App() {
                   bumpCounter(user.uid, 'longGamesPlayed', 1).catch(() => {});
                 }
 
+                // 벚꽃놀이 스킨: 시간제한 없는 모드로 플레이 (승패 무관)
+                if (!settings.timeLimitSec) {
+                  bumpCounter(user.uid, 'noTimeLimitGames', 1).catch(() => {});
+                }
+
+                // 심해 스킨: 다크 테마로 플레이 (승패 무관)
+                if (settings.theme === 'dark') {
+                  bumpCounter(user.uid, 'darkThemeGames', 1).catch(() => {});
+                }
+
+                // 타임랩스 스킨: 누적 플레이 시간 (승패 무관)
+                if (gameStartTimeRef.current != null) {
+                  const elapsedSec = Math.max(0, Math.round((Date.now() - gameStartTimeRef.current) / 1000));
+                  if (elapsedSec > 0) bumpCounter(user.uid, 'totalPlaySeconds', elapsedSec).catch(() => {});
+                }
+
                 // 폐허가 된 전장: 상대에게 이번 판에서 돌 5개 이상 파괴당했는데도 승리
                 if (result === 'win' && (state.stoneDestroyCount?.[otherPlayer(myColor)] || 0) >= 5) {
                   bumpCounter(user.uid, 'ruinedBattlefieldWins', 1).catch(() => {});
@@ -1043,6 +1103,10 @@ export default function App() {
                       const opponentUid = online.role === 'host' ? guestUid : hostUid;
                       if (opponentUid && opponentUid !== user.uid) {
                         addToStatSet(user.uid, 'friendsPlayed', opponentUid).catch(() => {});
+                        // 찻잎 스킨: 친구와 함께한 대국 총 판수
+                        isFriend(user.uid, opponentUid)
+                          .then((yes) => { if (yes) bumpCounter(user.uid, 'friendGamesPlayed', 1).catch(() => {}); })
+                          .catch(() => {});
                       }
                     })
                     .catch(() => {});
@@ -3618,7 +3682,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <button
               key={r.id}
               className="record-item"
-              onClick={() => { setSelectedRecord(r); setStep('replay'); }}
+              onClick={() => {
+                setSelectedRecord(r);
+                setStep('replay');
+                if (user && isFirebaseConfigured()) bumpCounter(user.uid, 'replayViewCount', 1).catch(() => {});
+              }}
             >
               <div>
                 <div className="record-item-result">

@@ -64,6 +64,12 @@ export async function getMyProfilePhoto(uid) {
   return snap.exists() ? snap.val() : null;
 }
 
+export async function isFriend(myUid, otherUid) {
+  const db = getDb();
+  const snap = await get(ref(db, `users/${myUid}/friends/${otherUid}`));
+  return snap.exists();
+}
+
 // ---------- 친구 요청 ----------
 
 export async function sendFriendRequestByEmail(myUser, targetEmail) {
