@@ -32,6 +32,7 @@ import {
   declineFriendRequest, subscribeFriends, inviteFriendToGame, subscribeInvites, clearInvite,
   quickMatch, cancelQuickMatch, setupPresence, subscribeUserStatus, recordGameResult,
   subscribeStats, deleteUserData, getPublicProfile, syncEquippedSkinsToLeaderboard,
+  uploadProfilePhoto, removeProfilePhoto, getMyProfilePhoto,
 } from './social.js';
 import {
   ensureRatingInitialized, getRating, computeRatingDelta, applyRatingChange, fetchLeaderboard, DEFAULT_RATING, adminSetRating,
@@ -86,10 +87,50 @@ function isDevAccount(user) {
   return !!user?.email && user.email.toLowerCase() === DEV_ACCOUNT_EMAIL;
 }
 
+// 프로필 사진이 있으면 그 이미지를, 없으면 기존처럼 사람 아이콘을 보여줘요.
+function Avatar({ photo, size = 40 }) {
+  if (photo) {
+    return (
+      <img
+        src={photo}
+        alt=""
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+      />
+    );
+  }
+  return <UserCircle size={size} style={{ flexShrink: 0 }} />;
+}
+
 // 개발자는 아니지만, 모든 칭호를 특별히 받는 계정들 ('개발자' 칭호 자체는 안 줘요).
 const BONUS_ALL_TITLES_EMAILS = [];
 function hasAllTitlesBonus(user) {
   return !!user?.email && BONUS_ALL_TITLES_EMAILS.includes(user.email.toLowerCase());
+}
+
+// 업로드한 이미지 파일을 정사각형으로 가운데 크롭 + 리사이즈해서, DB에 바로 저장해도
+// 될 만큼 작은 base64 JPEG로 바꿔줘요 (별도 Storage 없이 Realtime Database에 저장해요).
+function resizeImageFileToDataUrl(file, size = 200) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('파일을 읽지 못했어요.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('이미지를 열지 못했어요.'));
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 // 장착한 칭호를 개발자 뱃지와 같은 캡슐 모양으로 보여주는 배지.
@@ -303,6 +344,7 @@ export default function App() {
   const [settings, setSettingsState] = useState(() => loadSettings());
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const [user, setUser] = useState(null); // null | { uid, displayName, email, photoURL, emailVerified, isGoogle }
+  const [myPhoto, setMyPhoto] = useState(null); // base64 프로필 사진 (Auth의 photoURL과는 별개)
   const [myRating, setMyRating] = useState(null);
   const [lastRatingChange, setLastRatingChange] = useState(null);
   const [myRankPoints, setMyRankPoints] = useState(null);
@@ -618,6 +660,15 @@ export default function App() {
       upsertUserProfile(user).catch(() => {});
     }
   }, [user?.uid, user?.displayName, user?.photoURL]);
+
+  // 내가 업로드해둔 프로필 사진을 불러와요.
+  useEffect(() => {
+    if (user && isFirebaseConfigured()) {
+      getMyProfilePhoto(user.uid).then(setMyPhoto).catch(() => setMyPhoto(null));
+    } else {
+      setMyPhoto(null);
+    }
+  }, [user?.uid]);
 
   // 로그인하면 레이팅이 없는 계정은 1000점으로 초기화하고, 순위표용 닉네임도 최신화해요.
   useEffect(() => {
@@ -1095,6 +1146,8 @@ export default function App() {
         updateSettings={updateSettings}
         user={user}
         setUser={setUser}
+        myPhoto={myPhoto}
+        setMyPhoto={setMyPhoto}
         myRating={myRating}
         setMyRating={setMyRating}
         myRankPoints={myRankPoints}
@@ -1308,7 +1361,7 @@ function FriendRow({ friend, busy, onInvite }) {
   );
 }
 
-function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify, setTitleUnlockToast, challengesCleared, ladderLevel, knownUnlockedSkinsRef }) {
+function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, user, setUser, myPhoto, setMyPhoto, myRating, setMyRating, myRankPoints, peakTierIndex, reachedTierBadges, equippedTierId, setEquippedTierId, myTitles, equippedTitle, setEquippedTitle, unlockAndNotify, setTitleUnlockToast, challengesCleared, ladderLevel, knownUnlockedSkinsRef }) {
   const [step, setStep] = useState('mode');
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
@@ -1332,6 +1385,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [authNotice, setAuthNotice] = useState('');
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileNickname, setProfileNickname] = useState('');
+  const [photoStatus, setPhotoStatus] = useState('');
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [friendRequests, setFriendRequests] = useState([]);
   const [friendsList, setFriendsList] = useState([]);
   const [invites, setInvites] = useState([]);
@@ -1362,8 +1417,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     setViewedProfile(null);
     setViewedProfileLoading(true);
     setStep('view-profile');
-    const p = await getPublicProfile(uid).catch(() => null);
-    setViewedProfile(p);
+    const [p, photo] = await Promise.all([
+      getPublicProfile(uid).catch(() => null),
+      getMyProfilePhoto(uid).catch(() => null),
+    ]);
+    setViewedProfile(p ? { ...p, photo } : null);
     setViewedProfileLoading(false);
   }
 
@@ -2522,6 +2580,41 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       }
     }
 
+    async function handlePhotoChange(e) {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = ''; // 같은 파일을 다시 골라도 onChange가 또 뜨도록
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        setPhotoStatus('이미지 파일만 올릴 수 있어요.');
+        return;
+      }
+      setPhotoBusy(true);
+      setPhotoStatus('업로드하는 중...');
+      try {
+        const dataUrl = await resizeImageFileToDataUrl(file, 200);
+        await uploadProfilePhoto(user.uid, dataUrl);
+        setMyPhoto(dataUrl);
+        setPhotoStatus('프로필 사진을 바꿨어요.');
+      } catch {
+        setPhotoStatus('사진을 올리지 못했어요. 다시 시도해주세요.');
+      } finally {
+        setPhotoBusy(false);
+      }
+    }
+
+    async function handlePhotoRemove() {
+      setPhotoBusy(true);
+      try {
+        await removeProfilePhoto(user.uid);
+        setMyPhoto(null);
+        setPhotoStatus('프로필 사진을 지웠어요.');
+      } catch {
+        setPhotoStatus('지우지 못했어요. 다시 시도해주세요.');
+      } finally {
+        setPhotoBusy(false);
+      }
+    }
+
     if (user) {
       return (
         <div className="page">
@@ -2536,7 +2629,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
           <div className="tutorial-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-              <UserCircle size={40} />
+              <Avatar photo={myPhoto} size={40} />
               <div>
                 <div className="tutorial-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {user.displayName || '이름 없음'}
@@ -2546,6 +2639,25 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <div className="setup-card-desc">{user.email}</div>
               </div>
             </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+              <label className="reset-btn" style={{ cursor: photoBusy ? 'not-allowed' : 'pointer', opacity: photoBusy ? 0.6 : 1 }}>
+                {myPhoto ? '사진 바꾸기' : '프로필 사진 추가'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  disabled={photoBusy}
+                  style={{ display: 'none' }}
+                />
+              </label>
+              {myPhoto && (
+                <button className="icon-toggle-btn" disabled={photoBusy} onClick={handlePhotoRemove} title="사진 삭제">
+                  <XIcon size={14} />
+                </button>
+              )}
+            </div>
+            {photoStatus && <p className="setup-card-desc" style={{ marginBottom: 8 }}>{photoStatus}</p>}
 
             {!user.isGoogle && !user.emailVerified && (
               <div className="setup-warning">
@@ -2888,7 +3000,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <>
             <div className="tutorial-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <UserCircle size={40} />
+                <Avatar photo={viewedProfile.photo} size={40} />
                 <div>
                   <div className="tutorial-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {viewedProfile.displayName}
@@ -3010,7 +3122,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <>
             <div className="tutorial-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <UserCircle size={40} />
+                <Avatar photo={myPhoto} size={40} />
                 <div>
                   <div className="tutorial-title" style={{ marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                     {user.displayName || '이름 없음'}

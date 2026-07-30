@@ -41,6 +41,27 @@ export async function upsertUserProfile(user) {
   }
 }
 
+// ---------- 프로필 사진 ----------
+// 별도의 Firebase Storage 없이, 작게 리사이즈한 이미지를 base64로 DB에 직접 저장해요.
+// Auth의 photoURL(구글 로그인 사진 등)과는 별개의 필드(customPhoto)라서, 다른 곳에서
+// user.photoURL을 다시 저장해도 이 값은 그대로 남아있어요.
+
+export async function uploadProfilePhoto(uid, dataUrl) {
+  const db = getDb();
+  await update(ref(db, `users/${uid}/profile`), { customPhoto: dataUrl });
+}
+
+export async function removeProfilePhoto(uid) {
+  const db = getDb();
+  await update(ref(db, `users/${uid}/profile`), { customPhoto: null });
+}
+
+export async function getMyProfilePhoto(uid) {
+  const db = getDb();
+  const snap = await get(ref(db, `users/${uid}/profile/customPhoto`));
+  return snap.exists() ? snap.val() : null;
+}
+
 // ---------- 친구 요청 ----------
 
 export async function sendFriendRequestByEmail(myUser, targetEmail) {
