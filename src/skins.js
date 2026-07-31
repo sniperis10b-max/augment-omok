@@ -334,6 +334,8 @@ export const BOARD_SKINS = [
     questDesc: '시즌 상점에서 코인으로 구매 (900코인)',
   },
   {
+    // TODO: '카드 도박꾼' 챌린지가 챌린지 1에서 빠지면서 지금은 아무 조건으로도 못 얻는
+    // 예약 스킨이에요. 나중에 다른 조건에 다시 연결할 예정이라 지우지 않고 남겨뒀어요.
     id: 'casinoFelt',
     name: '카지노 펠트',
     background: 'radial-gradient(circle at 50% 45%, #1a5c3a, #0a2e1e 80%)',
@@ -663,6 +665,8 @@ export const STONE_SKINS = [
     questDesc: '시즌 상점에서 코인으로 구매 (900코인)',
   },
   {
+    // TODO: '속전속결' 챌린지가 챌린지 1에서 빠지면서 지금은 아무 조건으로도 못 얻는
+    // 예약 스킨이에요. 나중에 다른 조건에 다시 연결할 예정이라 지우지 않고 남겨뒀어요.
     id: 'lightningMark',
     name: '번개 각인',
     black:

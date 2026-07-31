@@ -13,8 +13,6 @@ export const CHALLENGES = [
   { id: 'doubleForbidden', name: '이중 금수', desc: '무작위 칸 10곳이 처음부터 막힌 채 시작해요.' },
   { id: 'silhouette', name: '흑백 실루엣', desc: '돌이 색이 아니라 채워짐/테두리 모양으로만 구분돼요.' },
   { id: 'ladder', name: '5단 계단', desc: '쉬움부터 불가능까지 5개 난이도를 연속으로 이겨야 해요. 중간에 지면 처음부터예요.' },
-  { id: 'speedRun', name: '속전속결', desc: '한 수당 제한시간이 무조건 15초로 고정돼요.' },
-  { id: 'gambler', name: '카드 도박꾼', desc: '드래프트 풀이 확률형 카드(동전 던지기, 복권, 기적 등)로만 구성돼요.' },
 ];
 
 export const LADDER_LEVELS = ['easy', 'normal', 'hard', 'hell', 'impossible'];
