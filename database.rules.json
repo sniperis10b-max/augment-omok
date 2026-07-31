@@ -1,0 +1,135 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      ".read": "auth != null && auth.token.email === 'sniperis10b@gmail.com'",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+
+        "profile": {
+          "customPhoto": {
+            ".read": "auth != null"
+          }
+        },
+
+        "friends": {
+          "$otherUid": {
+            ".write": "auth != null && (auth.uid === $uid || auth.uid === $otherUid)"
+          }
+        },
+        "friendRequests": {
+          "$fromUid": {
+            ".write": "auth != null && (auth.uid === $uid || auth.uid === $fromUid)"
+          }
+        },
+        "invites": {
+          "$fromUid": {
+            ".write": "auth != null && (auth.uid === $uid || auth.uid === $fromUid)"
+          }
+        },
+
+        "titles": {
+          "$titleId": {
+            ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+          }
+        },
+        "equippedTitle": {
+          ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+        },
+        "reachedTierBadges": {
+          "$tierId": {
+            ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+          }
+        },
+        "equippedTierId": {
+          ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+        },
+        "grantedBoardSkins": {
+          "$skinId": {
+            ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+          }
+        },
+        "grantedStoneSkins": {
+          "$skinId": {
+            ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+          }
+        },
+        "blockedBoardSkins": {
+          "$skinId": {
+            ".write": "auth != null && auth.token.email === 'sniperis10b@gmail.com'"
+          }
+        },
+        "blockedStoneSkins": {
+          "$skinId": {
+            ".write": "auth != null && auth.token.email === 'sniperis10b@gmail.com'"
+          }
+        }
+      }
+    },
+
+    "usersByEmail": {
+      "$emailKey": {
+        ".read": "auth != null",
+        ".write": "auth != null && (newData.val() === auth.uid || (!newData.exists() && data.val() === auth.uid))"
+      }
+    },
+
+    "rooms": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "matchmaking": {
+      "waiting": {
+        "$queueKey": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
+
+    "leaderboard": {
+      ".read": true,
+      ".indexOn": ["rating"],
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        "titleName": {
+          ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+        },
+        "tierBadgeId": {
+          ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+        }
+      }
+    },
+
+    "rankLeaderboard": {
+      ".read": true,
+      ".indexOn": ["points"],
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        "tierBadgeId": {
+          ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+        }
+      }
+    },
+
+    "titleCounts": {
+      ".read": true,
+      "$titleId": {
+        ".write": "auth != null"
+      }
+    },
+
+    "cardStats": {
+      ".read": "auth != null",
+      "$cardId": {
+        ".write": "auth != null"
+      }
+    }
+  }
+}

@@ -52,46 +52,109 @@ npm run dev
    - 보안 규칙은 우선 **테스트 모드**로 시작 (나중에 아래 규칙으로 바꾸는 걸 추천해요)
 4. 프로젝트 개요 옆 톱니바퀴 → "프로젝트 설정" → 아래로 스크롤해서 "내 앱" → 웹 아이콘(`</>`) 클릭 → 앱 등록
 5. 화면에 나오는 `firebaseConfig` 객체 값을 복사해서, 이 프로젝트의 `src/firebaseConfig.js` 파일에 그대로 붙여넣기
-6. Realtime Database 메뉴의 "규칙" 탭에서 아래처럼 설정 (테스트 삼아 누구나 읽고 쓸 수 있게 하는 규칙이에요. 실제 서비스라면 더 제한적으로 바꾸는 게 좋아요):
+6. Realtime Database 메뉴의 "규칙" 탭에서 아래 규칙을 붙여넣기 (프로젝트 루트의 `database.rules.json` 파일과 같은 내용이에요. 로그인한 사용자만 접근 가능하고, 각자 자기 데이터만 쓸 수 있도록 제한한 규칙이에요):
    ```json
    {
      "rules": {
-       "rooms": {
-         "$code": {
-           ".read": true,
-           ".write": true
+       ".read": false,
+       ".write": false,
+
+       "users": {
+         ".read": "auth != null && auth.token.email === 'sniperis10b@gmail.com'",
+         "$uid": {
+           ".read": "auth != null && auth.uid === $uid",
+           ".write": "auth != null && auth.uid === $uid",
+
+           "profile": {
+             "customPhoto": { ".read": "auth != null" }
+           },
+           "friends": {
+             "$otherUid": { ".write": "auth != null && (auth.uid === $uid || auth.uid === $otherUid)" }
+           },
+           "friendRequests": {
+             "$fromUid": { ".write": "auth != null && (auth.uid === $uid || auth.uid === $fromUid)" }
+           },
+           "invites": {
+             "$fromUid": { ".write": "auth != null && (auth.uid === $uid || auth.uid === $fromUid)" }
+           },
+           "titles": {
+             "$titleId": { ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')" }
+           },
+           "equippedTitle": {
+             ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+           },
+           "reachedTierBadges": {
+             "$tierId": { ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')" }
+           },
+           "equippedTierId": {
+             ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+           },
+           "grantedBoardSkins": {
+             "$skinId": { ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')" }
+           },
+           "grantedStoneSkins": {
+             "$skinId": { ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')" }
+           },
+           "blockedBoardSkins": {
+             "$skinId": { ".write": "auth != null && auth.token.email === 'sniperis10b@gmail.com'" }
+           },
+           "blockedStoneSkins": {
+             "$skinId": { ".write": "auth != null && auth.token.email === 'sniperis10b@gmail.com'" }
+           }
          }
        },
-       "users": {
-         ".read": true,
-         ".write": true
-       },
+
        "usersByEmail": {
-         ".read": true,
-         ".write": true
+         "$emailKey": {
+           ".read": "auth != null",
+           ".write": "auth != null && (newData.val() === auth.uid || (!newData.exists() && data.val() === auth.uid))"
+         }
        },
+
+       "rooms": {
+         "$code": { ".read": "auth != null", ".write": "auth != null" }
+       },
+
        "matchmaking": {
-         ".read": true,
-         ".write": true
+         "waiting": {
+           "$queueKey": { ".read": "auth != null", ".write": "auth != null" }
+         }
        },
+
        "leaderboard": {
          ".read": true,
-         ".write": true,
-         ".indexOn": ["rating"]
+         ".indexOn": ["rating"],
+         "$uid": {
+           ".write": "auth != null && auth.uid === $uid",
+           "titleName": { ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')" },
+           "tierBadgeId": { ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')" }
+         }
        },
-       "titleCounts": {
-         ".read": true,
-         ".write": true
-       },
+
        "rankLeaderboard": {
          ".read": true,
-         ".write": true,
-         ".indexOn": ["points"]
+         ".indexOn": ["points"],
+         "$uid": {
+           ".write": "auth != null && auth.uid === $uid",
+           "tierBadgeId": { ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')" }
+         }
+       },
+
+       "titleCounts": {
+         ".read": true,
+         "$titleId": { ".write": "auth != null" }
+       },
+
+       "cardStats": {
+         ".read": "auth != null",
+         "$cardId": { ".write": "auth != null" }
        }
      }
    }
    ```
-   (`users`, `usersByEmail`, `matchmaking` 경로는 친구 추가와 랜덤 매칭 기능에, `leaderboard`는 일반 레이팅 순위표에, `titleCounts`는 칭호별 보유자 수 집계에, `rankLeaderboard`는 랭크전 전용 순위표에 쓰여요. 두 순위표 모두 닉네임과 점수만 저장되고 이메일은 절대 저장되지 않아요)
+   (`users`는 로그인한 사람만, 그것도 원칙적으로 자기 데이터만 쓸 수 있어요. 칭호/스킨/티어뱃지처럼 개발자 계정이 다른 사람에게 지급/회수해주는 항목만 예외로 열어뒀고, 그 이메일은 `sniperis10b@gmail.com`으로 고정해서 검사해요 — 다른 이메일로 개발자 계정을 바꾸고 싶다면 이 부분을 전부 바꿔야 해요. `rooms`/`matchmaking`은 로그인한 사람이면 누구나 쓸 수 있는데, 이건 온라인 대전이 지금 클라이언트가 만든 게임 상태를 그대로 믿고 저장하는 구조라 "수가 유효한지" 자체는 서버가 검사 안 해요 — 브라우저 콘솔로 직접 조작하는 것까진 막지 못하니, 완전히 막으려면 나중에 Cloud Functions로 이동하는 게 좋아요.)
+
+   ⚠️ 이 규칙은 실제 라이브 Firebase 프로젝트에 올려서 테스트해본 게 아니라(샌드박스에서 에뮬레이터 실행이 막혀있어요), 문법과 로직을 꼼꼼히 검토는 했지만 **적용 전에 Firebase 콘솔의 "규칙 재생(Rules Playground)" 기능으로 한 번 시뮬레이션**해보길 권장해요. 특히 온라인 대전, 친구 추가, 스킨/칭호 지급이 다 잘 되는지 직접 확인해보세요.
 7. `npm run dev`로 실행 후 "친구와 플레이"를 눌러 방을 만들고, 다른 브라우저 탭(또는 다른 사람)이 코드를 입력해서 참가하면 돼요.
 
 설정을 안 해도 로컬 2인 대국과 AI 대국은 그대로 잘 작동해요. "친구와 플레이"만 이 설정이 필요해요.
