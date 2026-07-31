@@ -46,6 +46,7 @@ import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.j
 import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins, toBgImage } from './skins.js';
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
+import { bumpCardsOffered, bumpCardPicked, bumpCardUsedGlobal, bumpCardGameOutcome, getAllCardStats } from './cardStats.js';
 import { isSeasonActive } from './seasonPass.js';
 import {
   CURRENT_SEASON, levelProgress, getDailyMissionProgress, getWeeklyMissionProgress, getSeasonMilestoneProgress,
@@ -382,6 +383,7 @@ export default function App() {
   const [cardOverlay, setCardOverlay] = useState(null);
   const matchIntroShownRef = useRef(false); // 이번 판에서 매치 인트로를 이미 띄웠는지
   const gameStartTimeRef = useRef(null); // 이번 판이 시작된 시각 (타임랩스 스킨: 누적 플레이 시간 집계용)
+  const cardOfferTrackedIndexRef = useRef(-1); // 카드 통계: 이미 "떴음" 집계한 draft.currentIndex
   const prevTurnDeadlineRef = useRef(null); // 직전 수를 두기 전의 제한시간 마감 시각
   const lastMoveRemainingSecRef = useRef(null); // 마지막 수를 둘 때 남아있던 시간(초) - 균열 유리 스킨 조건용
   const [matchIntro, setMatchIntro] = useState(null); // { myName, myColorLabel, myPhoto, oppName, oppPhoto } | null
@@ -462,6 +464,7 @@ export default function App() {
         if (usedCount >= CARDS.length) unlockAndNotify('allRounder');
         bumpNestedCounter(user.uid, 'cardUseCounts', cur, 1).catch(() => {});
         bumpCounter(user.uid, 'totalCardUses', 1).catch(() => {});
+        bumpCardUsedGlobal(cur);
         // 시즌 패스: 이번 시즌 기간에만 누적돼요 (2인 로컬 대국은 위 myColor 체크에서 이미 제외됨).
         if (isSeasonActive()) {
           bumpCounter(user.uid, 'seasonCardUses', 1).catch(() => {});
@@ -644,7 +647,23 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
-  // 타임랩스 스킨: 이번 판이 언제 시작됐는지 기억해뒀다가, 끝날 때 누적 플레이 시간에 더해요.
+  // 카드 통계(개발자 대시보드용): 드래프트에서 카드 3장이 뜰 때마다 "떴음"을 집계해요.
+  // 온라인 대전에서 양쪽 클라이언트가 같은 state를 공유해도 중복 집계되지 않도록,
+  // 지금 픽할 차례인 쪽의 로컬 색깔이 맞을 때만(=한쪽 클라이언트에서만) 집계해요.
+  useEffect(() => {
+    if (!isFirebaseConfigured()) return;
+    if (state.phase !== 'draft' || !state.draft.options || state.draft.options.length === 0) return;
+    if (cardOfferTrackedIndexRef.current === state.draft.currentIndex) return;
+    const picker = state.draft.order[state.draft.currentIndex];
+    const myColor = online && online.role !== 'spectator'
+      ? online.localColor
+      : state.aiPlayer ? otherPlayer(state.aiPlayer) : picker;
+    if (picker !== myColor) return; // 상대가 고를 차례면 내 클라이언트에선 집계 안 해요.
+    cardOfferTrackedIndexRef.current = state.draft.currentIndex;
+    bumpCardsOffered(state.draft.options);
+  }, [state.phase, state.draft?.currentIndex, state.draft?.options, online, state.aiPlayer]);
+
+
   useEffect(() => {
     if (state.phase === 'setup') {
       gameStartTimeRef.current = null;
@@ -955,6 +974,17 @@ export default function App() {
         if (myColor) {
           const result = state.winner === null ? 'draw' : state.winner === myColor ? 'win' : 'loss';
           recordGameResult(user.uid, result).catch(() => {});
+
+          // 카드 통계(개발자 대시보드용): 이번 판에 내가 실제로 쓴 카드들의 승패를 집계해요.
+          // (룰렛 모드는 카드 사용 통계 전반에서 빼기로 했으니 여기도 제외해요.)
+          if (isFirebaseConfigured() && !state.rouletteRule) {
+            const usedThisGame = new Set(
+              (state.moveLog || [])
+                .filter((m) => m.type === 'card' && m.player === myColor)
+                .map((m) => m.cardId)
+            );
+            bumpCardGameOutcome([...usedThisGame], result === 'win');
+          }
 
           // 시즌 패스: 대국 판수(승패 무관, 2인 로컬 대국은 myColor가 없어서 이미 제외됨)
           if (isFirebaseConfigured() && isSeasonActive()) {
@@ -1386,6 +1416,7 @@ function useAIDriver(state, dispatch, online) {
         const t = setTimeout(() => {
           const cardId = pickDraftCard(state.draft.options);
           dispatch({ type: 'DRAFT_PICK', cardId });
+          if (isFirebaseConfigured()) bumpCardPicked(cardId);
         }, 500);
         return () => clearTimeout(t);
       }
@@ -1557,6 +1588,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [myStats, setMyStats] = useState({});
   const [myGrantedSkins, setMyGrantedSkins] = useState({ board: {}, stone: {} });
   const [seasonProgress, setSeasonProgress] = useState(null);
+  const [cardStatsData, setCardStatsData] = useState(null);
+  const [cardStatsLoading, setCardStatsLoading] = useState(false);
   const [seasonBusy, setSeasonBusy] = useState(false);
   const [seasonNotice, setSeasonNotice] = useState('');
 
@@ -2116,6 +2149,77 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <p className="setup-card-desc">
           AI 대전과 온라인 대전 결과만 기록돼요. 2인이서 대국은 "내 색"이 명확하지 않아서 전적에 포함되지 않아요.
         </p>
+      </div>
+    );
+  }
+
+  if (step === 'admin-cardstats') {
+    if (!isDevAccount(user)) {
+      return (
+        <div className="page">
+          <header className="header"><h1>증강 오목</h1></header>
+          <button className="setup-back" onClick={() => setStep('mode')}><ChevronLeft size={16} /> 뒤로</button>
+          <p className="setup-card-desc">개발자 계정만 볼 수 있어요.</p>
+        </div>
+      );
+    }
+    const rows = CARDS.map((c) => {
+      const s = cardStatsData?.[c.id] || {};
+      const offered = s.offered || 0;
+      const picked = s.picked || 0;
+      const used = s.used || 0;
+      const gamesWithCard = s.gamesWithCard || 0;
+      const winsWithCard = s.winsWithCard || 0;
+      return {
+        id: c.id,
+        name: c.name,
+        offered,
+        pickRate: offered > 0 ? Math.round((picked / offered) * 100) : null,
+        used,
+        gamesWithCard,
+        winRate: gamesWithCard > 0 ? Math.round((winsWithCard / gamesWithCard) * 100) : null,
+      };
+    }).sort((a, b) => b.offered - a.offered);
+
+    return (
+      <div className="page">
+        <header className="header"><h1>증강 오목</h1></header>
+        <p className="subtitle">카드 통계 (개발자 전용)</p>
+        <button className="setup-back" onClick={() => setStep('account')}><ChevronLeft size={16} /> 뒤로</button>
+
+        <button
+          className="reset-btn"
+          style={{ marginBottom: 10 }}
+          disabled={cardStatsLoading}
+          onClick={async () => {
+            setCardStatsLoading(true);
+            const data = await getAllCardStats().catch(() => ({}));
+            setCardStatsData(data);
+            setCardStatsLoading(false);
+          }}
+        >
+          {cardStatsLoading ? '불러오는 중...' : '통계 불러오기 / 새로고침'}
+        </button>
+
+        <p className="setup-card-desc" style={{ marginBottom: 8 }}>
+          픽률 = 드래프트 3장 중 뜬 횟수 대비 실제로 고른 비율 · 승률 = 그 카드를 쓴 판 중 이긴 비율 (룰렛 모드는 집계에서 제외돼요)
+        </p>
+
+        {cardStatsData && (
+          <div className="tutorial-card" style={{ padding: 0, overflow: 'hidden' }}>
+            {rows.map((r) => (
+              <div key={r.id} className="leaderboard-row" style={{ alignItems: 'center' }}>
+                <span className="leaderboard-name" style={{ flex: 1 }}>{r.name}</span>
+                <span className="setup-card-desc" style={{ minWidth: 110, textAlign: 'right' }}>
+                  노출 {r.offered} · 픽률 {r.pickRate == null ? '-' : `${r.pickRate}%`}
+                </span>
+                <span className="setup-card-desc" style={{ minWidth: 110, textAlign: 'right' }}>
+                  사용 {r.used} · 승률 {r.winRate == null ? '-' : `${r.winRate}%`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -2944,6 +3048,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                     onClick={() => setStep('admin-titles')}
                   >
                     관리자 화면
+                  </button>
+                  <button
+                    className="reset-btn"
+                    style={{ fontSize: 11, padding: '4px 8px' }}
+                    onClick={() => setStep('admin-cardstats')}
+                  >
+                    카드 통계
                   </button>
                 </div>
               )}
@@ -4673,7 +4784,10 @@ function DraftScreen({ state, dispatch, online, user }) {
               className={`card-option ${waiting ? 'card-option-readonly' : ''}`}
               style={{ animationDelay: `${i * 60}ms` }}
               disabled={waiting}
-              onClick={() => dispatch({ type: 'DRAFT_PICK', cardId })}
+              onClick={() => {
+                dispatch({ type: 'DRAFT_PICK', cardId });
+                if (isFirebaseConfigured()) bumpCardPicked(cardId);
+              }}
             >
               <div className="card-icon"><CardIcon name={card.icon} size={22} /></div>
               <div className="card-name">{blind ? '???' : card.name}</div>
