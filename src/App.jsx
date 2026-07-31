@@ -15,7 +15,7 @@ import {
 import { BOARD_SIZE, otherPlayer, isCellInSealedLine } from './gameLogic.js';
 import { gameReducer, createInitialState, isBlocked, BLACK, WHITE, WILD, FREE_ACTION } from './gameReducer.js';
 import { getCardById, CARDS } from './cards.js';
-import { decideAIAction, pickDraftCard, chooseBestCell, computeAITarget, DIFFICULTIES } from './ai.js';
+import { decideAIAction, pickDraftCard, chooseBestCell, computeAITarget, DIFFICULTIES, hasThreateningCards } from './ai.js';
 import {
   createRoom, joinRoom, peekRoom, subscribeRoom, pushGameState, leaveRoom, isFirebaseConfigured,
   sendChatMessage, subscribeChat, getRoomPlayers,
@@ -1458,7 +1458,8 @@ function useAIDriver(state, dispatch, online) {
         // 판단에 그대로 반영해요 (안 그러면 4목/6목 구간에서 위협을 잘못 판단해요).
         const winLength = state.rouletteRule === 'rollingWin' ? rollingWinLength(state.ply) : 5;
 
-        const best = chooseBestCell(state.board, state.aiPlayer, placementBlockedFn, state.ruleFlags, state.aiDifficulty, winLength);
+        const opponentHand = state.draft?.hands?.[otherPlayer(state.aiPlayer)] ?? [];
+        const best = chooseBestCell(state.board, state.aiPlayer, placementBlockedFn, state.ruleFlags, state.aiDifficulty, winLength, state.protectedStones, hasThreateningCards(opponentHand));
         if (best) dispatch({ type: 'SELECT_CELL', x: best.x, y: best.y });
       }, 650);
       return () => clearTimeout(t);

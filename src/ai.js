@@ -130,7 +130,33 @@ function findWinningCellFor(board, player, blockedFn, ruleFlags, winLength = 5) 
 }
 
 // 보드에서 둘 만한 칸 하나를 골라요. 내 공격과 상대 방어를 함께 고려.
-export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'normal', winLength = 5) {
+// 상대 손에 있으면 "내 돌이 위험할 수 있다"고 판단할 카드들 (파괴/변환/봉인 계열).
+const THREATENING_CARD_IDS = new Set([
+  'destroy', 'destroyChain', 'coinFlip', 'dice', 'mark', 'alchemy', 'overwrite',
+  'lightning', 'tsunami', 'blackhole', 'corrupt', 'sealLine', 'swap',
+]);
+
+export function hasThreateningCards(hand) {
+  return (hand || []).some((id) => THREATENING_CARD_IDS.has(id));
+}
+
+// 상대가 파괴/변환 계열 카드를 들고 있으면, 이미 강화(보호)된 내 돌 주변에 이어 두는 걸
+// 살짝 더 선호해요 - 그래야 상대가 카드로 끊어내려 해도 그 옆의 보호된 돌이 라인을 지켜줘요.
+function safetyBonus(board, x, y, me, protectedStones, opponentHasThreatCards) {
+  if (!opponentHasThreatCards || !protectedStones) return 0;
+  const size = board.length;
+  for (const [dx, dy] of DIRECTIONS) {
+    for (const sign of [1, -1]) {
+      const nx = x + dx * sign, ny = y + dy * sign;
+      if (nx >= 0 && nx < size && ny >= 0 && ny < size && board[ny][nx] === me && protectedStones[`${nx},${ny}`]) {
+        return 60;
+      }
+    }
+  }
+  return 0;
+}
+
+export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'normal', winLength = 5, protectedStones = {}, opponentHasThreatCards = false) {
   const cfg = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
   const opponent = otherPlayer(me);
 
@@ -193,7 +219,7 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
   }
 
   if (cfg.deepSearch) {
-    const deep = chooseBestCellDeep(board, me, blockedFn, ruleFlags, cfg.searchWidth ?? 10, cfg.searchDepth ?? 2);
+    const deep = chooseBestCellDeep(board, me, blockedFn, ruleFlags, cfg.searchWidth ?? 10, cfg.searchDepth ?? 2, protectedStones, opponentHasThreatCards);
     if (deep) return deep;
   }
 
@@ -212,7 +238,8 @@ export function chooseBestCell(board, me, blockedFn, ruleFlags, difficulty = 'no
       const defense = scoreCellFor(board, x, y, opponent) * 1.1;
       const centerBias = (1 - (Math.abs(x - center) + Math.abs(y - center)) / size) * 8;
       const randomness = (Math.random() - 0.5) * noise;
-      const total = attack + defense + centerBias + randomness;
+      const safety = safetyBonus(board, x, y, me, protectedStones, opponentHasThreatCards);
+      const total = attack + defense + centerBias + randomness + safety;
 
       if (total > bestScore) {
         bestScore = total;
@@ -272,7 +299,7 @@ function bestReplyScore(board, player, ruleFlags, width, depth) {
 
 // 유력한 후보 몇 칸을 놓아본 뒤, 상대의 최선 응수(그리고 필요하면 그 다음 내 응수까지)를
 // 내다봐서 가장 좋은 자리를 골라요. width/depth가 클수록 더 강하지만 느려져요.
-function chooseBestCellDeep(board, me, blockedFn, ruleFlags, width, depth) {
+function chooseBestCellDeep(board, me, blockedFn, ruleFlags, width, depth, protectedStones = {}, opponentHasThreatCards = false) {
   const size = board.length;
   const opponent = otherPlayer(me);
   const candidates = [];
@@ -301,7 +328,8 @@ function chooseBestCellDeep(board, me, blockedFn, ruleFlags, width, depth) {
 
     const myEval = scoreCellFor(trial, c.x, c.y, me);
     const oppBest = bestReplyScore(trial, opponent, ruleFlags, Math.max(6, Math.floor(width * 0.75)), depth - 1);
-    const total = myEval - oppBest * 1.1;
+    const safety = safetyBonus(board, c.x, c.y, me, protectedStones, opponentHasThreatCards);
+    const total = myEval - oppBest * 1.1 + safety;
 
     if (total > bestScore) {
       bestScore = total;
@@ -692,11 +720,15 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
 
   // 난이도가 높을수록 카드를 더 똑똑하고 적극적으로 판단해요 (임계값을 낮춰서 더 잘 씀).
   const intensity = { easy: 1.3, normal: 1.0, hard: 0.85, hell: 0.7, impossible: 0.55 }[difficulty] ?? 1.0;
+  // 상대가 파괴/변환 계열 카드를 쥐고 있으면, 내 돌이 실제로 위험하니 방어 카드를 더
+  // 적극적으로(낮은 기준으로) 써요.
+  const oppHasThreatCards = hasThreateningCards(opponentHand);
+  const defenseIntensity = oppHasThreatCards ? intensity * 0.6 : intensity;
 
   const targetedCandidates = [];
   if (hand.includes('reinforce')) {
     const t = findMostConnectedStoneWithScore(board, aiPlayer);
-    if (t && t.score >= 40 * intensity) targetedCandidates.push({ cardId: 'reinforce', target: { x: t.x, y: t.y } });
+    if (t && t.score >= 40 * defenseIntensity) targetedCandidates.push({ cardId: 'reinforce', target: { x: t.x, y: t.y } });
   }
   // 돌 이동: 내 돌 하나를 더 강한 확장 위치로 옮겨요 (제일 강한 내 라인 근처에 여유가 있을 때).
   if (hand.includes('moveStone')) {
@@ -705,7 +737,7 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
   }
   if (hand.includes('sanctuary')) {
     const t = findMostConnectedStoneWithScore(board, aiPlayer);
-    if (t && t.score >= 120 * intensity) targetedCandidates.push({ cardId: 'sanctuary', target: { x: t.x, y: t.y } });
+    if (t && t.score >= 120 * defenseIntensity) targetedCandidates.push({ cardId: 'sanctuary', target: { x: t.x, y: t.y } });
   }
   if (hand.includes('corrupt')) {
     const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
