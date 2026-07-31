@@ -15,7 +15,7 @@ import { BLACK } from './gameLogic.js';
 export const CARDS = [
   { id: 'destroy', name: '파괴', desc: '지정한 상대 돌 1개를 판에서 제거해요.', targetType: 'enemyStone', icon: 'Skull' },
   { id: 'alchemy', name: '연금술', desc: '지정한 상대 돌 1개를 내 돌로 바꿔요. 이 카드로는 승리를 완성할 수 없어요.', targetType: 'enemyStone', icon: 'FlaskConical' },
-  { id: 'swap', name: '위치 교환', desc: '내 돌 1개와 상대 돌 1개의 위치를 바꿔요.', targetType: 'ownThenEnemy', icon: 'ArrowLeftRight' },
+  { id: 'swap', name: '위치 교환', desc: '내 돌 1개와 상대 돌 1개의 위치를 바꿔요. 이 카드로는 승리를 완성할 수 없어요.', targetType: 'ownThenEnemy', icon: 'ArrowLeftRight' },
   { id: 'overwrite', name: '관통', desc: '이미 돌이 있는 칸 위에 내 돌을 겹쳐 놓아요. 이번 턴 착수로 처리돼요. 이 카드로는 승리를 완성할 수 없어요.', targetType: 'anyStoneCell', icon: 'Layers' },
   { id: 'moveStone', name: '돌 이동', desc: '내 돌 1개를 다른 빈 칸으로 옮겨요.', targetType: 'ownThenEmpty', icon: 'Move' },
   { id: 'reinforce', name: '연마', desc: '내 돌 1개를 강화해, 파괴/변환 효과에 영구히 면역으로 만들어요.', targetType: 'ownStone', icon: 'ShieldCheck' },
