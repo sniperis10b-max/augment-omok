@@ -681,9 +681,21 @@ export const STONE_SKINS = [
   {
     id: 'unbreakableWill',
     name: '불굴의 의지',
-    black: 'linear-gradient(160deg, #2a2a2a, #050505)',
-    white: 'linear-gradient(160deg, #f0ede0, #b8ab8a)',
-    whiteBorder: '#9a8a60',
+    black:
+      'linear-gradient(97deg, rgba(255,200,90,0.85), rgba(255,200,90,0.85)), '
+      + 'linear-gradient(35deg, rgba(255,170,60,0.7), rgba(255,170,60,0.7)), '
+      + 'linear-gradient(150deg, rgba(255,210,110,0.6), rgba(255,210,110,0.6)), '
+      + 'radial-gradient(circle at 30% 70%, #2a2a35, #08080c 75%)',
+    blackPosition: '10% 42%, 55% 15%, 25% 78%, 0 0',
+    blackSize: '80% 2px, 45% 2px, 60% 2px, 100% 100%',
+    white:
+      'linear-gradient(97deg, rgba(214,160,60,0.8), rgba(214,160,60,0.8)), '
+      + 'linear-gradient(35deg, rgba(214,160,60,0.65), rgba(214,160,60,0.65)), '
+      + 'linear-gradient(150deg, rgba(214,160,60,0.55), rgba(214,160,60,0.55)), '
+      + 'radial-gradient(circle at 30% 70%, #f5f0e4, #d8cdb4 75%)',
+    whitePosition: '10% 42%, 55% 15%, 25% 78%, 0 0',
+    whiteSize: '80% 2px, 45% 2px, 60% 2px, 100% 100%',
+    whiteBorder: '#c9a04a',
     questDesc: '챌린지 세트 2 (10개) 전부 클리어',
   },
 ];
