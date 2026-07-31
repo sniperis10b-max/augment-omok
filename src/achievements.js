@@ -372,6 +372,8 @@ export async function getUserProgressByEmail(email) {
     equippedTierId: data.equippedTierId || null,
     grantedBoardSkins: data.grantedBoardSkins || {},
     grantedStoneSkins: data.grantedStoneSkins || {},
+    blockedBoardSkins: data.blockedBoardSkins || {},
+    blockedStoneSkins: data.blockedStoneSkins || {},
     achievementStats: data.achievementStats || {},
   };
 }

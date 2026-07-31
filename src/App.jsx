@@ -43,7 +43,7 @@ import {
   forceSetPeakTierIndex, adminSetRankPoints, getReachedTierBadges, adminRevokeTierBadges, adminGrantTierBadges,
 } from './rankpoints.js';
 import { getTierForRating, getTierById, getNextTierInfo, TIERS } from './tiers.js';
-import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins, toBgImage } from './skins.js';
+import { BOARD_SKINS, STONE_SKINS, getBoardSkinById, getStoneSkinById, isBoardSkinUnlocked, isStoneSkinUnlocked, getBoardSkinProgress, getStoneSkinProgress, getGrantedSkins, adminGrantSkinsByEmail, adminRevokeSkins, adminSetBlockedSkins, getBlockedSkins, toBgImage } from './skins.js';
 import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, getPlacementEffectProgress } from './effects.js';
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
 import { bumpCardsOffered, bumpCardPicked, bumpCardUsedGlobal, bumpCardGameOutcome, getAllCardStats } from './cardStats.js';
@@ -1578,6 +1578,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [revokeSelectedTiers, setRevokeSelectedTiers] = useState({});
   const [desiredBoardSkins, setDesiredBoardSkins] = useState({});
   const [desiredStoneSkins, setDesiredStoneSkins] = useState({});
+  const [desiredBlockedBoardSkins, setDesiredBlockedBoardSkins] = useState({});
+  const [desiredBlockedStoneSkins, setDesiredBlockedStoneSkins] = useState({});
   const [scoreEditEmail, setScoreEditEmail] = useState('');
   const [scoreEditRating, setScoreEditRating] = useState('');
   const [scoreEditRankPoints, setScoreEditRankPoints] = useState('');
@@ -1587,6 +1589,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 
   const [myStats, setMyStats] = useState({});
   const [myGrantedSkins, setMyGrantedSkins] = useState({ board: {}, stone: {} });
+  const [myBlockedSkins, setMyBlockedSkins] = useState({ board: {}, stone: {} });
   const [seasonProgress, setSeasonProgress] = useState(null);
   const [cardStatsData, setCardStatsData] = useState(null);
   const [cardStatsLoading, setCardStatsLoading] = useState(false);
@@ -1653,10 +1656,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     };
     const currentUnlocked = new Set();
     BOARD_SKINS.forEach((s) => {
-      if (dev || myGrantedSkins.board[s.id] || isBoardSkinUnlocked(s.id, myStats, skinCtx)) currentUnlocked.add(`board:${s.id}`);
+      if (!myBlockedSkins.board[s.id] && (dev || myGrantedSkins.board[s.id] || isBoardSkinUnlocked(s.id, myStats, skinCtx))) currentUnlocked.add(`board:${s.id}`);
     });
     STONE_SKINS.forEach((s) => {
-      if (dev || myGrantedSkins.stone[s.id] || isStoneSkinUnlocked(s.id, myStats, skinCtx)) currentUnlocked.add(`stone:${s.id}`);
+      if (!myBlockedSkins.stone[s.id] && (dev || myGrantedSkins.stone[s.id] || isStoneSkinUnlocked(s.id, myStats, skinCtx))) currentUnlocked.add(`stone:${s.id}`);
     });
 
     if (knownUnlockedSkinsRef.current === null) {
@@ -1678,15 +1681,23 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         count: newlyUnlocked.length,
       });
     }
-  }, [myStats, peakTierIndex, myTitles, myGrantedSkins, user, statsLoaded]);
+  }, [myStats, peakTierIndex, myTitles, myGrantedSkins, myBlockedSkins, user, statsLoaded]);
 
 
   useEffect(() => {
     if (user && isFirebaseConfigured()) {
       getGrantedSkins(user.uid).then(setMyGrantedSkins).catch(() => {});
+      getBlockedSkins(user.uid).then((blocked) => {
+        setMyBlockedSkins(blocked);
+        // 지금 장착 중인 스킨이 차단당했으면 강제로 클래식으로 되돌려요.
+        if (settings.boardSkin && blocked.board[settings.boardSkin]) updateSettings({ boardSkin: 'classic' });
+        if (settings.stoneSkin && blocked.stone[settings.stoneSkin]) updateSettings({ stoneSkin: 'classic' });
+      }).catch(() => {});
     } else {
       setMyGrantedSkins({ board: {}, stone: {} });
+      setMyBlockedSkins({ board: {}, stone: {} });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
   useEffect(() => {
@@ -2268,6 +2279,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         setRevokeSelectedTiers({ ...res.reachedTierBadges });
         setDesiredBoardSkins({ ...res.grantedBoardSkins });
         setDesiredStoneSkins({ ...res.grantedStoneSkins });
+        setDesiredBlockedBoardSkins({ ...res.blockedBoardSkins });
+        setDesiredBlockedStoneSkins({ ...res.blockedStoneSkins });
         setRevokeStatus('');
       } else {
         setRevokeLookup(null);
@@ -2293,6 +2306,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       const tierDiff = diffIds(allTierIds, revokeSelectedTiers, revokeLookup.reachedTierBadges);
       const boardDiff = diffIds(allBoardIds, desiredBoardSkins, revokeLookup.grantedBoardSkins);
       const stoneDiff = diffIds(allStoneIds, desiredStoneSkins, revokeLookup.grantedStoneSkins);
+      const blockedBoardDiff = diffIds(allBoardIds, desiredBlockedBoardSkins, revokeLookup.blockedBoardSkins);
+      const blockedStoneDiff = diffIds(allStoneIds, desiredBlockedStoneSkins, revokeLookup.blockedStoneSkins);
 
       await adminGrantTitles(revokeLookup.uid, titleDiff.toGrant).catch(() => {});
       await adminRevokeTitles(revokeLookup.uid, titleDiff.toRevoke, revokeLookup.equippedTitle).catch(() => {});
@@ -2300,6 +2315,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
       await adminRevokeTierBadges(revokeLookup.uid, tierDiff.toRevoke, revokeLookup.equippedTierId).catch(() => {});
       await adminGrantSkinsByEmail(revokeEmail.trim(), boardDiff.toGrant, stoneDiff.toGrant).catch(() => {});
       await adminRevokeSkins(revokeLookup.uid, boardDiff.toRevoke, stoneDiff.toRevoke).catch(() => {});
+      await adminSetBlockedSkins(revokeLookup.uid, blockedBoardDiff.toGrant, blockedStoneDiff.toGrant, true).catch(() => {});
+      await adminSetBlockedSkins(revokeLookup.uid, blockedBoardDiff.toRevoke, blockedStoneDiff.toRevoke, false).catch(() => {});
 
       setRevokeStatus('변경사항을 적용했어요.');
       getTitleCounts().then(setTitleCounts).catch(() => {});
@@ -2427,6 +2444,34 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                       type="checkbox"
                       checked={!!desiredStoneSkins[s.id]}
                       onChange={(e) => setDesiredStoneSkins((prev) => ({ ...prev, [s.id]: e.target.checked }))}
+                    />
+                    {s.name}
+                  </label>
+                ))}
+              </div>
+
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4, color: '#c0392b' }}>
+                강제 차단 (스탯 조건을 만족해도 못 씀)
+              </div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 6, maxHeight: 160, overflowY: 'auto' }}>
+                <div className="setup-card-desc" style={{ fontWeight: 700, marginBottom: 2 }}>바둑판</div>
+                {BOARD_SKINS.filter((s) => s.id !== 'classic').map((s) => (
+                  <label key={`block-board-${s.id}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!desiredBlockedBoardSkins[s.id]}
+                      onChange={(e) => setDesiredBlockedBoardSkins((prev) => ({ ...prev, [s.id]: e.target.checked }))}
+                    />
+                    {s.name}
+                  </label>
+                ))}
+                <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 6, marginBottom: 2 }}>바둑돌</div>
+                {STONE_SKINS.filter((s) => s.id !== 'classic').map((s) => (
+                  <label key={`block-stone-${s.id}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!desiredBlockedStoneSkins[s.id]}
+                      onChange={(e) => setDesiredBlockedStoneSkins((prev) => ({ ...prev, [s.id]: e.target.checked }))}
                     />
                     {s.name}
                   </label>
@@ -3644,7 +3689,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <p className="setup-card-desc" style={{ marginBottom: 8 }}>퀘스트를 달성하면 하나씩 풀려요.</p>
                 <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
                   {BOARD_SKINS.map((skin) => {
-                    const unlocked = dev || myGrantedSkins.board[skin.id] || isBoardSkinUnlocked(skin.id, myStats, skinCtx);
+                    const unlocked = !myBlockedSkins.board[skin.id] && (dev || myGrantedSkins.board[skin.id] || isBoardSkinUnlocked(skin.id, myStats, skinCtx));
                     const progress = unlocked ? null : getBoardSkinProgress(skin.id, myStats, skinCtx);
                     return (
                       <button
@@ -3687,7 +3732,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <p className="setup-card-desc" style={{ marginBottom: 8 }}>퀘스트를 달성하면 하나씩 풀려요.</p>
                 <div className="setup-options" style={{ gridTemplateColumns: 'repeat(2, 1fr)', display: 'grid' }}>
                   {STONE_SKINS.map((skin) => {
-                    const unlocked = dev || myGrantedSkins.stone[skin.id] || isStoneSkinUnlocked(skin.id, myStats, skinCtx);
+                    const unlocked = !myBlockedSkins.stone[skin.id] && (dev || myGrantedSkins.stone[skin.id] || isStoneSkinUnlocked(skin.id, myStats, skinCtx));
                     const progress = unlocked ? null : getStoneSkinProgress(skin.id, myStats, skinCtx);
                     return (
                       <button
@@ -4627,7 +4672,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
 function ReplayScreen({ record, onBack }) {
   const [index, setIndex] = useState(record.moves.length - 1);
   const board = record.moves[index] || record.moves[record.moves.length - 1];
-  const size = BOARD_SIZE;
+  const size = board.length;
   const gapPct = 100 / (size - 1);
 
   return (
@@ -5432,7 +5477,7 @@ function HandPanel({ player, state, dispatch, disabled, online }) {
 }
 
 function Board({ state, dispatch, online, settings }) {
-  const size = BOARD_SIZE;
+  const size = state.board.length;
   const gapPct = 100 / (size - 1);
   const gameOver = state.phase === 'over';
   const isAITurn = state.aiPlayer && state.turn === state.aiPlayer && !gameOver;

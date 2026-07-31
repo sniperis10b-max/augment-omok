@@ -766,6 +766,26 @@ export async function adminRevokeSkins(uid, boardSkinIds, stoneSkinIds) {
   await update(ref(db), updates);
 }
 
+// 스킨 차단(블록리스트): 스탯 조건을 만족하거나 관리자가 지급했어도, 이 유저는 그 스킨을
+// 절대 못 쓰게 강제로 막아요 (예: 부적절한 이유로 회수해야 하는 경우).
+export async function getBlockedSkins(uid) {
+  const db = getDb();
+  const snap = await get(ref(db, `users/${uid}`));
+  const data = snap.val() || {};
+  return {
+    board: data.blockedBoardSkins || {},
+    stone: data.blockedStoneSkins || {},
+  };
+}
+
+export async function adminSetBlockedSkins(uid, boardSkinIds, stoneSkinIds, blocked) {
+  const db = getDb();
+  const updates = {};
+  for (const id of boardSkinIds || []) updates[`users/${uid}/blockedBoardSkins/${id}`] = blocked ? true : null;
+  for (const id of stoneSkinIds || []) updates[`users/${uid}/blockedStoneSkins/${id}`] = blocked ? true : null;
+  await update(ref(db), updates);
+}
+
 export function getStoneSkinById(id) {
   return STONE_SKINS.find((s) => s.id === id) || STONE_SKINS[0];
 }
