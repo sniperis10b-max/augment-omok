@@ -11,7 +11,7 @@ import {
   findOpenThreeFlankCells,
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
-import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS } from './challenges.js';
+import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
 import { pickRandomRouletteRule, rollingWinLength, getRouletteRuleById } from './roulette.js';
 
 const STANDALONE = new Set([
@@ -345,6 +345,14 @@ function finishTurnAfterPlacement(state, placingPlayer) {
     return next;
   }
 
+  // 챌린지 "유한한 인내": 30수 안에 승부를 못 내면 그 즉시 패배해요.
+  if (next.challengeId === 'finitePatience' && next.phase === 'play' && next.ply >= 30 && next.humanColor) {
+    next.phase = 'over';
+    next.winner = otherPlayer(next.humanColor);
+    next.message = '유한한 인내가 바닥났어요... 30수 안에 승부를 내지 못해 패배했어요.';
+    return next;
+  }
+
   // 룰렛 "협곡 붕괴": 10수마다 판 바깥 테두리를 한 줄씩 영구히 막아요.
   if (next.rouletteRule === 'canyonCollapse' && next.ply % 10 === 0) {
     const size = next.board.length;
@@ -584,6 +592,11 @@ function removeFromHand(state, player, cardId) {
   // 룰렛 "강제 카드 턴": 이번 턴에 카드를 썼다고 기록해요.
   if (next.rouletteRule === 'forceCardTurn') {
     next = { ...next, cardUsedThisTurn: { ...next.cardUsedThisTurn, [player]: true } };
+  }
+
+  // 챌린지 "침묵의 규칙": 내가 카드를 쓰면 내 다음 턴이 자동으로 스킵돼요.
+  if (next.challengeId === 'silentRule' && player === next.humanColor) {
+    next = { ...next, skipNextTurn: { ...next.skipNextTurn, [player]: true } };
   }
 
   // 룰렛 "카드 소모 없음": 손에서 실제로 빼지 않아요.
@@ -1447,8 +1460,10 @@ export function gameReducer(state, action) {
       return { ...createInitialState(), ...action.state };
 
     case 'START_GAME': {
-      const { aiPlayer, difficulty, timeLimitSec, cardsPerPlayer, challengeId, rouletteMode } = action;
+      const { difficulty, timeLimitSec, cardsPerPlayer, challengeId, rouletteMode } = action;
       const fresh = createInitialState();
+      // '흑백 역전' 챌린지는 색 선택과 무관하게 항상 내가 백이 돼요 (AI가 흑).
+      const aiPlayer = challengeId === 'colorReverse' ? BLACK : action.aiPlayer;
       const humanColor = aiPlayer ? otherPlayer(aiPlayer) : null;
 
       const challengeCardBan = {};
@@ -1494,6 +1509,40 @@ export function gameReducer(state, action) {
           if (!blockedCells[k]) { blockedCells[k] = Infinity; placed++; }
         }
       }
+      if (challengeId === 'gambler') {
+        for (const c of CARDS) {
+          if (!PROB_CARD_IDS.has(c.id)) challengeCardBan[c.id] = true;
+        }
+      }
+      if (challengeId === 'narrowVision5') {
+        const size = fresh.board.length;
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            if (x < 5 || x >= size - 5 || y < 5 || y >= size - 5) blockedCells[key(x, y)] = Infinity;
+          }
+        }
+      }
+      if (challengeId === 'quadForbidden') {
+        const size = fresh.board.length;
+        let placed = 0;
+        let guard = 0;
+        while (placed < 20 && guard < 800) {
+          guard++;
+          const rx = Math.floor(Math.random() * size);
+          const ry = Math.floor(Math.random() * size);
+          const k = key(rx, ry);
+          if (!blockedCells[k]) { blockedCells[k] = Infinity; placed++; }
+        }
+      }
+      if (challengeId === 'colorReverse') {
+        // 렌주 금수가 흑이 아니라 백(=나)에게 적용돼요.
+        ruleFlags = { ...ruleFlags, forbiddenColor: WHITE };
+      }
+      if (challengeId === 'sevenInRow' && humanColor) {
+        winLengthOverride = { ...winLengthOverride, [humanColor]: 7 };
+        // 7목을 완성하는 수 자체가 장목 금수로 막히지 않도록 해제해요 (6목 챌린지와 같은 이유).
+        ruleFlags = { ...ruleFlags, allowOverline: true };
+      }
 
       // 룰렛 모드: 챌린지와는 함께 쓰지 않고, 켜져 있으면 이번 판에 적용할 특수 규칙을 하나 뽑아요.
       // 개발자 계정 전용: 특정 규칙으로 결과를 고정할 수 있어요 (없거나 잘못된 id면 무작위).
@@ -1505,7 +1554,8 @@ export function gameReducer(state, action) {
         ...fresh,
         aiPlayer: aiPlayer || null,
         aiDifficulty: difficulty || 'normal',
-        timeLimitSec: timeLimitSec || 0,
+        // '속전속결' 챌린지는 설정에서 뭘 골랐든 무조건 15초로 고정돼요.
+        timeLimitSec: challengeId === 'speedRun' ? 15 : (timeLimitSec || 0),
         humanColor,
         challengeId: challengeId || null,
         challengeCardBan,
@@ -1513,6 +1563,9 @@ export function gameReducer(state, action) {
         winLengthOverride,
         blockedCells,
         rouletteRule,
+        board: challengeId === 'smallBoard' ? createEmptyBoard(11)
+          : challengeId === 'wideHell' ? createEmptyBoard(19)
+          : fresh.board,
       };
 
       // 무카드 챌린지는 드래프트 자체를 건너뛰고 바로 대국을 시작해요.
@@ -1523,6 +1576,25 @@ export function gameReducer(state, action) {
           turn: BLACK,
           message: '무카드 챌린지! 카드 없이 순수 실력으로 승부해요.',
           draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
+        };
+      }
+
+      // '불가능' 챌린지: 나는 카드를 한 장도 못 받고, AI는 카드 30장을 갖고 시작해요.
+      if (challengeId === 'impossibleHandicap' && aiPlayer) {
+        const aiPool = poolForPlayer(aiPlayer);
+        const aiHand = Array.from({ length: 30 }, () => aiPool[Math.floor(Math.random() * aiPool.length)]);
+        return {
+          ...base,
+          phase: 'play',
+          turn: BLACK,
+          message: '불가능 챌린지! 나는 카드 없이, AI는 카드 30장으로 시작해요.',
+          draft: {
+            pool: [],
+            hands: { [BLACK]: [], [WHITE]: [], [aiPlayer]: aiHand },
+            order: [],
+            currentIndex: 0,
+            options: [],
+          },
         };
       }
 
@@ -1625,17 +1697,21 @@ export function gameReducer(state, action) {
           ruleFlags: {
             ...fresh.ruleFlags,
             noDiagonalFor: state.ruleFlags?.noDiagonalFor || null,
-            // 6목 챌린지는 재대국해도 계속 이 챌린지이므로 장목 금수 해제를 유지해요.
-            allowOverline: state.challengeId === 'sixInRow' ? true : fresh.ruleFlags.allowOverline,
+            // 6목/7목 챌린지는 재대국해도 계속 이 챌린지이므로 장목 금수 해제를 유지해요.
+            allowOverline: (state.challengeId === 'sixInRow' || state.challengeId === 'sevenInRow') ? true : fresh.ruleFlags.allowOverline,
+            forbiddenColor: state.challengeId === 'colorReverse' ? WHITE : undefined,
           },
           // '단축 승리'/'연장 승리' 카드 효과는 "이번 판 끝까지"만 적용되는 일회성 효과라
-          // 재대국하면 초기화돼야 해요. 챌린지(6목/4목 승리) 자체의 규칙만 재대국에도 이어져요.
-          winLengthOverride: (state.challengeId === 'sixInRow' || state.challengeId === 'fourVsFive')
+          // 재대국하면 초기화돼야 해요. 챌린지(6목/7목/4목 승리) 자체의 규칙만 재대국에도 이어져요.
+          winLengthOverride: ['sixInRow', 'sevenInRow', 'fourVsFive'].includes(state.challengeId)
             ? { ...state.winLengthOverride }
             : fresh.winLengthOverride,
-          blockedCells: state.challengeId === 'narrowVision' || state.challengeId === 'doubleForbidden'
+          blockedCells: ['narrowVision', 'narrowVision5', 'doubleForbidden', 'quadForbidden'].includes(state.challengeId)
             ? { ...state.blockedCells }
             : fresh.blockedCells,
+          board: state.challengeId === 'smallBoard' ? createEmptyBoard(11)
+            : state.challengeId === 'wideHell' ? createEmptyBoard(19)
+            : fresh.board,
         };
 
         if (state.challengeId === 'noCards') {
@@ -1645,6 +1721,24 @@ export function gameReducer(state, action) {
             turn: BLACK,
             message: '무카드 챌린지! 카드 없이 순수 실력으로 승부해요.',
             draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
+          };
+        }
+
+        if (state.challengeId === 'impossibleHandicap' && state.aiPlayer) {
+          const aiPool = poolForPlayer(state.aiPlayer);
+          const aiHand = Array.from({ length: 30 }, () => aiPool[Math.floor(Math.random() * aiPool.length)]);
+          return {
+            ...base,
+            phase: 'play',
+            turn: BLACK,
+            message: '불가능 챌린지! 나는 카드 없이, AI는 카드 30장으로 시작해요.',
+            draft: {
+              pool: [],
+              hands: { [BLACK]: [], [WHITE]: [], [state.aiPlayer]: aiHand },
+              order: [],
+              currentIndex: 0,
+              options: [],
+            },
           };
         }
 

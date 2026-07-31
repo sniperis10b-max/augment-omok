@@ -241,7 +241,8 @@ export function findOpenThreeFlankCells(board, player) {
 // 렌주 금수는 원래 흑에게만 적용돼요. ruleFlags.forceForbiddenFor가 player와 같으면
 // (역금수 카드로) 백에게도 일시적으로 같은 규칙을 적용해요.
 export function isForbiddenMove(board, x, y, player, ruleFlags = {}) {
-  const applies = player === BLACK || ruleFlags.forceForbiddenFor === player;
+  const forbiddenColor = ruleFlags.forbiddenColor ?? BLACK;
+  const applies = player === forbiddenColor || ruleFlags.forceForbiddenFor === player;
   if (!applies) return false;
   if (board[y][x] !== EMPTY) return false;
 

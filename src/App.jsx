@@ -53,7 +53,7 @@ import {
   ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
   SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS, devSetSeasonLevel,
 } from './seasonPass.js';
-import { CHALLENGES, getChallengeById, hasCompletedAllChallenges, LADDER_LEVELS } from './challenges.js';
+import { CHALLENGES, CHALLENGES_2, getChallengeById, hasCompletedAllChallenges, hasCompletedAllChallenges2, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
 import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
@@ -63,7 +63,6 @@ import {
 } from './achievements.js';
 
 // 일일 퀘스트 "확률형 카드 시도" 집계용 (성공/실패와 무관하게 시도만 세요)
-const PROB_CARD_IDS = new Set(['coinFlip', 'miracle', 'echo', 'shortWin', 'longWin', 'resurrection', 'lottery', 'dice']);
 
 const ICONS = {
   Skull, FlaskConical, ArrowLeftRight, Layers, Move, ShieldCheck, Ban, ShieldAlert,
@@ -1498,6 +1497,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [modeChoice, setModeChoice] = useState(null); // 'local' | 'ai' | 'online'
   const [humanColor, setHumanColor] = useState(BLACK);
   const [selectedChallenge, setSelectedChallenge] = useState(null);
+  const [challengeSetTab, setChallengeSetTab] = useState('set1'); // 'set1' | 'set2'
   const [customSeconds, setCustomSeconds] = useState('30');
   const [customCards, setCustomCards] = useState('3');
   const [joinCode, setJoinCode] = useState('');
@@ -4124,6 +4124,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   }
 
   if (step === 'challenge-select') {
+    const activeList = challengeSetTab === 'set1' ? CHALLENGES : CHALLENGES_2;
     return (
       <div className="page">
         <header className="header">
@@ -4135,8 +4136,25 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           <ChevronLeft size={16} /> 뒤로
         </button>
 
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button
+            className={`reset-btn ${challengeSetTab === 'set1' ? 'title-pick-active' : ''}`}
+            style={{ flex: 1 }}
+            onClick={() => setChallengeSetTab('set1')}
+          >
+            챌린지 1
+          </button>
+          <button
+            className={`reset-btn ${challengeSetTab === 'set2' ? 'title-pick-active' : ''}`}
+            style={{ flex: 1 }}
+            onClick={() => setChallengeSetTab('set2')}
+          >
+            챌린지 2
+          </button>
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {CHALLENGES.map((c) => {
+          {activeList.map((c) => {
             const cleared = !!challengesCleared[c.id];
             return (
               <button
@@ -4156,8 +4174,11 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         </div>
 
         <p className="setup-card-desc" style={{ marginTop: 14 }}>
-          {CHALLENGES.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES.length}개 클리어 —
-          전부 클리어하면 "투명 돌" 스킨을 얻어요.
+          {challengeSetTab === 'set1' ? (
+            <>{CHALLENGES.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES.length}개 클리어 — 전부 클리어하면 "투명 돌" 스킨을 얻어요.</>
+          ) : (
+            <>{CHALLENGES_2.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_2.length}개 클리어 — 전부 클리어하면 "불굴의 의지" 스킨을 얻어요.</>
+          )}
         </p>
       </div>
     );
@@ -5414,7 +5435,7 @@ function Board({ state, dispatch, online, settings }) {
 
   // 룰렛 "안개 전장": 상대 돌이 안 보여요 (내 색을 알 수 있는 경우에만 - 2인 로컬은 예외).
   const myColorForFog = online && !isSpectator ? online.localColor : (state.aiPlayer ? otherPlayer(state.aiPlayer) : null);
-  const fogActive = state.rouletteRule === 'fogOfWar' && myColorForFog != null;
+  const fogActive = (state.rouletteRule === 'fogOfWar' || state.challengeId === 'lonelyLight') && myColorForFog != null;
 
   // 룰렛 "최근 3수만 표시": 최근에 놓인 돌 3개만 보여요.
   const recentOnlyActive = state.rouletteRule === 'recentOnly';

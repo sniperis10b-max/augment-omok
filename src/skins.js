@@ -3,7 +3,7 @@
 // "내 계정만 열어준다"는 건 UI에서 개발자 계정일 때만 선택 가능하게 막아둔다는 뜻이에요).
 
 import { CARDS } from './cards.js';
-import { CHALLENGES } from './challenges.js';
+import { CHALLENGES, hasCompletedAllChallenges2 } from './challenges.js';
 
 // background-image는 색상값(#fff 같은)을 그대로 못 받아서, 단색 스킨은 그라데이션으로 감싸줘요.
 // (실제 게임판/돌 렌더링과 설정 화면의 미리보기 스와치 둘 다 이 함수로 통일해서 써요.)
@@ -333,6 +333,14 @@ export const BOARD_SKINS = [
     line: 'rgba(255, 255, 255, 0.15)',
     questDesc: '시즌 상점에서 코인으로 구매 (900코인)',
   },
+  {
+    id: 'casinoFelt',
+    name: '카지노 펠트',
+    background: 'radial-gradient(circle at 50% 45%, #1a5c3a, #0a2e1e 80%)',
+    border: '#d4af37',
+    line: 'rgba(212, 175, 55, 0.35)',
+    questDesc: "'카드 도박꾼' 챌린지 클리어",
+  },
 ];
 
 export const STONE_SKINS = [
@@ -654,6 +662,26 @@ export const STONE_SKINS = [
     whiteBorder: '#ff9d4a',
     questDesc: '시즌 상점에서 코인으로 구매 (900코인)',
   },
+  {
+    id: 'lightningMark',
+    name: '번개 각인',
+    black:
+      'linear-gradient(95deg, rgba(255,230,120,0.6), rgba(255,230,120,0.6)), '
+      + 'linear-gradient(160deg, #16161e, #050508)',
+    blackPosition: '20% 40%, 0 0',
+    blackSize: '55% 3px, 100% 100%',
+    white: 'radial-gradient(circle at 35% 35%, #fff8e0, #d8d0c0 75%)',
+    whiteBorder: '#c9c0a8',
+    questDesc: "'속전속결' 챌린지 클리어",
+  },
+  {
+    id: 'unbreakableWill',
+    name: '불굴의 의지',
+    black: 'linear-gradient(160deg, #2a2a2a, #050505)',
+    white: 'linear-gradient(160deg, #f0ede0, #b8ab8a)',
+    whiteBorder: '#9a8a60',
+    questDesc: '챌린지 세트 2 (10개) 전부 클리어',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -754,6 +782,7 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'volcanicAsh': return (stats.destroyKills || 0) >= 100;
     case 'libraryArchive': return (stats.totalCardUses || 0) >= 150;
     case 'seasonFireworksSky': return (stats.seasonLevel || 0) >= 10;
+    case 'casinoFelt': return !!(ctx.challengesCleared || {}).gambler;
     default: return false;
   }
 }
@@ -782,6 +811,8 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
       const cleared = ctx.challengesCleared || {};
       return CHALLENGES.every((c) => cleared[c.id]);
     }
+    case 'lightningMark': return !!(ctx.challengesCleared || {}).speedRun;
+    case 'unbreakableWill': return hasCompletedAllChallenges2(ctx.challengesCleared || {});
     case 'twins': return (stats.duplicateUses || 0) >= 30;
     case 'frostbite': return (stats.freezeCellUses || 0) >= 50;
     case 'swappedFate': return (stats.swapUses || 0) >= 100;

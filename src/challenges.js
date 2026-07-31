@@ -13,9 +13,36 @@ export const CHALLENGES = [
   { id: 'doubleForbidden', name: '이중 금수', desc: '무작위 칸 10곳이 처음부터 막힌 채 시작해요.' },
   { id: 'silhouette', name: '흑백 실루엣', desc: '돌이 색이 아니라 채워짐/테두리 모양으로만 구분돼요.' },
   { id: 'ladder', name: '5단 계단', desc: '쉬움부터 불가능까지 5개 난이도를 연속으로 이겨야 해요. 중간에 지면 처음부터예요.' },
+  { id: 'speedRun', name: '속전속결', desc: '한 수당 제한시간이 무조건 15초로 고정돼요.' },
+  { id: 'gambler', name: '카드 도박꾼', desc: '드래프트 풀이 확률형 카드(동전 던지기, 복권, 기적 등)로만 구성돼요.' },
 ];
 
 export const LADDER_LEVELS = ['easy', 'normal', 'hard', 'hell', 'impossible'];
+
+// 확률에 기대는 카드들 (성공/실패가 갈리는 카드) - '카드 도박꾼' 챌린지의 드래프트 풀로도 써요.
+export const PROB_CARD_IDS = new Set(['coinFlip', 'miracle', 'echo', 'shortWin', 'longWin', 'resurrection', 'lottery', 'dice']);
+
+// 되돌리기/복구 계열 카드 ('한 번의 기회' 챌린지에서 제외돼요) - 지금은 안 쓰지만 나중에 참고용
+export const RESTORE_CARD_IDS = new Set(['undoLast', 'restore', 'resurrection', 'timeReset']);
+
+// 챌린지 두 번째 세트예요. 전부 AI 불가능 난이도 기준이고, 10개를 전부 클리어하면
+// 첫 번째 세트와는 별개의 스킨(투명 돌 아님)을 하나 더 받아요.
+export const CHALLENGES_2 = [
+  { id: 'narrowVision5', name: '좁은 시야 확장판', desc: '보드 바깥 테두리 5칸이 처음부터 막힌 채 시작해요.' },
+  { id: 'quadForbidden', name: '사중 금수', desc: '무작위 칸 20곳이 처음부터 막힌 채 시작해요.' },
+  { id: 'colorReverse', name: '흑백 역전', desc: '나는 무조건 백으로 시작하고, 렌주 금수(3-3, 4-4, 육목)가 흑 대신 백에게 적용돼요.' },
+  { id: 'sevenInRow', name: '7목 지옥', desc: '나는 7목을 만들어야 승리해요 (AI는 5목이면 승리).' },
+  { id: 'lonelyLight', name: '한 줄기 빛', desc: '상대(AI)의 돌이 화면에 아예 보이지 않아요.' },
+  { id: 'silentRule', name: '침묵의 규칙', desc: '카드를 쓸 때마다 내 다음 턴이 자동으로 스킵돼요.' },
+  { id: 'smallBoard', name: '좁은 판', desc: '15x15가 아니라 11x11의 작은 판에서 대국해요.' },
+  { id: 'wideHell', name: '넓은 지옥', desc: '19x19의 넓은 판에서 대국해요.' },
+  { id: 'finitePatience', name: '유한한 인내', desc: '30수 안에 승부를 못 내면 그 즉시 패배해요.' },
+  { id: 'impossibleHandicap', name: '불가능', desc: '나는 카드를 한 장도 못 받고, AI는 카드 30장을 갖고 시작해요.' },
+];
+
+export function hasCompletedAllChallenges2(clearedSet = {}) {
+  return CHALLENGES_2.every((c) => clearedSet[c.id]);
+}
 
 // 파괴/방어 계열로 분류되는 카드 id들 (파괴 금지/방어 금지 챌린지에서 드래프트 풀에서 제외돼요)
 export const DESTROY_CARD_IDS = new Set([
@@ -26,7 +53,7 @@ export const DEFENSE_CARD_IDS = new Set([
 ]);
 
 export function getChallengeById(id) {
-  return CHALLENGES.find((c) => c.id === id) || null;
+  return CHALLENGES.find((c) => c.id === id) || CHALLENGES_2.find((c) => c.id === id) || null;
 }
 
 // 완주(전 챌린지 클리어) 여부를 계산해요. clearedSet은 achievementStats.challengesCleared 같은 객체예요.
