@@ -356,6 +356,27 @@ function findMostConnectedStone(board, player, protectedStones = {}, exclude = n
   return result ? { x: result.x, y: result.y } : null;
 }
 
+// 상대가 그 자리에 두면 가장 위협적일 빈 칸을 찾아요 (얼리기/장벽/결계 카드로 그 자리를
+// 미리 막아버리는 용도 - "상대 돌을 파괴"가 아니라 "상대가 원하는 자리를 선점"하는 방어예요).
+function findBestEmptyCellForOpponent(board, aiPlayer, blockedFn = () => false) {
+  const opponent = otherPlayer(aiPlayer);
+  const size = board.length;
+  let best = null;
+  let bestScore = -Infinity;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (board[y][x] !== 0 || blockedFn(x, y)) continue;
+      let score = 0;
+      for (const [dx, dy] of DIRECTIONS) {
+        const { count, openEnds } = lineStrength(board, x, y, dx, dy, opponent);
+        score += patternScore(count, openEnds);
+      }
+      if (score > bestScore) { bestScore = score; best = { x, y, score }; }
+    }
+  }
+  return best;
+}
+
 // AI가 자율적으로 판단할 수 있는(단일 대상 이하) 카드 목록과, 각 카드의 대상 계산기.
 // blockedFn은 barrier/결계 등으로 실제 막힌 칸을 걸러내기 위해 받아요.
 const AI_CARD_HANDLERS = {
@@ -459,6 +480,57 @@ AI_CARD_HANDLERS.tsunami = (board, ai) => {
 // 블랙홀은 상대 진영이 가장 뭉쳐있는 지점을 중심으로 잡아요.
 AI_CARD_HANDLERS.blackhole = (board, ai) => findMostConnectedStone(board, otherPlayer(ai));
 AI_CARD_HANDLERS.alchemy = (board, ai) => findMostConnectedStone(board, otherPlayer(ai));
+
+// 위치 교환: 내 약한(아무) 돌 하나와 상대의 가장 위협적인 돌을 바꿔치기해요.
+AI_CARD_HANDLERS.swap = (board, ai, blockedFn = () => false, protectedStones = {}, pending = []) => {
+  if (pending.length === 0) {
+    // 내 돌 아무거나 (가장 연결이 약한 돌을 내주는 게 아까울 게 없어요)
+    const size = board.length;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (board[y][x] === ai) return { x, y };
+      }
+    }
+    return null;
+  }
+  return findMostConnectedStone(board, otherPlayer(ai), protectedStones);
+};
+
+// 관통: 상대의 가장 위협적인 돌 위에 겹쳐 놓아요 (승리는 안 되지만 상대 라인을 끊어요).
+AI_CARD_HANDLERS.overwrite = (board, ai, blockedFn = () => false, protectedStones = {}) =>
+  findMostConnectedStone(board, otherPlayer(ai), protectedStones);
+
+// 돌 이동: 내 돌 하나를, 내가 가장 강하게 확장할 수 있는 빈 칸으로 옮겨요.
+AI_CARD_HANDLERS.moveStone = (board, ai, blockedFn = () => false, protectedStones = {}, pending = []) => {
+  if (pending.length === 0) {
+    const size = board.length;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (board[y][x] === ai && !protectedStones[`${x},${y}`]) return { x, y };
+      }
+    }
+    return null;
+  }
+  // findBestEmptyCellForOpponent(board, X)는 "X의 상대"에게 좋은 칸을 찾아줘요.
+  // 그래서 otherPlayer(ai)를 넣으면 "ai 자신"에게 좋은 칸을 찾는 셈이 돼요.
+  const best = findBestEmptyCellForOpponent(board, otherPlayer(ai), blockedFn);
+  return best ? { x: best.x, y: best.y } : null;
+};
+
+// 얼리기/장벽/결계: 상대가 가장 원할 빈 칸을 미리 막아버려요.
+AI_CARD_HANDLERS.freezeCell = (board, ai, blockedFn = () => false) => {
+  const best = findBestEmptyCellForOpponent(board, ai, blockedFn);
+  return best ? { x: best.x, y: best.y } : null;
+};
+AI_CARD_HANDLERS.barrier = AI_CARD_HANDLERS.freezeCell;
+AI_CARD_HANDLERS.ward = AI_CARD_HANDLERS.freezeCell;
+
+// 도발/혼란: 상대의 다음 수를 그 자리 근처로 강제/무작위화해서 상대가 노리던 흐름을 끊어요.
+AI_CARD_HANDLERS.provoke = (board, ai, blockedFn = () => false) => {
+  const best = findBestEmptyCellForOpponent(board, ai, blockedFn);
+  return best ? { x: best.x, y: best.y } : null;
+};
+AI_CARD_HANDLERS.confuse = AI_CARD_HANDLERS.provoke;
 
 // 상대의 열린 삼(다음에 열린 사가 될 수 있는 자리)이 있으면 그 확장 칸들을 반환
 function opponentOpenThreeFlanks(board, aiPlayer) {
@@ -618,37 +690,88 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     else if (hand.includes('reroll')) developCandidates.push('reroll');
   }
 
+  // 난이도가 높을수록 카드를 더 똑똑하고 적극적으로 판단해요 (임계값을 낮춰서 더 잘 씀).
+  const intensity = { easy: 1.3, normal: 1.0, hard: 0.85, hell: 0.7, impossible: 0.55 }[difficulty] ?? 1.0;
+
   const targetedCandidates = [];
   if (hand.includes('reinforce')) {
     const t = findMostConnectedStoneWithScore(board, aiPlayer);
-    if (t && t.score >= 40) targetedCandidates.push({ cardId: 'reinforce', target: { x: t.x, y: t.y } });
+    if (t && t.score >= 40 * intensity) targetedCandidates.push({ cardId: 'reinforce', target: { x: t.x, y: t.y } });
+  }
+  // 돌 이동: 내 돌 하나를 더 강한 확장 위치로 옮겨요 (제일 강한 내 라인 근처에 여유가 있을 때).
+  if (hand.includes('moveStone')) {
+    const t = findMostConnectedStoneWithScore(board, aiPlayer);
+    if (t && t.score >= 60 * intensity) targetedCandidates.push({ cardId: 'moveStone' });
   }
   if (hand.includes('sanctuary')) {
     const t = findMostConnectedStoneWithScore(board, aiPlayer);
-    if (t && t.score >= 120) targetedCandidates.push({ cardId: 'sanctuary', target: { x: t.x, y: t.y } });
+    if (t && t.score >= 120 * intensity) targetedCandidates.push({ cardId: 'sanctuary', target: { x: t.x, y: t.y } });
   }
   if (hand.includes('corrupt')) {
     const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
-    if (t && t.score >= 120) targetedCandidates.push({ cardId: 'corrupt', target: { x: t.x, y: t.y } });
+    if (t && t.score >= 120 * intensity) targetedCandidates.push({ cardId: 'corrupt', target: { x: t.x, y: t.y } });
   }
   if (hand.includes('sealLine')) {
     const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
-    if (t && t.score >= 350) targetedCandidates.push({ cardId: 'sealLine', target: { x: t.x, y: t.y } });
+    if (t && t.score >= 350 * intensity) targetedCandidates.push({ cardId: 'sealLine', target: { x: t.x, y: t.y } });
   }
   if (hand.includes('mark') && !targetedCandidates.some((c) => c.cardId === 'mark')) {
     const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
-    if (t && t.score >= 350) targetedCandidates.push({ cardId: 'mark', target: { x: t.x, y: t.y } });
+    if (t && t.score >= 350 * intensity) targetedCandidates.push({ cardId: 'mark', target: { x: t.x, y: t.y } });
   }
   if (hand.includes('thornTrap')) {
     const t = AI_CARD_HANDLERS.thornTrap(board, aiPlayer, blockedFn);
     if (t) targetedCandidates.push({ cardId: 'thornTrap', target: t });
   }
-  if (hand.includes('purify') && Object.keys(state.blockedCells || {}).length >= 3) {
+  if (hand.includes('purify') && Object.keys(state.blockedCells || {}).length >= Math.max(1, Math.round(3 * intensity))) {
     targetedCandidates.push({ cardId: 'purify' });
   }
   if (hand.includes('blackhole')) {
     const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
-    if (t && t.score >= 250) targetedCandidates.push({ cardId: 'blackhole', target: { x: t.x, y: t.y } });
+    if (t && t.score >= 250 * intensity) targetedCandidates.push({ cardId: 'blackhole', target: { x: t.x, y: t.y } });
+  }
+  if (hand.includes('alchemy')) {
+    const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+    if (t && t.score >= 250 * intensity) targetedCandidates.push({ cardId: 'alchemy', target: { x: t.x, y: t.y } });
+  }
+  if (hand.includes('overwrite')) {
+    const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+    if (t && t.score >= 350 * intensity) targetedCandidates.push({ cardId: 'overwrite', target: { x: t.x, y: t.y } });
+  }
+  // 방어형: 상대가 노리는 자리를 미리 막아요. 상대 위협이 꽤 뚜렷할 때만 (아까워서 아무 때나 안 써요).
+  for (const cardId of ['freezeCell', 'barrier', 'ward']) {
+    if (hand.includes(cardId)) {
+      const best = findBestEmptyCellForOpponent(board, aiPlayer, blockedFn);
+      if (best && best.score >= 350 * intensity) targetedCandidates.push({ cardId, target: { x: best.x, y: best.y } });
+    }
+  }
+  // 방해형: 상대가 유리한 흐름을 타고 있을 때(연결 점수가 높을 때) 흐름을 끊어요.
+  for (const cardId of ['provoke', 'confuse']) {
+    if (hand.includes(cardId)) {
+      const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+      if (t && t.score >= 350 * intensity) targetedCandidates.push({ cardId, target: { x: t.x, y: t.y } });
+    }
+  }
+  if (hand.includes('swap')) {
+    const oppBest = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+    const myWorst = findMostConnectedStoneWithScore(board, aiPlayer);
+    if (oppBest && oppBest.score >= 350 * intensity && myWorst) {
+      targetedCandidates.push({ cardId: 'swap' });
+    }
+  }
+  // 침묵: 상대 손에 카드가 있을 때, 여유 있으면 미리 봉인해둬요.
+  if (hand.includes('silence')) {
+    const opponentHand = state.draft?.hands?.[otherPlayer(aiPlayer)] ?? [];
+    if (opponentHand.length >= Math.max(1, Math.round(2 * intensity))) targetedCandidates.push({ cardId: 'silence' });
+  }
+  // 연속 공격 차단: 상대가 열린 삼을 만들어서 사(四)로 발전시킬 수 있는 상황이면 미리 막아요.
+  if (hand.includes('comboBlock')) {
+    const t = findMostConnectedStoneWithScore(board, otherPlayer(aiPlayer));
+    if (t && t.score >= 1200 * intensity) targetedCandidates.push({ cardId: 'comboBlock' });
+  }
+  // 3-3 해제: 내가 흑이면(3-3 금수가 나한테 적용되면) 여유 있을 때 미리 풀어둬요.
+  if (hand.includes('release33') && aiPlayer === BLACK) {
+    targetedCandidates.push({ cardId: 'release33' });
   }
 
   // 발전용 카드는 예전보다 덜 헤프게, 대상이 뚜렷한 카드는 조금 더 적극적으로 써요
