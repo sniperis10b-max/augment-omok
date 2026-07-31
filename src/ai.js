@@ -21,7 +21,7 @@ export const DIFFICULTIES = {
   normal: { label: '보통', blockChance: 0.95, cardUseChance: 0.5, noise: 8 },
   hard: { label: '어려움', blockChance: 1, cardUseChance: 0.65, noise: 0, deepSearch: true, searchWidth: 10, searchDepth: 2 },
   hell: { label: '지옥', blockChance: 1, cardUseChance: 0.75, noise: 0, deepSearch: true, searchWidth: 16, searchDepth: 3 },
-  impossible: { label: '불가능', blockChance: 1, cardUseChance: 0.85, noise: 0, deepSearch: true, searchWidth: 24, searchDepth: 3 },
+  impossible: { label: '불가능', blockChance: 1, cardUseChance: 0.85, noise: 0, deepSearch: true, searchWidth: 16, searchDepth: 5 },
 };
 
 function inB(size, x, y) {
