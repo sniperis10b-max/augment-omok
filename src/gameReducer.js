@@ -9,6 +9,7 @@ import {
   isForbiddenMove,
   inBounds,
   findOpenThreeFlankCells,
+  DIRECTIONS,
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
 import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
@@ -110,6 +111,58 @@ function isBlocked(state, x, y) {
   return expire === Infinity || state.ply < expire;
 }
 
+// 챌린지 "외통수 강요"용 간단한 평가 함수: player가 그 칸에 두면 얼마나 좋을지
+// (4방향 연결 길이 기반) 대충 점수 매겨서, 가장 좋은 빈 칸을 찾아요.
+function simpleLineScore(board, x, y, player) {
+  const size = board.length;
+  let score = 0;
+  for (const [dx, dy] of DIRECTIONS) {
+    let count = 1;
+    for (const sign of [1, -1]) {
+      let nx = x + dx * sign, ny = y + dy * sign;
+      while (nx >= 0 && nx < size && ny >= 0 && ny < size && board[ny][nx] === player) {
+        count++;
+        nx += dx * sign;
+        ny += dy * sign;
+      }
+    }
+    score += count * count;
+  }
+  return score;
+}
+
+function findBestEmptyCellForPlayer(state, player) {
+  const { board } = state;
+  const size = board.length;
+  let best = null;
+  let bestScore = -Infinity;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (board[y][x] !== 0 || isBlocked(state, x, y)) continue;
+      const score = simpleLineScore(board, x, y, player);
+      if (score > bestScore) { bestScore = score; best = { x, y }; }
+    }
+  }
+  return best;
+}
+
+// 챌린지 "완전 무작위"용: 지금 둘 수 있는(비어있고 안 막힌) 칸 중 무작위로 n개를 뽑아요.
+function pickRandomEmptyCells(state, n) {
+  const { board } = state;
+  const size = board.length;
+  const options = [];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (board[y][x] === 0 && !isBlocked(state, x, y)) options.push({ x, y });
+    }
+  }
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [options[i], options[j]] = [options[j], options[i]];
+  }
+  return options.slice(0, n);
+}
+
 // 챌린지의 "파괴 금지"/"방어 금지" 같은 카드 제한을 사람 플레이어의 드래프트 풀에만 적용해요.
 function draftPoolForChallenge(pool, player, state) {
   if (!state.challengeCardBan || player !== state.humanColor) return pool;
@@ -194,6 +247,7 @@ export function createInitialState() {
     scatteredFogCells: {}, // 챌린지 "흩어진 시야": 항상 안 보이는 무작위 칸들 (렌더링 전용, 착수 자체는 가능)
     humanCardUsedCount: 0, // 챌린지 "카드 한 방 승부": 내가 이번 판에 카드를 몇 번 썼는지
     misfireOriginalCard: null, // 챌린지 "카드 감별 실패": 실제로 손에서 빠져야 할 원래 카드 id
+    allowedCells: null, // 챌린지 "완전 무작위": 이번 내 턴에 둘 수 있는 칸 3개 (null이면 제한 없음)
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
     rematchVotes: { [BLACK]: false, [WHITE]: false },
@@ -326,6 +380,15 @@ function advanceTurn(state, fromPlayer) {
     }
   }
 
+  // 챌린지 "완전 무작위": 내(사람) 턴이 시작될 때마다 둘 수 있는 칸 3개를 새로 뽑아요.
+  if (next.challengeId === 'randomThreeCells') {
+    if (next.turn === next.humanColor) {
+      next.allowedCells = pickRandomEmptyCells(next, 3);
+    } else {
+      next.allowedCells = null;
+    }
+  }
+
   // 챌린지 "카드 폭풍": AI 차례가 되면 카드를 2장씩 자동으로 받아요 (나는 평소대로 드래프트).
   if (next.challengeId === 'cardStormAI' && next.aiPlayer && next.turn === next.aiPlayer) {
     const pool = poolForPlayer(next.aiPlayer);
@@ -381,6 +444,62 @@ function finishTurnAfterPlacement(state, placingPlayer) {
       next.blockedCells = blockedCells;
       next.canyonRing = ring;
       next.message = `협곡이 붕괴돼서 바깥 ${ring}줄이 막혔어요! ${next.message}`;
+    }
+  }
+
+  // 챌린지 "짧아지는 판": 5수마다 판 바깥 테두리를 한 줄씩 영구히 막아요 (협곡 붕괴의 빠른 버전).
+  if (next.challengeId === 'shrinkingBoard' && next.ply % 5 === 0 && next.ply > 0) {
+    const size = next.board.length;
+    const ring = next.canyonRing + 1;
+    if (ring * 2 < size) {
+      const blockedCells = { ...next.blockedCells };
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (x < ring || x >= size - ring || y < ring || y >= size - ring) {
+            blockedCells[key(x, y)] = Infinity;
+          }
+        }
+      }
+      next.blockedCells = blockedCells;
+      next.canyonRing = ring;
+      next.message = `판이 좁아져서 바깥 ${ring}줄이 막혔어요! ${next.message}`;
+    }
+  }
+
+  // 챌린지 "유령 돌": 내(사람) 돌 중 놓은 지 10수가 지난 건 사라져요.
+  if (next.challengeId === 'ghostStones' && next.humanColor) {
+    const size = next.board.length;
+    const birth = next.stoneBirthPly || {};
+    const decayed = [];
+    let changed = false;
+    const newBoard = next.board.map((row) => row.slice());
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (newBoard[y][x] !== next.humanColor) continue;
+        const k = key(x, y);
+        const bornAt = birth[k];
+        if (bornAt != null && next.ply - bornAt >= 10) {
+          newBoard[y][x] = 0;
+          decayed.push(k);
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      next.board = newBoard;
+      const newBirth = { ...birth };
+      for (const k of decayed) delete newBirth[k];
+      next.stoneBirthPly = newBirth;
+      next.message = `유령이 된 내 돌이 사라졌어요! ${next.message}`;
+    }
+  }
+
+  // 챌린지 "외통수 강요": AI가 자기 수를 두고 나면, 내(사람) 급소가 될 만한 빈 칸을 하나 더 막아요.
+  if (next.challengeId === 'forcedCheckmate' && placingPlayer === next.aiPlayer && next.humanColor) {
+    const target = findBestEmptyCellForPlayer(next, next.humanColor);
+    if (target) {
+      next.blockedCells = { ...next.blockedCells, [key(target.x, target.y)]: Infinity };
+      next.message = `AI가 당신의 급소를 미리 막았어요! ${next.message}`;
     }
   }
 
@@ -489,10 +608,28 @@ function tryPlaceStone(state, clickX, clickY) {
   if (board[y][x] !== 0) return { ...workingState, message: '이미 돌이 있는 칸이에요.' };
   if (isBlocked(workingState, x, y)) return { ...workingState, message: '지금은 놓을 수 없는 칸이에요.' };
 
+  // 챌린지 "완전 무작위": 내 턴엔 미리 제시된 3칸 중 하나에만 둘 수 있어요.
+  if (
+    workingState.challengeId === 'randomThreeCells'
+    && player === workingState.humanColor
+    && Array.isArray(workingState.allowedCells)
+    && !workingState.allowedCells.some((c) => c.x === x && c.y === y)
+  ) {
+    return { ...workingState, message: '지금은 제시된 3칸 중 한 곳에만 둘 수 있어요.' };
+  }
+
   const forbidden = isForbiddenMove(board, x, y, player, workingState.ruleFlags);
   if (forbidden) {
     const label = forbidden === 'overline' ? '육목' : forbidden === 'double-three' ? '3-3' : '4-4';
     return { ...workingState, message: `금수 자리예요 (${label}). 다른 칸을 선택하세요.` };
+  }
+
+  // 챌린지 "도박수": 내가 두는 수는 30% 확률로만 실제로 놓이고, 실패하면 그냥 턴이 넘어가요.
+  // (실제로 돌을 놓은 게 아니라서 ply는 그대로 두고, 턴만 상대에게 넘겨요.)
+  if (workingState.challengeId === 'gambitMove' && player === workingState.humanColor && Math.random() >= 0.3) {
+    const res = advanceTurn(workingState, player);
+    res.message = `도박 실패! 이번 수는 놓이지 않고 턴이 넘어갔어요. ${res.message}`;
+    return res;
   }
 
   const nextBoard = cloneBoard(board);
@@ -512,6 +649,10 @@ function tryPlaceStone(state, clickX, clickY) {
 
   // 룰렛 "자동 소멸"을 위해 이 칸이 언제(몇 수째) 놓였는지 기억해둬요.
   if (workingState.rouletteRule === 'autoDecay') {
+    nextState.stoneBirthPly = { ...workingState.stoneBirthPly, [key(x, y)]: workingState.ply };
+  }
+  // 챌린지 "유령 돌": 내(사람) 돌이 언제 놓였는지 기억해뒀다가 5수 후 반투명, 10수 후 소멸시켜요.
+  if (workingState.challengeId === 'ghostStones' && placedColor === workingState.humanColor) {
     nextState.stoneBirthPly = { ...workingState.stoneBirthPly, [key(x, y)]: workingState.ply };
   }
 
@@ -547,8 +688,13 @@ function tryPlaceStone(state, clickX, clickY) {
   if (workingState.rouletteRule === 'doubleMoveAlways' && !isBonusMove) {
     nextState.buffs = { ...nextState.buffs, doubleMoveRemaining: 1 };
   }
+  // 챌린지 "2연속 착수": AI만 매 턴 2수씩 둬요. AI의 두 번째 수로도 승리가 인정돼요.
+  if (workingState.challengeId === 'aiDoubleMove' && player === workingState.aiPlayer && !isBonusMove) {
+    nextState.buffs = { ...nextState.buffs, doubleMoveRemaining: 1 };
+  }
+  const winBlockedByBonusMove = isBonusMove && workingState.challengeId !== 'aiDoubleMove';
 
-  const won = !isBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal });
+  const won = !winBlockedByBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal });
 
   if (won) {
     // 룰렛 "역전 오목": 완성한 쪽이 오히려 패배해요.
@@ -582,7 +728,7 @@ function tryPlaceStone(state, clickX, clickY) {
     return nextState;
   }
 
-  if (isBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal })) {
+  if (winBlockedByBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal })) {
     const res = finishTurnAfterPlacement(nextState, player);
     res.message = `연속 두기의 두 번째 수로는 승리할 수 없어요! ${res.message}`;
     return res;
@@ -980,6 +1126,17 @@ function resolveTargetedEffect(state, cardId, targets) {
   // 넘어가지 않고 여기서 바로 반환해요 (안 그러면 advanceTurn이 승리 메시지를 덮어써요).
   if (next.phase === 'over') return next;
 
+  // 챌린지 "하나의 생명": 내(사람) 돌이 이번 카드로 하나라도 파괴/변환당했으면 그 즉시 패배해요.
+  if (next.challengeId === 'oneLife' && next.humanColor && next.stoneLossLog.length > state.stoneLossLog.length) {
+    const newLosses = next.stoneLossLog.slice(state.stoneLossLog.length);
+    if (newLosses.some((l) => l.owner === next.humanColor)) {
+      next.phase = 'over';
+      next.winner = otherPlayer(next.humanColor);
+      next.message = '내 돌이 파괴/변환당했어요... "하나의 생명" 챌린지는 그 즉시 패배예요.';
+      return next;
+    }
+  }
+
   if (cardId === 'overwrite' || cardId === 'wildcard') {
     next.lastMove = { x: targets[0].x, y: targets[0].y };
   }
@@ -1375,6 +1532,17 @@ function resolveStandaloneNoTarget(state, cardId) {
   next = removeFromHand(next, player, cardId);
   next.activeCard = null;
 
+  // 챌린지 "하나의 생명": 내(사람) 돌이 이번 카드로 하나라도 파괴/변환당했으면 그 즉시 패배해요.
+  if (next.challengeId === 'oneLife' && next.humanColor && next.stoneLossLog.length > state.stoneLossLog.length) {
+    const newLosses = next.stoneLossLog.slice(state.stoneLossLog.length);
+    if (newLosses.some((l) => l.owner === next.humanColor)) {
+      next.phase = 'over';
+      next.winner = otherPlayer(next.humanColor);
+      next.message = '내 돌이 파괴/변환당했어요... "하나의 생명" 챌린지는 그 즉시 패배예요.';
+      return next;
+    }
+  }
+
   const boardChanged = ['undoLast', 'timeReset', 'chaosShift', 'restore'].includes(cardId);
   if (boardChanged) {
     next.history = [...next.history, board];
@@ -1577,6 +1745,23 @@ export function gameReducer(state, action) {
         // 7목을 완성하는 수 자체가 장목 금수로 막히지 않도록 해제해요 (6목 챌린지와 같은 이유).
         ruleFlags = { ...ruleFlags, allowOverline: true };
       }
+      if (challengeId === 'diagonalHell' && humanColor) {
+        // 대각선 승리 불가 + 6목이어야 승리 (6목 완성 수 자체가 장목 금수로 막히지 않게 해제).
+        ruleFlags = { ...ruleFlags, noDiagonalFor: humanColor, allowOverline: true };
+        winLengthOverride = { ...winLengthOverride, [humanColor]: 6 };
+      }
+      if (challengeId === 'boardIsEnemy') {
+        const size = fresh.board.length;
+        let placed = 0;
+        let guard = 0;
+        while (placed < 25 && guard < 800) {
+          guard++;
+          const rx = Math.floor(Math.random() * size);
+          const ry = Math.floor(Math.random() * size);
+          const k = key(rx, ry);
+          if (!blockedCells[k]) { blockedCells[k] = Infinity; placed++; }
+        }
+      }
 
       // 챌린지 "흩어진 시야": 항상 안 보이는 무작위 15칸을 미리 뽑아둬요 (누구 돌인지 무관).
       let scatteredFogCells = {};
@@ -1636,6 +1821,11 @@ export function gameReducer(state, action) {
         base.board = concessionBoard;
         base.ply = 3;
         base.turn = humanColor;
+      }
+
+      // 챌린지 "완전 무작위": 사람이 흑(선공)이면 첫 턴부터도 3칸이 미리 있어야 해요.
+      if (challengeId === 'randomThreeCells' && humanColor === BLACK) {
+        base.allowedCells = pickRandomEmptyCells(base, 3);
       }
 
       // 무카드/손 없이 두기 챌린지는 드래프트 자체를 건너뛰고 바로 대국을 시작해요.
@@ -1770,15 +1960,15 @@ export function gameReducer(state, action) {
             ...fresh.ruleFlags,
             noDiagonalFor: state.ruleFlags?.noDiagonalFor || null,
             // 6목/7목 챌린지는 재대국해도 계속 이 챌린지이므로 장목 금수 해제를 유지해요.
-            allowOverline: (state.challengeId === 'sixInRow' || state.challengeId === 'sevenInRow') ? true : fresh.ruleFlags.allowOverline,
+            allowOverline: (state.challengeId === 'sixInRow' || state.challengeId === 'sevenInRow' || state.challengeId === 'diagonalHell') ? true : fresh.ruleFlags.allowOverline,
             forbiddenColor: state.challengeId === 'colorReverse' ? WHITE : undefined,
           },
           // '단축 승리'/'연장 승리' 카드 효과는 "이번 판 끝까지"만 적용되는 일회성 효과라
           // 재대국하면 초기화돼야 해요. 챌린지(6목/7목/4목 승리) 자체의 규칙만 재대국에도 이어져요.
-          winLengthOverride: ['sixInRow', 'sevenInRow', 'fourVsFive'].includes(state.challengeId)
+          winLengthOverride: ['sixInRow', 'sevenInRow', 'fourVsFive', 'diagonalHell'].includes(state.challengeId)
             ? { ...state.winLengthOverride }
             : fresh.winLengthOverride,
-          blockedCells: ['narrowVision', 'narrowVision5', 'doubleForbidden', 'quadForbidden'].includes(state.challengeId)
+          blockedCells: ['narrowVision', 'narrowVision5', 'doubleForbidden', 'quadForbidden', 'boardIsEnemy'].includes(state.challengeId)
             ? { ...state.blockedCells }
             : fresh.blockedCells,
           board: state.challengeId === 'smallBoard' ? createEmptyBoard(11)
@@ -1817,6 +2007,11 @@ export function gameReducer(state, action) {
           base.board = concessionBoard;
           base.ply = 3;
           base.turn = state.humanColor;
+        }
+
+        // 챌린지 "완전 무작위": 재대국에서도 사람이 흑이면 첫 턴부터 3칸이 필요해요.
+        if (state.challengeId === 'randomThreeCells' && state.humanColor === BLACK) {
+          base.allowedCells = pickRandomEmptyCells(base, 3);
         }
 
         if (state.challengeId === 'noCards' || state.challengeId === 'handlessPlay') {
@@ -1939,6 +2134,11 @@ export function gameReducer(state, action) {
       // 챌린지 "카드 한 방 승부": 나는 이번 판에 카드를 딱 1번만 쓸 수 있어요.
       if (state.challengeId === 'oneCardDuel' && player === state.humanColor && (state.humanCardUsedCount || 0) >= 1) {
         return { ...state, message: '이번 판엔 카드를 이미 다 썼어요 (딱 1번만 가능해요).' };
+      }
+
+      // 챌린지 "침묵의 시작": 처음 10수 동안 나는 카드를 쓸 수 없어요.
+      if (state.challengeId === 'silentStartPlayer' && player === state.humanColor && state.ply < 10) {
+        return { ...state, message: `아직 침묵 중이에요 (${10 - state.ply}수 후 카드를 쓸 수 있어요).` };
       }
 
       let misfireOriginalCard = null;

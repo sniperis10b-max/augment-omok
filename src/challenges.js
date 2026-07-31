@@ -59,6 +59,24 @@ export function hasCompletedAllChallenges3(clearedSet = {}) {
   return CHALLENGES_3.every((c) => clearedSet[c.id]);
 }
 
+// 챌린지 네 번째 세트예요. 10개를 전부 클리어하면 '카지노 펠트' 바둑판 스킨을 받아요.
+export const CHALLENGES_4 = [
+  { id: 'oneLife', name: '하나의 생명', desc: '내 돌이 하나라도 파괴/변환당하면 그 즉시 패배해요.' },
+  { id: 'aiDoubleMove', name: '2연속 착수', desc: 'AI는 매 턴 무조건 2수씩 둬요 (나는 평소대로 1수).' },
+  { id: 'silentStartPlayer', name: '침묵의 시작', desc: '나는 처음 10수 동안 카드를 쓸 수 없어요 (AI는 평소대로).' },
+  { id: 'shrinkingBoard', name: '짧아지는 판', desc: '5수마다 판 바깥 테두리가 한 줄씩 영구히 막혀서 점점 좁아져요.' },
+  { id: 'ghostStones', name: '유령 돌', desc: '내 돌은 놓은 지 5수가 지나면 반투명해지고, 10수가 지나면 사라져요.' },
+  { id: 'forcedCheckmate', name: '외통수 강요', desc: 'AI가 매 턴 내 급소가 될 만한 자리를 하나씩 미리 막아요.' },
+  { id: 'boardIsEnemy', name: '판이 곧 적', desc: '무작위 칸 25곳이 처음부터 막힌 채 시작해요.' },
+  { id: 'diagonalHell', name: '대각선 지옥', desc: '나는 대각선 승리가 불가능하고, 동시에 6목을 만들어야 승리해요.' },
+  { id: 'randomThreeCells', name: '완전 무작위', desc: '내 턴마다 무작위로 제시되는 3칸 중 하나에만 둘 수 있어요 (AI는 평소대로).' },
+  { id: 'gambitMove', name: '도박수', desc: '내가 돌을 놓을 때마다 30% 확률로만 실제로 놓이고, 실패하면 그냥 턴이 넘어가요.' },
+];
+
+export function hasCompletedAllChallenges4(clearedSet = {}) {
+  return CHALLENGES_4.every((c) => clearedSet[c.id]);
+}
+
 // 파괴/방어 계열로 분류되는 카드 id들 (파괴 금지/방어 금지 챌린지에서 드래프트 풀에서 제외돼요)
 export const DESTROY_CARD_IDS = new Set([
   'destroy', 'destroyChain', 'lightning', 'tsunami', 'blackhole', 'erosion', 'dice', 'coinFlip', 'mark', 'alchemy',
@@ -68,7 +86,7 @@ export const DEFENSE_CARD_IDS = new Set([
 ]);
 
 export function getChallengeById(id) {
-  return CHALLENGES.find((c) => c.id === id) || CHALLENGES_2.find((c) => c.id === id) || CHALLENGES_3.find((c) => c.id === id) || null;
+  return CHALLENGES.find((c) => c.id === id) || CHALLENGES_2.find((c) => c.id === id) || CHALLENGES_3.find((c) => c.id === id) || CHALLENGES_4.find((c) => c.id === id) || null;
 }
 
 // 완주(전 챌린지 클리어) 여부를 계산해요. clearedSet은 achievementStats.challengesCleared 같은 객체예요.

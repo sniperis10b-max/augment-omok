@@ -3,7 +3,7 @@
 // "내 계정만 열어준다"는 건 UI에서 개발자 계정일 때만 선택 가능하게 막아둔다는 뜻이에요).
 
 import { CARDS } from './cards.js';
-import { CHALLENGES, hasCompletedAllChallenges2, hasCompletedAllChallenges3 } from './challenges.js';
+import { CHALLENGES, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4 } from './challenges.js';
 
 // background-image는 색상값(#fff 같은)을 그대로 못 받아서, 단색 스킨은 그라데이션으로 감싸줘요.
 // (실제 게임판/돌 렌더링과 설정 화면의 미리보기 스와치 둘 다 이 함수로 통일해서 써요.)
@@ -334,14 +334,12 @@ export const BOARD_SKINS = [
     questDesc: '시즌 상점에서 코인으로 구매 (900코인)',
   },
   {
-    // TODO: '카드 도박꾼' 챌린지가 챌린지 1에서 빠지면서 지금은 아무 조건으로도 못 얻는
-    // 예약 스킨이에요. 나중에 다른 조건에 다시 연결할 예정이라 지우지 않고 남겨뒀어요.
     id: 'casinoFelt',
     name: '카지노 펠트',
     background: 'radial-gradient(circle at 50% 45%, #1a5c3a, #0a2e1e 80%)',
     border: '#d4af37',
     line: 'rgba(212, 175, 55, 0.35)',
-    questDesc: "'카드 도박꾼' 챌린지 클리어",
+    questDesc: '챌린지 세트 4 (10개) 전부 클리어',
   },
 ];
 
@@ -828,7 +826,7 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'volcanicAsh': return (stats.destroyKills || 0) >= 100;
     case 'libraryArchive': return (stats.totalCardUses || 0) >= 150;
     case 'seasonFireworksSky': return (stats.seasonLevel || 0) >= 10;
-    case 'casinoFelt': return !!(ctx.challengesCleared || {}).gambler;
+    case 'casinoFelt': return hasCompletedAllChallenges4(ctx.challengesCleared || {});
     default: return false;
   }
 }
