@@ -4232,7 +4232,26 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 key={c.id}
                 className="setup-card"
                 style={{ textAlign: 'left', alignItems: 'flex-start' }}
-                onClick={() => { setSelectedChallenge(c.id); setStep('color'); }}
+                onClick={() => {
+                  setSelectedChallenge(c.id);
+                  if (c.id === 'colorReverse') {
+                    // 이 챌린지는 항상 내가 백이 되도록 강제되기 때문에, 색깔을 고르는 화면
+                    // 자체가 "흑으로 플레이"를 눌러도 실제로는 백이 되는 오해를 유발해요.
+                    // 그래서 색깔 선택 화면을 건너뛰고 바로 시작해요.
+                    dispatch({
+                      type: 'START_GAME',
+                      aiPlayer: BLACK,
+                      difficulty: 'impossible',
+                      timeLimitSec: settings.timeLimitSec,
+                      cardsPerPlayer: settings.cardsPerPlayer,
+                      challengeId: c.id,
+                      rouletteMode: settings.rouletteMode,
+                      forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
+                    });
+                  } else {
+                    setStep('color');
+                  }
+                }}
               >
                 <div className="setup-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {cleared && <span style={{ color: '#3fae52' }}>✓</span>} {c.name}
