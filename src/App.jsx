@@ -412,7 +412,9 @@ export default function App() {
                         ? (state.resurrectionResult === 'success' ? 'success' : 'fail')
                         : cur === 'lottery'
                           ? (state.lotteryResult === 'success' ? 'success' : 'fail')
-                          : null;
+                          : cur === 'dice'
+                            ? (state.diceResult != null && state.diceResult >= 3 ? 'success' : 'fail')
+                            : null;
           const diceRoll = cur === 'dice' ? state.diceResult : null;
           setCardOverlay({ player: p, card, key: Date.now(), result, diceRoll });
         }
@@ -1608,6 +1610,15 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
     refreshSeasonProgress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
+
+  // 시즌 화면에 들어갈 때마다 오늘/이번 주 미션이 갱신됐는지 다시 확인해요.
+  // (로그인할 때 딱 한 번만 확인하면, 로그인한 채로 날짜가 바뀌어도 자정에 리셋이 안 돼요.)
+  useEffect(() => {
+    if (step === 'season') {
+      refreshSeasonProgress();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   async function handleClaimSeasonMission(periodType, mission) {
     if (!user || seasonBusy) return;

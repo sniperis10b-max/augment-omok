@@ -458,6 +458,7 @@ AI_CARD_HANDLERS.tsunami = (board, ai) => {
 };
 // 블랙홀은 상대 진영이 가장 뭉쳐있는 지점을 중심으로 잡아요.
 AI_CARD_HANDLERS.blackhole = (board, ai) => findMostConnectedStone(board, otherPlayer(ai));
+AI_CARD_HANDLERS.alchemy = (board, ai) => findMostConnectedStone(board, otherPlayer(ai));
 
 // 상대의 열린 삼(다음에 열린 사가 될 수 있는 자리)이 있으면 그 확장 칸들을 반환
 function opponentOpenThreeFlanks(board, aiPlayer) {
