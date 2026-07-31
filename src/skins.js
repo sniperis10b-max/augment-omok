@@ -3,7 +3,7 @@
 // "내 계정만 열어준다"는 건 UI에서 개발자 계정일 때만 선택 가능하게 막아둔다는 뜻이에요).
 
 import { CARDS } from './cards.js';
-import { CHALLENGES, hasCompletedAllChallenges2 } from './challenges.js';
+import { CHALLENGES, hasCompletedAllChallenges2, hasCompletedAllChallenges3 } from './challenges.js';
 
 // background-image는 색상값(#fff 같은)을 그대로 못 받아서, 단색 스킨은 그라데이션으로 감싸줘요.
 // (실제 게임판/돌 렌더링과 설정 화면의 미리보기 스와치 둘 다 이 함수로 통일해서 써요.)
@@ -665,18 +665,28 @@ export const STONE_SKINS = [
     questDesc: '시즌 상점에서 코인으로 구매 (900코인)',
   },
   {
-    // TODO: '속전속결' 챌린지가 챌린지 1에서 빠지면서 지금은 아무 조건으로도 못 얻는
-    // 예약 스킨이에요. 나중에 다른 조건에 다시 연결할 예정이라 지우지 않고 남겨뒀어요.
     id: 'lightningMark',
     name: '번개 각인',
     black:
-      'linear-gradient(95deg, rgba(255,230,120,0.6), rgba(255,230,120,0.6)), '
-      + 'linear-gradient(160deg, #16161e, #050508)',
-    blackPosition: '20% 40%, 0 0',
-    blackSize: '55% 3px, 100% 100%',
-    white: 'radial-gradient(circle at 35% 35%, #fff8e0, #d8d0c0 75%)',
-    whiteBorder: '#c9c0a8',
-    questDesc: "'속전속결' 챌린지 클리어",
+      'radial-gradient(circle at 48% 45%, rgba(180,240,255,0.55), rgba(180,240,255,0) 30%), '
+      + 'linear-gradient(115deg, rgba(230,250,255,0.95), rgba(230,250,255,0.95)), '
+      + 'linear-gradient(70deg, rgba(230,250,255,0.95), rgba(230,250,255,0.95)), '
+      + 'linear-gradient(115deg, rgba(230,250,255,0.95), rgba(230,250,255,0.95)), '
+      + 'linear-gradient(75deg, rgba(120,220,255,0.5), rgba(120,220,255,0.5)), '
+      + 'radial-gradient(circle at 35% 30%, #1a2440, #06060e 78%)',
+    blackPosition: '0 0, 38% 8%, 52% 32%, 46% 52%, 40% 20%, 0 0',
+    blackSize: '100% 100%, 3px 26%, 3px 24%, 3px 28%, 5px 60%, 100% 100%',
+    white:
+      'radial-gradient(circle at 48% 45%, rgba(60,140,255,0.35), rgba(60,140,255,0) 30%), '
+      + 'linear-gradient(115deg, rgba(30,60,120,0.9), rgba(30,60,120,0.9)), '
+      + 'linear-gradient(70deg, rgba(30,60,120,0.9), rgba(30,60,120,0.9)), '
+      + 'linear-gradient(115deg, rgba(30,60,120,0.9), rgba(30,60,120,0.9)), '
+      + 'linear-gradient(75deg, rgba(80,150,255,0.4), rgba(80,150,255,0.4)), '
+      + 'radial-gradient(circle at 35% 30%, #f0f4fb, #c7cede 78%)',
+    whitePosition: '0 0, 38% 8%, 52% 32%, 46% 52%, 40% 20%, 0 0',
+    whiteSize: '100% 100%, 3px 26%, 3px 24%, 3px 28%, 5px 60%, 100% 100%',
+    whiteBorder: '#5fa8ff',
+    questDesc: '챌린지 세트 3 (10개) 전부 클리어',
   },
   {
     id: 'unbreakableWill',
@@ -827,7 +837,7 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
       const cleared = ctx.challengesCleared || {};
       return CHALLENGES.every((c) => cleared[c.id]);
     }
-    case 'lightningMark': return !!(ctx.challengesCleared || {}).speedRun;
+    case 'lightningMark': return hasCompletedAllChallenges3(ctx.challengesCleared || {});
     case 'unbreakableWill': return hasCompletedAllChallenges2(ctx.challengesCleared || {});
     case 'twins': return (stats.duplicateUses || 0) >= 30;
     case 'frostbite': return (stats.freezeCellUses || 0) >= 50;

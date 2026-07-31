@@ -53,7 +53,7 @@ import {
   ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
   SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS, devSetSeasonLevel,
 } from './seasonPass.js';
-import { CHALLENGES, CHALLENGES_2, getChallengeById, hasCompletedAllChallenges, hasCompletedAllChallenges2, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
+import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, getChallengeById, hasCompletedAllChallenges, hasCompletedAllChallenges2, hasCompletedAllChallenges3, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
 import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
@@ -4124,7 +4124,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   }
 
   if (step === 'challenge-select') {
-    const activeList = challengeSetTab === 'set1' ? CHALLENGES : CHALLENGES_2;
+    const activeList = challengeSetTab === 'set1' ? CHALLENGES : challengeSetTab === 'set2' ? CHALLENGES_2 : CHALLENGES_3;
     return (
       <div className="page">
         <header className="header">
@@ -4151,6 +4151,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           >
             챌린지 2
           </button>
+          <button
+            className={`reset-btn ${challengeSetTab === 'set3' ? 'title-pick-active' : ''}`}
+            style={{ flex: 1 }}
+            onClick={() => setChallengeSetTab('set3')}
+          >
+            챌린지 3
+          </button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -4176,8 +4183,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         <p className="setup-card-desc" style={{ marginTop: 14 }}>
           {challengeSetTab === 'set1' ? (
             <>{CHALLENGES.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES.length}개 클리어 — 전부 클리어하면 "투명 돌" 스킨을 얻어요.</>
-          ) : (
+          ) : challengeSetTab === 'set2' ? (
             <>{CHALLENGES_2.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_2.length}개 클리어 — 전부 클리어하면 "불굴의 의지" 스킨을 얻어요.</>
+          ) : (
+            <>{CHALLENGES_3.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_3.length}개 클리어 — 전부 클리어하면 "번개 각인" 스킨을 얻어요.</>
           )}
         </p>
       </div>
@@ -5468,10 +5477,24 @@ function Board({ state, dispatch, online, settings }) {
             const inForcedZone = forcedZone && x >= forcedZone.x0 && x <= forcedZone.x1 && y >= forcedZone.y0 && y <= forcedZone.y1;
             const inConfusionZone = confusionZone && Math.abs(x - confusionZone.x) <= 1 && Math.abs(y - confusionZone.y) <= 1;
             const isLastMove = state.lastMove && state.lastMove.x === x && state.lastMove.y === y;
+            const inScatteredFog = !!(state.scatteredFogCells && state.scatteredFogCells[`${x},${y}`]);
             const hideStone = value !== 0 && (
               (fogActive && value !== WILD && value !== myColorForFog)
               || (recentOnlyActive && !recentCellKeys.has(`${x},${y}`))
+              || inScatteredFog
             );
+
+            // 챌린지 "혼란": 실제 좌표는 그대로지만, 화면에는 살짝 흐트러진 위치에 놓인
+            // 것처럼 보여요. (x,y)로 시드를 고정해서 매 렌더마다 같은 자리로 흔들려요.
+            let confusionJitter = null;
+            if (state.challengeId === 'confusion' && value !== 0) {
+              const seed = (x * 7919 + y * 104729) % 1000;
+              const angle = (seed / 1000) * Math.PI * 2;
+              const dist = 20 + (seed % 40); // 셀 크기의 20~60%만큼 흔들림
+              confusionJitter = {
+                transform: `translate(${Math.cos(angle) * dist}%, ${Math.sin(angle) * dist}%)`,
+              };
+            }
 
             return (
               <button
@@ -5494,6 +5517,7 @@ function Board({ state, dispatch, online, settings }) {
                     } ${protectedStone ? 'stone-protected' : ''} ${markedStone ? 'stone-marked' : ''} ${isLastMove ? placementEffect.className : ''} ${
                       state.challengeId === 'silhouette' && value !== WILD ? (value === 1 ? 'stone-silhouette-fill' : 'stone-silhouette-ring') : ''
                     }`}
+                    style={confusionJitter || undefined}
                   >
                     {isLastMove && <span className="last-move-dot" />}
                     {markedStone && <Stamp size={11} className="marked-badge" />}

@@ -42,6 +42,24 @@ export function hasCompletedAllChallenges2(clearedSet = {}) {
   return CHALLENGES_2.every((c) => clearedSet[c.id]);
 }
 
+// 챌린지 세 번째 세트예요. 10개를 전부 클리어하면 '번개 각인' 돌 스킨을 받아요.
+export const CHALLENGES_3 = [
+  { id: 'handlessPlay', name: '손 없이 두기', desc: '카드 시스템이 완전히 꺼져요. 나도 AI도 카드 없이 순수 실력으로 승부해요.' },
+  { id: 'cardStormAI', name: '카드 폭풍', desc: 'AI가 매 턴마다 카드 2장씩 자동으로 받아요 (나는 평소대로 드래프트해요).' },
+  { id: 'frozenTime', name: '얼어붙은 시간', desc: '한 수당 제한시간이 무조건 1초로 고정돼요.' },
+  { id: 'diagonalOnlyPlayer', name: '대각선만', desc: '내 승리는 대각선 방향으로만 인정돼요 (AI는 모든 방향 인정).' },
+  { id: 'scatteredVision', name: '흩어진 시야', desc: '판 위 무작위 15칸이 게임 내내 안 보여요 (누구 돌이든 상관없이).' },
+  { id: 'oneCardDuel', name: '카드 한 방 승부', desc: '나는 이번 판에 카드를 딱 1번만 쓸 수 있어요 (AI는 평소대로).' },
+  { id: 'confusion', name: '혼란', desc: '실제로 두는 자리는 정확한데, 화면에는 돌이 무작위로 흐트러진 위치에 놓인 것처럼 보여요.' },
+  { id: 'firstMoveConcession', name: '첫 수 양보', desc: 'AI가 먼저 3수를 두고 시작해요 (나는 4번째 수부터).' },
+  { id: 'cardMisfire', name: '카드 감별 실패', desc: '카드는 자유롭게 고르지만, 실제로 발동될 때는 무작위 다른 카드로 바뀌어요.' },
+  { id: 'unlimitedExpansion', name: '무제한 확장', desc: '21x21의 아주 넓은 판에서 대국해요.' },
+];
+
+export function hasCompletedAllChallenges3(clearedSet = {}) {
+  return CHALLENGES_3.every((c) => clearedSet[c.id]);
+}
+
 // 파괴/방어 계열로 분류되는 카드 id들 (파괴 금지/방어 금지 챌린지에서 드래프트 풀에서 제외돼요)
 export const DESTROY_CARD_IDS = new Set([
   'destroy', 'destroyChain', 'lightning', 'tsunami', 'blackhole', 'erosion', 'dice', 'coinFlip', 'mark', 'alchemy',
@@ -51,7 +69,7 @@ export const DEFENSE_CARD_IDS = new Set([
 ]);
 
 export function getChallengeById(id) {
-  return CHALLENGES.find((c) => c.id === id) || CHALLENGES_2.find((c) => c.id === id) || null;
+  return CHALLENGES.find((c) => c.id === id) || CHALLENGES_2.find((c) => c.id === id) || CHALLENGES_3.find((c) => c.id === id) || null;
 }
 
 // 완주(전 챌린지 클리어) 여부를 계산해요. clearedSet은 achievementStats.challengesCleared 같은 객체예요.

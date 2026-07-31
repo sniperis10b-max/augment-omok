@@ -191,6 +191,9 @@ export function createInitialState() {
     cardUsedThisTurn: { [BLACK]: false, [WHITE]: false },
     stoneBirthPly: {},
     canyonRing: 0,
+    scatteredFogCells: {}, // 챌린지 "흩어진 시야": 항상 안 보이는 무작위 칸들 (렌더링 전용, 착수 자체는 가능)
+    humanCardUsedCount: 0, // 챌린지 "카드 한 방 승부": 내가 이번 판에 카드를 몇 번 썼는지
+    misfireOriginalCard: null, // 챌린지 "카드 감별 실패": 실제로 손에서 빠져야 할 원래 카드 id
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
     rematchVotes: { [BLACK]: false, [WHITE]: false },
@@ -320,6 +323,15 @@ function advanceTurn(state, fromPlayer) {
     if (pool.length > 0) {
       const randomId = pool[Math.floor(Math.random() * pool.length)];
       next.draft = { ...next.draft, hands: { ...next.draft.hands, [next.turn]: [...next.draft.hands[next.turn], randomId] } };
+    }
+  }
+
+  // 챌린지 "카드 폭풍": AI 차례가 되면 카드를 2장씩 자동으로 받아요 (나는 평소대로 드래프트).
+  if (next.challengeId === 'cardStormAI' && next.aiPlayer && next.turn === next.aiPlayer) {
+    const pool = poolForPlayer(next.aiPlayer);
+    if (pool.length > 0) {
+      const drawn = [pool[Math.floor(Math.random() * pool.length)], pool[Math.floor(Math.random() * pool.length)]];
+      next.draft = { ...next.draft, hands: { ...next.draft.hands, [next.aiPlayer]: [...next.draft.hands[next.aiPlayer], ...drawn] } };
     }
   }
 
@@ -528,13 +540,15 @@ function tryPlaceStone(state, clickX, clickY) {
     : (workingState.buffs.fourToWinActive ? 4 : (workingState.winLengthOverride?.[placedColor] ?? 5));
   const isBonusMove = !!workingState.buffs.doubleMoveBonusPending;
   const excludeDiagonal = workingState.ruleFlags?.noDiagonalFor === placedColor;
+  // 챌린지 "대각선만": 내(사람) 승리만 대각선 방향으로만 인정돼요 (AI는 제한 없음).
+  const onlyDiagonal = workingState.challengeId === 'diagonalOnlyPlayer' && placedColor === workingState.humanColor;
 
   // 룰렛 "연속 두기 상시": 이번 수가 이 턴의 첫 수라면, 언제나 한 번 더 놓을 수 있게 예약해요.
   if (workingState.rouletteRule === 'doubleMoveAlways' && !isBonusMove) {
     nextState.buffs = { ...nextState.buffs, doubleMoveRemaining: 1 };
   }
 
-  const won = !isBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal });
+  const won = !isBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal });
 
   if (won) {
     // 룰렛 "역전 오목": 완성한 쪽이 오히려 패배해요.
@@ -568,7 +582,7 @@ function tryPlaceStone(state, clickX, clickY) {
     return nextState;
   }
 
-  if (isBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal })) {
+  if (isBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal })) {
     const res = finishTurnAfterPlacement(nextState, player);
     res.message = `연속 두기의 두 번째 수로는 승리할 수 없어요! ${res.message}`;
     return res;
@@ -579,6 +593,17 @@ function tryPlaceStone(state, clickX, clickY) {
 
 function removeFromHand(state, player, cardId) {
   let next = state;
+
+  // 챌린지 "카드 감별 실패": 실제로는 손에 있던 원래 카드를 빼야 해요 (발동된 카드가 아니라).
+  const actualCardId = next.misfireOriginalCard || cardId;
+  if (next.misfireOriginalCard) {
+    next = { ...next, misfireOriginalCard: null };
+  }
+
+  // 챌린지 "카드 한 방 승부": 내가 카드를 썼다는 걸 기록해요.
+  if (next.challengeId === 'oneCardDuel' && player === next.humanColor) {
+    next = { ...next, humanCardUsedCount: (next.humanCardUsedCount || 0) + 1 };
+  }
 
   // 룰렛 "카드 강탈": 상대가 카드를 쓰면 나도 같은 카드를 하나 더 얻어요.
   if (next.rouletteRule === 'cardSteal') {
@@ -605,8 +630,8 @@ function removeFromHand(state, player, cardId) {
   }
 
   const hand = next.draft.hands[player].filter((id, idx, arr) => {
-    const firstIdx = arr.indexOf(cardId);
-    return !(idx === firstIdx && id === cardId);
+    const firstIdx = arr.indexOf(actualCardId);
+    return !(idx === firstIdx && id === actualCardId);
   });
   return { ...next, draft: { ...next.draft, hands: { ...next.draft.hands, [player]: hand } } };
 }
@@ -1440,6 +1465,15 @@ const TARGET_STEPS = {
   dice: ['enemyStone'],
 };
 
+// 카드 감별 실패 챌린지용: 같은 "상호작용 형태"(대상 필요 없음/버프/특정 대상 시퀀스)의
+// 카드끼리만 서로 대체돼야 대상 선택 흐름이 깨지지 않아요.
+function cardShapeKey(cardId) {
+  if (PLACEMENT_BUFF.has(cardId)) return 'buff';
+  if (STANDALONE.has(cardId) && !TARGET_STEPS[cardId]) return 'standalone';
+  const steps = TARGET_STEPS[cardId];
+  return steps ? steps.join(',') : 'unknown';
+}
+
 function cellMatchesStep(state, x, y, step) {
   const player = state.turn;
   const v = state.board[y][x];
@@ -1544,6 +1578,21 @@ export function gameReducer(state, action) {
         ruleFlags = { ...ruleFlags, allowOverline: true };
       }
 
+      // 챌린지 "흩어진 시야": 항상 안 보이는 무작위 15칸을 미리 뽑아둬요 (누구 돌인지 무관).
+      let scatteredFogCells = {};
+      if (challengeId === 'scatteredVision') {
+        const size = fresh.board.length;
+        let placed = 0;
+        let guard = 0;
+        while (placed < 15 && guard < 500) {
+          guard++;
+          const rx = Math.floor(Math.random() * size);
+          const ry = Math.floor(Math.random() * size);
+          const k = key(rx, ry);
+          if (!scatteredFogCells[k]) { scatteredFogCells[k] = true; placed++; }
+        }
+      }
+
       // 룰렛 모드: 챌린지와는 함께 쓰지 않고, 켜져 있으면 이번 판에 적용할 특수 규칙을 하나 뽑아요.
       // 개발자 계정 전용: 특정 규칙으로 결과를 고정할 수 있어요 (없거나 잘못된 id면 무작위).
       const rouletteRule = (rouletteMode && !challengeId)
@@ -1554,8 +1603,10 @@ export function gameReducer(state, action) {
         ...fresh,
         aiPlayer: aiPlayer || null,
         aiDifficulty: difficulty || 'normal',
-        // '속전속결' 챌린지는 설정에서 뭘 골랐든 무조건 15초로 고정돼요.
-        timeLimitSec: challengeId === 'speedRun' ? 15 : (timeLimitSec || 0),
+        // '속전속결' 챌린지는 15초, '얼어붙은 시간'은 1초로 무조건 고정돼요.
+        timeLimitSec: challengeId === 'speedRun' ? 15
+          : challengeId === 'frozenTime' ? 1
+          : (timeLimitSec || 0),
         humanColor,
         challengeId: challengeId || null,
         challengeCardBan,
@@ -1563,18 +1614,39 @@ export function gameReducer(state, action) {
         winLengthOverride,
         blockedCells,
         rouletteRule,
+        scatteredFogCells,
         board: challengeId === 'smallBoard' ? createEmptyBoard(11)
           : challengeId === 'wideHell' ? createEmptyBoard(19)
+          : challengeId === 'unlimitedExpansion' ? createEmptyBoard(21)
           : fresh.board,
       };
 
-      // 무카드 챌린지는 드래프트 자체를 건너뛰고 바로 대국을 시작해요.
-      if (challengeId === 'noCards') {
+      // 챌린지 "첫 수 양보": AI가 먼저 3수를 두고 시작해요. 서로 위협 라인이 안 되도록
+      // 멀찍이 떨어뜨려서 3곳에 둬요.
+      if (challengeId === 'firstMoveConcession' && aiPlayer && humanColor) {
+        const size = base.board.length;
+        const mid = Math.floor(size / 2);
+        const spots = [
+          { x: mid, y: mid },
+          { x: Math.min(size - 1, mid + 3), y: Math.max(0, mid - 3) },
+          { x: Math.max(0, mid - 3), y: Math.min(size - 1, mid + 3) },
+        ];
+        const concessionBoard = base.board.map((row) => row.slice());
+        for (const s of spots) concessionBoard[s.y][s.x] = aiPlayer;
+        base.board = concessionBoard;
+        base.ply = 3;
+        base.turn = humanColor;
+      }
+
+      // 무카드/손 없이 두기 챌린지는 드래프트 자체를 건너뛰고 바로 대국을 시작해요.
+      if (challengeId === 'noCards' || challengeId === 'handlessPlay') {
         return {
           ...base,
           phase: 'play',
           turn: BLACK,
-          message: '무카드 챌린지! 카드 없이 순수 실력으로 승부해요.',
+          message: challengeId === 'handlessPlay'
+            ? '손 없이 두기! 나도 AI도 카드 없이 순수 실력으로 승부해요.'
+            : '무카드 챌린지! 카드 없이 순수 실력으로 승부해요.',
           draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
         };
       }
@@ -1711,15 +1783,50 @@ export function gameReducer(state, action) {
             : fresh.blockedCells,
           board: state.challengeId === 'smallBoard' ? createEmptyBoard(11)
             : state.challengeId === 'wideHell' ? createEmptyBoard(19)
+            : state.challengeId === 'unlimitedExpansion' ? createEmptyBoard(21)
             : fresh.board,
         };
 
-        if (state.challengeId === 'noCards') {
+        // 챌린지 "흩어진 시야": 재대국이어도 안 보이는 칸을 새로 뽑아요.
+        if (state.challengeId === 'scatteredVision') {
+          const size = base.board.length;
+          const cells = {};
+          let placed = 0;
+          let guard = 0;
+          while (placed < 15 && guard < 500) {
+            guard++;
+            const rx = Math.floor(Math.random() * size);
+            const ry = Math.floor(Math.random() * size);
+            const k = key(rx, ry);
+            if (!cells[k]) { cells[k] = true; placed++; }
+          }
+          base.scatteredFogCells = cells;
+        }
+
+        // 챌린지 "첫 수 양보": 재대국해도 AI가 먼저 3수를 두고 시작해요.
+        if (state.challengeId === 'firstMoveConcession' && state.aiPlayer && state.humanColor) {
+          const size = base.board.length;
+          const mid = Math.floor(size / 2);
+          const spots = [
+            { x: mid, y: mid },
+            { x: Math.min(size - 1, mid + 3), y: Math.max(0, mid - 3) },
+            { x: Math.max(0, mid - 3), y: Math.min(size - 1, mid + 3) },
+          ];
+          const concessionBoard = base.board.map((row) => row.slice());
+          for (const s of spots) concessionBoard[s.y][s.x] = state.aiPlayer;
+          base.board = concessionBoard;
+          base.ply = 3;
+          base.turn = state.humanColor;
+        }
+
+        if (state.challengeId === 'noCards' || state.challengeId === 'handlessPlay') {
           return {
             ...base,
             phase: 'play',
-            turn: BLACK,
-            message: '무카드 챌린지! 카드 없이 순수 실력으로 승부해요.',
+            turn: base.turn || BLACK,
+            message: state.challengeId === 'handlessPlay'
+              ? '손 없이 두기! 나도 AI도 카드 없이 순수 실력으로 승부해요.'
+              : '무카드 챌린지! 카드 없이 순수 실력으로 승부해요.',
             draft: { pool: [], hands: { [BLACK]: [], [WHITE]: [] }, order: [], currentIndex: 0, options: [] },
           };
         }
@@ -1807,7 +1914,7 @@ export function gameReducer(state, action) {
         return withDeadline({
           ...state,
           phase: 'play',
-          message: '흑 차례예요.',
+          message: `${state.turn === BLACK ? '흑' : '백'} 차례예요.`,
           draft: { ...state.draft, hands, currentIndex, options: [], lastPick },
         });
       }
@@ -1821,7 +1928,7 @@ export function gameReducer(state, action) {
     }
 
     case 'ACTIVATE_CARD': {
-      const { cardId } = action;
+      let { cardId } = action;
       if (state.phase !== 'play') return state;
       const player = state.turn;
 
@@ -1829,12 +1936,30 @@ export function gameReducer(state, action) {
         return { ...state, message: '침묵 상태라 카드를 사용할 수 없어요.' };
       }
 
-      if (PLACEMENT_BUFF.has(cardId)) return activatePlacementBuff(state, cardId);
-      if (STANDALONE.has(cardId) && !TARGET_STEPS[cardId]) return resolveStandaloneNoTarget(state, cardId);
+      // 챌린지 "카드 한 방 승부": 나는 이번 판에 카드를 딱 1번만 쓸 수 있어요.
+      if (state.challengeId === 'oneCardDuel' && player === state.humanColor && (state.humanCardUsedCount || 0) >= 1) {
+        return { ...state, message: '이번 판엔 카드를 이미 다 썼어요 (딱 1번만 가능해요).' };
+      }
+
+      let misfireOriginalCard = null;
+      // 챌린지 "카드 감별 실패": 내가 고른 카드가 아니라, 같은 형태의 무작위 다른 카드가 발동돼요.
+      if (state.challengeId === 'cardMisfire' && player === state.humanColor) {
+        const shape = cardShapeKey(cardId);
+        const candidates = CARDS.filter((c) => c.id !== cardId && cardShapeKey(c.id) === shape);
+        if (candidates.length > 0) {
+          misfireOriginalCard = cardId;
+          cardId = candidates[Math.floor(Math.random() * candidates.length)].id;
+        }
+      }
+
+      const withMisfire = misfireOriginalCard ? { ...state, misfireOriginalCard } : state;
+
+      if (PLACEMENT_BUFF.has(cardId)) return activatePlacementBuff(withMisfire, cardId);
+      if (STANDALONE.has(cardId) && !TARGET_STEPS[cardId]) return resolveStandaloneNoTarget(withMisfire, cardId);
       return {
-        ...state,
+        ...withMisfire,
         activeCard: { id: cardId, pending: [] },
-        message: '대상을 선택하세요.',
+        message: misfireOriginalCard ? '어라, 뭔가 다른 카드가 나온 것 같아요... 대상을 선택하세요.' : '대상을 선택하세요.',
       };
     }
 
