@@ -48,7 +48,7 @@ import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, g
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
 import { bumpCardsOffered, bumpCardPicked, bumpCardUsedGlobal, bumpCardGameOutcome, getAllCardStats } from './cardStats.js';
 import { isSeasonActive } from './seasonPass.js';
-import { verifyPlacementOnServer } from './serverValidation.js';
+import { verifyPlacementOnServer, reportGameResultToServer } from './serverValidation.js';
 import {
   CURRENT_SEASON, levelProgress, getDailyMissionProgress, getWeeklyMissionProgress, getSeasonMilestoneProgress,
   ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
@@ -1186,29 +1186,50 @@ export default function App() {
           }
 
           // 레이팅은 온라인 대전이면 전부(친선전 포함) 변동돼요. 랭크전 전용 점수는 따로 관리해요.
+          // 서버(reportGameResult)에 결과를 먼저 보고해서, 최종 보드에서 실제로 승리 조건이
+          // 성립하는지 검증받아요. 서버가 반영까지 해주면 그 결과를 그대로 쓰고, 서버를 못
+          // 부르는 경우(아직 미배포 등)에만 예전처럼 클라이언트에서 직접 계산+반영해요.
           if (online && online.role !== 'spectator') {
             (async () => {
               try {
-                const { hostUid, guestUid } = await getRoomPlayers(online.code);
-                const opponentUid = online.role === 'host' ? guestUid : hostUid;
-                if (opponentUid && opponentUid !== user.uid) {
+                const serverReport = await reportGameResultToServer(online.code, user.uid);
+                if (!serverReport.ok) {
+                  // 서버가 명확히 거부함 (예: 보드에 실제 승리 조건이 없는데 승리로 기록됨).
+                  // 조작 의심 상황이라 레이팅을 반영하지 않고 조용히 넘어가요.
+                  console.warn('레이팅 반영이 서버에서 거부됐어요:', serverReport.message);
+                  return;
+                }
+
+                let delta;
+                let newRating;
+                if (serverReport.mine) {
+                  // 서버가 이미 검증하고 반영까지 마쳤어요 - 그 결과를 그대로 써요.
+                  delta = serverReport.mine.ratingDelta;
+                  newRating = serverReport.mine.newRating;
+                } else {
+                  // 서버를 못 불렀거나(미배포 등) 반영할 상대가 없는 경우 - 예전 방식대로
+                  // 클라이언트에서 계산하고 직접 반영해요.
+                  const { hostUid, guestUid } = await getRoomPlayers(online.code);
+                  const opponentUid = online.role === 'host' ? guestUid : hostUid;
+                  if (!opponentUid || opponentUid === user.uid) return;
                   const [myRatingBefore, opponentRating] = await Promise.all([
                     getRating(user.uid),
                     getRating(opponentUid),
                   ]);
-                  const delta = computeRatingDelta(myRatingBefore, opponentRating, result);
-                  const newRating = await applyRatingChange(user.uid, myRatingBefore, delta, user.displayName, isDevAccount(user));
-                  setMyRating(newRating);
-                  setLastRatingChange({ delta, newRating });
+                  delta = computeRatingDelta(myRatingBefore, opponentRating, result);
+                  newRating = await applyRatingChange(user.uid, myRatingBefore, delta, user.displayName, isDevAccount(user));
+                }
 
-                  // 언더독: 나보다 300점 이상 높은 상대에게 승리
-                  if (result === 'win' && opponentRating - myRatingBefore >= 300) {
-                    unlockAndNotify('underdog');
-                  }
-                  // 재활 치료 시급: 레이팅이 1000 밑으로 떨어짐
-                  if (newRating < 1000) {
-                    unlockAndNotify('rehab');
-                  }
+                setMyRating(newRating);
+                setLastRatingChange({ delta, newRating });
+
+                // 언더독: 나보다 300점 이상 높은 상대에게 승리 (레이팅 테이블상 그 경우에만 delta가 15가 돼요)
+                if (result === 'win' && delta === 15) {
+                  unlockAndNotify('underdog');
+                }
+                // 재활 치료 시급: 레이팅이 1000 밑으로 떨어짐
+                if (newRating < 1000) {
+                  unlockAndNotify('rehab');
                 }
               } catch {
                 // 레이팅 반영 실패해도 게임 결과 자체엔 영향 없어요
@@ -1221,31 +1242,45 @@ export default function App() {
           if (online && online.role !== 'spectator' && online.ranked) {
             (async () => {
               try {
-                const { hostUid, guestUid } = await getRoomPlayers(online.code);
-                const opponentUid = online.role === 'host' ? guestUid : hostUid;
-                if (opponentUid && opponentUid !== user.uid) {
+                const serverReport = await reportGameResultToServer(online.code, user.uid);
+                if (!serverReport.ok) {
+                  console.warn('랭크 포인트 반영이 서버에서 거부됐어요:', serverReport.message);
+                  return;
+                }
+
+                let delta;
+                let newPoints;
+                if (serverReport.mine && serverReport.mine.newRankPoints != null) {
+                  delta = serverReport.mine.rankPointsDelta;
+                  newPoints = serverReport.mine.newRankPoints;
+                } else {
+                  const { hostUid, guestUid } = await getRoomPlayers(online.code);
+                  const opponentUid = online.role === 'host' ? guestUid : hostUid;
+                  if (!opponentUid || opponentUid === user.uid) return;
                   const myPointsBefore = await getRankPoints(user.uid);
-                  const delta = computeRankPointsDelta(myPointsBefore, result);
-                  const newPoints = await applyRankPointsChange(user.uid, myPointsBefore, delta, user.displayName, isDevAccount(user));
-                  setMyRankPoints(newPoints);
-                  setLastRankChange({ delta, newPoints });
-                  const peak = await updatePeakTier(user.uid, newPoints).catch(() => null);
-                  if (peak !== null) {
-                    setPeakTierIndex(peak);
-                    getReachedTierBadges(user.uid).then(setReachedTierBadges).catch(() => {});
-                  }
+                  delta = computeRankPointsDelta(myPointsBefore, result);
+                  newPoints = await applyRankPointsChange(user.uid, myPointsBefore, delta, user.displayName, isDevAccount(user));
+                }
 
-                  // 파동 이펙트 조건: 이미 마스터였던 상태에서 랭크전으로 승리
-                  if (result === 'win' && peakTierIndex >= TIERS.length - 1) {
-                    bumpCounter(user.uid, 'postMasterWins', 1).catch(() => {});
-                  }
+                setMyRankPoints(newPoints);
+                setLastRankChange({ delta, newPoints });
+                const peak = await updatePeakTier(user.uid, newPoints).catch(() => null);
+                if (peak !== null) {
+                  setPeakTierIndex(peak);
+                  getReachedTierBadges(user.uid).then(setReachedTierBadges).catch(() => {});
+                }
 
-                  // 오로라 스킨 조건: 티어 승급 횟수
-                  const tierBefore = TIERS.findIndex((t) => t.id === getTierForRating(myPointsBefore).id);
-                  const tierAfter = TIERS.findIndex((t) => t.id === getTierForRating(newPoints).id);
-                  if (tierAfter > tierBefore) {
-                    bumpCounter(user.uid, 'tierPromotions', 1).catch(() => {});
-                  }
+                // 파동 이펙트 조건: 이미 마스터였던 상태에서 랭크전으로 승리
+                if (result === 'win' && peakTierIndex >= TIERS.length - 1) {
+                  bumpCounter(user.uid, 'postMasterWins', 1).catch(() => {});
+                }
+
+                // 오로라 스킨 조건: 티어 승급 횟수 (delta = newPoints - pointsBefore이므로 역산해요)
+                const pointsBefore = newPoints - delta;
+                const tierBefore = TIERS.findIndex((t) => t.id === getTierForRating(pointsBefore).id);
+                const tierAfter = TIERS.findIndex((t) => t.id === getTierForRating(newPoints).id);
+                if (tierAfter > tierBefore) {
+                  bumpCounter(user.uid, 'tierPromotions', 1).catch(() => {});
                 }
               } catch {
                 // 랭크 포인트 반영 실패해도 게임 결과 자체엔 영향 없어요
