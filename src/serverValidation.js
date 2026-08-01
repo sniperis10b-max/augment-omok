@@ -8,10 +8,23 @@
 // "평범한 돌 하나 놓기"와 "대국이 끝났을 때 결과"에만 적용해요.
 // API를 못 부르거나 네트워크 문제가 있으면, 게임이 막히지 않도록 "일단 통과"로
 // 처리해요 — 클라이언트 자체 검증(gameReducer)이 어차피 다시 한번 걸러줘요.
+//
+// ⚠️ 중요: 서버 응답이 ok:false여도, 그 이유(code)에 따라 다르게 처리해요.
+// - failed-precondition / invalid-argument → 진짜 게임 규칙 위반(이미 돌이 있음, 내
+//   턴 아님, 금수 등)이라서 실제로 막아요.
+// - unauthenticated / not-found / permission-denied → 로그인 토큰 검증 실패나 서버
+//   설정 문제(Vercel 환경변수 오타 등) 때문일 수 있어서, 안전하게 통과시켜요. 이 셋을
+//   전부 "부정행위"로 오인해서 막아버리면, 서버 설정에 문제가 생겼을 때 정상적으로
+//   로그인한 사람도 온라인 대전에서 돌을 아예 못 놓게 되는 심각한 문제가 생겨요
+//   (실제로 한 번 이 문제가 있었어요).
 
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
+
+// 이 코드들은 "서버가 게임 규칙을 근거로 명확히 거부한 것"만 나타내요.
+// 이것들만 실제로 착수/결과 반영을 막아요.
+const HARD_REJECT_CODES = new Set(['failed-precondition', 'invalid-argument']);
 
 function getAuthInstance() {
   if (!isFirebaseConfigured()) throw new Error('Firebase 설정이 비어있어요.');
@@ -40,13 +53,18 @@ async function callApi(path, body) {
 }
 
 // 서버에 "이 자리에 둬도 되는지" 물어봐요.
-// 반환: { ok: true } (둬도 됨) | { ok: false, message } (서버가 실제로 거부함)
-//      | { ok: true, skipped: true } (API를 못 부름 - 아직 배포 전이거나 네트워크 문제라 통과 처리)
+// 반환: { ok: true } (둬도 됨) | { ok: false, message } (서버가 게임 규칙 위반으로 실제 거부함)
+//      | { ok: true, skipped: true } (API를 못 부름/인증 문제 등 - 안전하게 통과 처리)
 export async function verifyPlacementOnServer(roomCode, x, y) {
   try {
     const data = await callApi('placeStone', { roomCode, x, y });
     if (data && data.ok === false) {
-      return { ok: false, message: data.message || '서버에서 이 수를 거부했어요.' };
+      if (HARD_REJECT_CODES.has(data.code)) {
+        return { ok: false, message: data.message || '서버에서 이 수를 거부했어요.' };
+      }
+      // unauthenticated/not-found/permission-denied 등 - 인증/설정 문제일 수 있어서 통과시켜요.
+      console.warn('서버 착수 검증을 건너뛰어요 (code:', data.code, '):', data.message);
+      return { ok: true, skipped: true };
     }
     return { ok: true, wouldWin: data?.wouldWin };
   } catch {
@@ -60,13 +78,17 @@ export async function verifyPlacementOnServer(roomCode, x, y) {
 //
 // 반환:
 //  - { ok: true, mine: { result, ratingDelta, newRating } }  → 서버가 검증하고 반영함
-//  - { ok: false, message }                                   → 서버가 실제로 거부함 (조작 의심 등)
-//  - { ok: true, skipped: true }                              → API를 못 부름 (아직 미배포 등), 통과 처리
+//  - { ok: false, message }                                   → 서버가 게임 규칙 위반으로 실제 거부함 (조작 의심 등)
+//  - { ok: true, skipped: true }                              → API를 못 부름/인증 문제 등, 통과 처리
 export async function reportGameResultToServer(roomCode, myUid) {
   try {
     const data = await callApi('reportGameResult', { roomCode });
     if (!data || data.ok === false) {
-      return { ok: false, message: data?.message || '서버에서 결과를 거부했어요.' };
+      if (data && HARD_REJECT_CODES.has(data.code)) {
+        return { ok: false, message: data.message || '서버에서 결과를 거부했어요.' };
+      }
+      console.warn('서버 결과 검증을 건너뛰어요 (code:', data?.code, '):', data?.message);
+      return { ok: true, skipped: true };
     }
     if (data.alreadyProcessed || data.skipped) {
       return { ok: true, alreadyProcessed: !!data.alreadyProcessed, skipped: !!data.skipped };

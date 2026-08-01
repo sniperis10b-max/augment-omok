@@ -123,6 +123,7 @@
 
     "titleCounts": {
       ".read": true,
+      ".write": "auth != null && auth.token.email === 'sniperis10b@gmail.com'",
       "$titleId": {
         ".write": "auth != null"
       }

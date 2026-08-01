@@ -60,24 +60,24 @@ function boardHasWinFor(board, player, options) {
   return false;
 }
 
-// 반환: { ok: true, myColor, hostColor, guestColor } 또는 { ok: false, message }
+// 반환: { ok: true, myColor, hostColor, guestColor } 또는 { ok: false, code, message }
 export function validateGameResult(room, uid) {
-  if (!uid) return { ok: false, message: '로그인 후에 대국을 할 수 있어요.' };
-  if (!room) return { ok: false, message: '존재하지 않는 방이에요.' };
+  if (!uid) return { ok: false, code: 'unauthenticated', message: '로그인 후에 대국을 할 수 있어요.' };
+  if (!room) return { ok: false, code: 'not-found', message: '존재하지 않는 방이에요.' };
 
   const state = room.state;
-  if (!state) return { ok: false, message: '대국 정보가 없어요.' };
+  if (!state) return { ok: false, code: 'failed-precondition', message: '대국 정보가 없어요.' };
 
   let myColor = null;
   if (room.hostUid && room.hostUid === uid) myColor = room.hostColor;
   else if (room.guestUid && room.guestUid === uid) myColor = room.hostColor === BLACK ? WHITE : BLACK;
-  if (!myColor) return { ok: false, message: '이 방의 참가자가 아니에요.' };
+  if (!myColor) return { ok: false, code: 'permission-denied', message: '이 방의 참가자가 아니에요.' };
 
-  if (state.phase !== 'over') return { ok: false, message: '아직 대국이 끝나지 않았어요.' };
+  if (state.phase !== 'over') return { ok: false, code: 'failed-precondition', message: '아직 대국이 끝나지 않았어요.' };
 
   const winner = state.winner;
   if (winner !== null && winner !== BLACK && winner !== WHITE) {
-    return { ok: false, message: '승자 값이 이상해요.' };
+    return { ok: false, code: 'failed-precondition', message: '승자 값이 이상해요.' };
   }
 
   if (winner !== null) {
@@ -87,7 +87,7 @@ export function validateGameResult(room, uid) {
       excludeDiagonal: state.ruleFlags?.noDiagonalFor === winner,
     });
     if (!hasWin) {
-      return { ok: false, message: '보드 상태에서 실제로 승리 조건을 확인할 수 없어요.' };
+      return { ok: false, code: 'failed-precondition', message: '보드 상태에서 실제로 승리 조건을 확인할 수 없어요.' };
     }
   }
 

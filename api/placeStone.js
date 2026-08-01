@@ -34,8 +34,11 @@ export default async function handler(req, res) {
     const result = validatePlacement(room, uid, x, y);
     // 검증 실패도 정상 응답(200, ok:false)으로 돌려줘요. 그래야 클라이언트가 "서버가
     // 실제로 거부한 것"과 "API를 아예 못 부른 것"(네트워크 오류, 배포 전 등)을 명확히
-    // 구분할 수 있어요.
-    res.status(200).json(result.ok ? { ok: true, wouldWin: result.wouldWin } : { ok: false, message: result.message });
+    // 구분할 수 있어요. code도 같이 보내서, 클라이언트가 "진짜 게임 규칙 위반"(이미 돌이
+    // 있음, 내 턴 아님 등)과 "인증/설정 문제"(unauthenticated, not-found, permission-denied -
+    // 토큰 검증 실패나 서버 설정 오류일 가능성이 있음)를 구분해서, 후자는 안전하게
+    // 통과시킬 수 있게 해요.
+    res.status(200).json(result.ok ? { ok: true, wouldWin: result.wouldWin } : { ok: false, code: result.code, message: result.message });
   } catch (err) {
     res.status(500).json({ ok: false, message: `서버 오류: ${err.message}` });
   }

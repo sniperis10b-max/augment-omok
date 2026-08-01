@@ -39,7 +39,7 @@ export default async function handler(req, res) {
 
     const check = validateGameResult(room, uid);
     if (!check.ok) {
-      res.status(200).json({ ok: false, message: check.message });
+      res.status(200).json({ ok: false, code: check.code, message: check.message });
       return;
     }
 
