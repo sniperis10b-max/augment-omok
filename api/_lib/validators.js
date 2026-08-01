@@ -2,6 +2,26 @@
 import { BLACK, WHITE, checkWin, isForbiddenMove } from './gameLogic.js';
 import { getTierForRating } from './tiers.js';
 
+// ⚠️ 중요: 클라이언트(src/network.js)는 rooms/{code}/state를 객체가 아니라
+// JSON.stringify()한 "문자열"로 Firebase에 저장해요 (읽을 때는 JSON.parse로 되돌려요).
+// 이걸 모르고 room.state.board처럼 곧바로 접근하면 항상 undefined만 나와서, 검증이
+// 실제로는 한 번도 제대로 동작하지 않고 매번 "정보가 이상함"으로 취급되며 그냥
+// 통과되기만 했을 거예요. 그래서 항상 이 함수를 통해서만 state를 꺼내요 (이미 객체로
+// 들어오는 경우 — 테스트에서 순수 객체를 바로 넣는 경우 — 도 그대로 지원해요).
+function parseRoomState(room) {
+  if (!room) return null;
+  const raw = room.state;
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return raw;
+}
+
 function isBlockedCell(blockedCells, x, y, ply) {
   const expire = blockedCells?.[`${x},${y}`];
   if (expire === undefined || expire === null) return false;
@@ -14,7 +34,7 @@ export function validatePlacement(room, uid, x, y) {
   if (!uid) return { ok: false, code: 'unauthenticated', message: '로그인 후에 대국을 할 수 있어요.' };
   if (!room) return { ok: false, code: 'not-found', message: '존재하지 않는 방이에요.' };
 
-  const state = room.state;
+  const state = parseRoomState(room);
   if (!state) return { ok: false, code: 'failed-precondition', message: '아직 대국이 시작되지 않았어요.' };
 
   let myColor = null;
@@ -144,7 +164,7 @@ export function validateGameResult(room, uid) {
   if (!uid) return { ok: false, code: 'unauthenticated', message: '로그인 후에 대국을 할 수 있어요.' };
   if (!room) return { ok: false, code: 'not-found', message: '존재하지 않는 방이에요.' };
 
-  const state = room.state;
+  const state = parseRoomState(room);
   if (!state) return { ok: false, code: 'failed-precondition', message: '대국 정보가 없어요.' };
 
   let myColor = null;
