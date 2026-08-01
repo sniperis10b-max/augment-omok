@@ -22,12 +22,16 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
 
-// 이 코드들은 "서버가 게임 규칙을 근거로 명확히 거부한 것"만 나타내요.
-// ⚠️ 지금은 비워뒀어요: phase/turn 체크가 "클라이언트가 최신 상태를 Firebase에 다
-// 올리기 전에 서버가 그 사이의 상태를 읽어버리는" 타이밍 문제로 정상적인 착수까지
-// 잘못 거부하는 게 실제로 확인돼서, 원인을 제대로 고칠 때까지 서버 응답을 로그로만
-// 남기고 실제로 막지는 않게 해뒀어요.
-const HARD_REJECT_CODES = new Set([]);
+// 이 코드들은 "서버가 게임 규칙을 근거로 명확히 거부한 것"만 나타내요. 이것들만 실제로
+// 착수/결과 반영을 막아요.
+// - failed-precondition / invalid-argument → 이미 돌이 있음, 내 턴 아님(재시도로도 여전히
+//   그렇다면), 금수, 좌표 밖 등 진짜 게임 규칙 위반이에요.
+// - stale-state / unauthenticated / not-found / permission-denied → 서버가 몇 차례
+//   재시도했는데도 여전히 애매하거나, 인증/설정 문제일 수 있어서 안전하게 통과시켜요.
+//   (한 번은 이 구분이 없어서, 서버 쪽 타이밍 문제로 정상 착수까지 막힌 적이 있었는데,
+//   지금은 서버가 stale-state는 재시도로 먼저 해소해보고, 그래도 안 되면 code를 그대로
+//   내려줘서 클라이언트가 통과시키게 했어요.)
+const HARD_REJECT_CODES = new Set(['failed-precondition', 'invalid-argument']);
 
 function getAuthInstance() {
   if (!isFirebaseConfigured()) throw new Error('Firebase 설정이 비어있어요.');

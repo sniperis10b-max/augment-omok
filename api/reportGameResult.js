@@ -2,7 +2,7 @@
 // 대국이 끝나면 서버가 최종 보드 상태를 다시 스캔해서 "그 색이 정말로 승리 조건을
 // 만족하는지" 검증한 뒤에만 레이팅/랭크 포인트를 반영해요.
 
-import { getDb, getUidFromRequest, DEV_EMAIL } from './_lib/firebaseAdmin.js';
+import { getDb, getUidFromRequest, DEV_EMAIL, sleep } from './_lib/firebaseAdmin.js';
 import { getAuth } from 'firebase-admin/auth';
 import {
   BLACK, WHITE,
@@ -10,6 +10,22 @@ import {
 import {
   validateGameResult, computeRatingDelta, computeRankPointsDelta, DEFAULT_RATING, DEFAULT_RANK_POINTS,
 } from './_lib/validators.js';
+
+// placeStone과 같은 이유예요: 클라이언트가 "대국이 끝났다"는 최신 상태를 Firebase에
+// 다 올리기 전에 서버가 그 사이의 상태를 읽으면 "아직 안 끝났어요"로 오판할 수 있어서,
+// 그 경우(code: 'stale-state')엔 짧게 기다렸다가 다시 읽어서 재검증해요.
+async function validateResultWithRetry(db, roomCode, uid, attempts = 4, delayMs = 250) {
+  let room;
+  let check;
+  for (let i = 0; i < attempts; i++) {
+    const roomSnap = await db.ref(`rooms/${roomCode}`).get();
+    room = roomSnap.exists() ? roomSnap.val() : null;
+    check = validateGameResult(room, uid);
+    if (check.ok || check.code !== 'stale-state') return { room, check };
+    if (i < attempts - 1) await sleep(delayMs);
+  }
+  return { room, check };
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -34,10 +50,8 @@ export default async function handler(req, res) {
   try {
     const db = getDb();
     const roomRef = db.ref(`rooms/${roomCode}`);
-    const roomSnap = await roomRef.get();
-    const room = roomSnap.exists() ? roomSnap.val() : null;
+    const { room, check } = await validateResultWithRetry(db, roomCode, uid);
 
-    const check = validateGameResult(room, uid);
     if (!check.ok) {
       res.status(200).json({ ok: false, code: check.code, message: check.message });
       return;

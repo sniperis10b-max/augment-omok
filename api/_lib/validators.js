@@ -22,8 +22,8 @@ export function validatePlacement(room, uid, x, y) {
   else if (room.guestUid && room.guestUid === uid) myColor = room.hostColor === BLACK ? WHITE : BLACK;
   if (!myColor) return { ok: false, code: 'permission-denied', message: '이 방의 참가자가 아니에요.' };
 
-  if (state.phase !== 'play') return { ok: false, code: 'failed-precondition', message: '지금은 착수할 수 있는 상태가 아니에요.' };
-  if (state.turn !== myColor) return { ok: false, code: 'failed-precondition', message: '내 턴이 아니에요.' };
+  if (state.phase !== 'play') return { ok: false, code: 'stale-state', message: '지금은 착수할 수 있는 상태가 아니에요.' };
+  if (state.turn !== myColor) return { ok: false, code: 'stale-state', message: '내 턴이 아니에요.' };
 
   const board = state.board;
   const size = board.length;
@@ -73,7 +73,7 @@ export function validateGameResult(room, uid) {
   else if (room.guestUid && room.guestUid === uid) myColor = room.hostColor === BLACK ? WHITE : BLACK;
   if (!myColor) return { ok: false, code: 'permission-denied', message: '이 방의 참가자가 아니에요.' };
 
-  if (state.phase !== 'over') return { ok: false, code: 'failed-precondition', message: '아직 대국이 끝나지 않았어요.' };
+  if (state.phase !== 'over') return { ok: false, code: 'stale-state', message: '아직 대국이 끝나지 않았어요.' };
 
   const winner = state.winner;
   if (winner !== null && winner !== BLACK && winner !== WHITE) {

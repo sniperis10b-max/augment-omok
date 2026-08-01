@@ -55,3 +55,7 @@ export async function getUidFromRequest(req) {
 
 // 이메일로 개발자 계정 여부를 판단해요 (관리자 UI에서 쓰는 계정과 동일).
 export const DEV_EMAIL = 'sniperis10b@gmail.com';
+
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
