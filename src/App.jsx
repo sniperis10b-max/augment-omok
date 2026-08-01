@@ -48,6 +48,7 @@ import { PLACEMENT_EFFECTS, getPlacementEffectById, isPlacementEffectUnlocked, g
 import { ensureDailyQuests, getQuestProgress, claimDailyReward, DAILY_REWARD_RANK_POINTS } from './dailyQuests.js';
 import { bumpCardsOffered, bumpCardPicked, bumpCardUsedGlobal, bumpCardGameOutcome, getAllCardStats } from './cardStats.js';
 import { isSeasonActive } from './seasonPass.js';
+import { verifyPlacementOnServer } from './serverValidation.js';
 import {
   CURRENT_SEASON, levelProgress, getDailyMissionProgress, getWeeklyMissionProgress, getSeasonMilestoneProgress,
   ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
@@ -5527,6 +5528,20 @@ function Board({ state, dispatch, online, settings }) {
   const confusionZone = state.confusion && state.confusion.player === state.turn ? state.confusion.anchor : null;
   const placementEffect = getPlacementEffectById(settings?.placementEffect);
 
+  // 온라인 대전에서 "그냥 돌 놓기"(카드 대상 선택 중이 아닐 때)는 서버에도 한 번 더
+  // 유효한지 물어봐요. 서버가 명확히 거부하면 로컬에는 아예 반영하지 않아요.
+  async function handleCellClick(x, y) {
+    const isPlainOnlinePlacement = online && !isSpectator && !state.activeCard && state.phase === 'play';
+    if (isPlainOnlinePlacement) {
+      const check = await verifyPlacementOnServer(online.code, x, y);
+      if (!check.ok) {
+        console.warn('서버가 이 착수를 거부했어요:', check.message);
+        return;
+      }
+    }
+    dispatch({ type: 'SELECT_CELL', x, y });
+  }
+
   // 룰렛 "안개 전장": 상대 돌이 안 보여요 (내 색을 알 수 있는 경우에만 - 2인 로컬은 예외).
   const myColorForFog = online && !isSpectator ? online.localColor : (state.aiPlayer ? otherPlayer(state.aiPlayer) : null);
   const fogActive = (state.rouletteRule === 'fogOfWar' || state.challengeId === 'lonelyLight') && myColorForFog != null;
@@ -5605,7 +5620,7 @@ function Board({ state, dispatch, online, settings }) {
                   height: `${gapPct}%`,
                 }}
                 disabled={disabled}
-                onClick={() => dispatch({ type: 'SELECT_CELL', x, y })}
+                onClick={() => handleCellClick(x, y)}
                 aria-label={`${x + 1}, ${y + 1} 교차점`}
               >
                 {value !== 0 && !hideStone && (
