@@ -5230,6 +5230,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       difficulty: state.aiDifficulty,
       timeLimitSec: state.timeLimitSec,
       cardsPerPlayer: state.draft.order.length / 2,
+      challengeId: state.challengeId,
       rouletteMode: settings.rouletteMode,
       forcedRouletteRule: isDevAccount(user) ? settings.forcedRouletteRule : null,
     });
