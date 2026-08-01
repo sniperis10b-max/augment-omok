@@ -75,6 +75,15 @@ export function validatePlacement(room, uid, x, y) {
 // 확인)을 쓰고, 그 외의 평범한 게임만 엄격하게 검증해요.
 const BOARD_MUTATING_ROULETTE_RULES = new Set(['colorSwap', 'autoDecay']);
 
+// 카드의 targets 배열 중 index번째 좌표가 실제 변화 위치(diff)와 일치하는지 확인해요.
+// targets 정보가 없는 옛날 기록 등은 너그럽게 통과시켜요(좌표 자체 검증만 못 할 뿐, 색/개수
+// 검증은 이미 위에서 끝났어요).
+function targetMatches(targets, index, diff) {
+  const t = targets?.[index];
+  if (!t) return true;
+  return t.x === diff.x && t.y === diff.y;
+}
+
 // state.moveLog는 한 수 한 수마다 그 시점의 보드 스냅샷을 같이 기록해둬요. 이걸 이용해서,
 // "돌 놓기(place)" 타입 기록들이 실제로 매번 딱 한 칸만, 그것도 기록된 사람의 색으로,
 // 원래 비어있던 곳에 놓인 게 맞는지 하나하나 대조해요. 카드 효과(파괴/변환 등)로 인한
@@ -146,6 +155,9 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
           if (diffs.length !== 1 || diffs[0].before !== opponent || diffs[0].after !== 0) {
             return { ok: false, message: `${entry.seq}번째 '파괴' 카드 기록이 실제 효과와 안 맞아요.` };
           }
+          if (!targetMatches(entry.targets, 0, diffs[0])) {
+            return { ok: false, message: `${entry.seq}번째 '파괴' 카드의 대상 좌표가 실제 변화 위치와 달라요.` };
+          }
         } else if (cardId === 'destroyChain') {
           if (diffs.length < 1 || diffs.length > 2 || diffs.some((d) => d.before !== opponent || d.after !== 0)) {
             return { ok: false, message: `${entry.seq}번째 '연쇄 파괴' 카드 기록이 실제 효과와 안 맞아요.` };
@@ -153,6 +165,9 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
         } else if (cardId === 'alchemy') {
           if (diffs.length !== 1 || diffs[0].before !== opponent || diffs[0].after !== mover) {
             return { ok: false, message: `${entry.seq}번째 '연금술' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+          if (!targetMatches(entry.targets, 0, diffs[0])) {
+            return { ok: false, message: `${entry.seq}번째 '연금술' 카드의 대상 좌표가 실제 변화 위치와 달라요.` };
           }
         } else if (cardId === 'swap') {
           const validSwap = diffs.length === 2 && (
@@ -166,9 +181,15 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
           if (diffs.length !== 1 || diffs[0].before === 0 || diffs[0].after !== mover) {
             return { ok: false, message: `${entry.seq}번째 '관통' 카드 기록이 실제 효과와 안 맞아요.` };
           }
+          if (!targetMatches(entry.targets, 0, diffs[0])) {
+            return { ok: false, message: `${entry.seq}번째 '관통' 카드의 대상 좌표가 실제 변화 위치와 달라요.` };
+          }
         } else if (cardId === 'wildcard') {
           if (diffs.length !== 1 || diffs[0].before !== 0 || diffs[0].after !== WILD) {
             return { ok: false, message: `${entry.seq}번째 '와일드카드' 기록이 실제 효과와 안 맞아요.` };
+          }
+          if (!targetMatches(entry.targets, 0, diffs[0])) {
+            return { ok: false, message: `${entry.seq}번째 '와일드카드'의 대상 좌표가 실제 변화 위치와 달라요.` };
           }
         } else if (diffs.length > size) {
           // 그 외 카드는 정확한 로직까지는 검증 못 하지만(더 큰 작업이에요), 한 번에 너무
