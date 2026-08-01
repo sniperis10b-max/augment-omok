@@ -59,3 +59,20 @@ export const DEV_EMAIL = 'sniperis10b@gmail.com';
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// 아주 짧은 시간에 같은 API를 너무 많이 부르는 걸 막는 간단한 속도 제한이에요.
+// windowMs 동안 maxRequests번 넘게 부르면 거부해요. Firebase 트랜잭션으로 동시 요청도
+// 안전하게 처리해요. (레디스 같은 전용 저장소 없이, 이미 쓰고 있는 Firebase로 처리해요.)
+export async function checkRateLimit(uid, bucket, maxRequests = 20, windowMs = 10000) {
+  const db = getDb();
+  const ref = db.ref(`rateLimits/${uid}/${bucket}`);
+  const now = Date.now();
+  const result = await ref.transaction((current) => {
+    if (!current || now - current.windowStart > windowMs) {
+      return { windowStart: now, count: 1 };
+    }
+    return { windowStart: current.windowStart, count: current.count + 1 };
+  });
+  const count = result.snapshot.val()?.count ?? 1;
+  return count <= maxRequests;
+}

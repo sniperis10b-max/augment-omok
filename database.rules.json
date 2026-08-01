@@ -83,7 +83,13 @@
     "rooms": {
       "$code": {
         ".read": "auth != null",
-        ".write": "auth != null"
+        ".write": "auth != null && (!data.exists() || data.child('hostUid').val() === auth.uid || data.child('guestUid').val() === auth.uid || (!data.child('guestUid').val() && newData.child('guestUid').val() === auth.uid))",
+        "chat": {
+          ".write": "auth != null"
+        },
+        "resultClaimed": {
+          ".write": false
+        }
       }
     },
 
@@ -134,6 +140,11 @@
       "$cardId": {
         ".write": "auth != null"
       }
+    },
+
+    "rateLimits": {
+      ".read": false,
+      ".write": false
     }
   }
 }

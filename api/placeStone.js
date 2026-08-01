@@ -3,7 +3,7 @@
 // 승리 판정)만 서버에서 다시 검증해요. 카드 효과(파괴/변환/봉인 등)와 룰렛/챌린지의 특수
 // 규칙은 아직 서버에서 검증하지 않고 클라이언트를 그대로 믿어요.
 
-import { getDb, getUidFromRequest, sleep } from './_lib/firebaseAdmin.js';
+import { getDb, getUidFromRequest, sleep, checkRateLimit } from './_lib/firebaseAdmin.js';
 import { validatePlacement } from './_lib/validators.js';
 
 // 클라이언트가 방금 둔 수를 Firebase에 다 올리기 전에, 서버가 그 사이의(한 수 전) 상태를
@@ -41,6 +41,15 @@ export default async function handler(req, res) {
   if (typeof roomCode !== 'string') {
     res.status(400).json({ ok: false, message: 'roomCode가 필요해요.' });
     return;
+  }
+
+  if (uid) {
+    // 짧은 시간에 너무 많이 부르면 거부해요(초당 여러 번 두는 정상 플레이는 넉넉히 허용).
+    const withinLimit = await checkRateLimit(uid, 'placeStone', 40, 10000).catch(() => true);
+    if (!withinLimit) {
+      res.status(200).json({ ok: false, code: 'resource-exhausted', message: '너무 빠르게 요청하고 있어요. 잠시 후 다시 시도해주세요.' });
+      return;
+    }
   }
 
   try {

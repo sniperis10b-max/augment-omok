@@ -2,7 +2,7 @@
 // 대국이 끝나면 서버가 최종 보드 상태를 다시 스캔해서 "그 색이 정말로 승리 조건을
 // 만족하는지" 검증한 뒤에만 레이팅/랭크 포인트를 반영해요.
 
-import { getDb, getUidFromRequest, DEV_EMAIL, sleep } from './_lib/firebaseAdmin.js';
+import { getDb, getUidFromRequest, DEV_EMAIL, sleep, checkRateLimit } from './_lib/firebaseAdmin.js';
 import { getAuth } from 'firebase-admin/auth';
 import {
   BLACK, WHITE,
@@ -45,6 +45,14 @@ export default async function handler(req, res) {
   if (typeof roomCode !== 'string') {
     res.status(400).json({ ok: false, message: 'roomCode가 필요해요.' });
     return;
+  }
+
+  if (uid) {
+    const withinLimit = await checkRateLimit(uid, 'reportGameResult', 10, 10000).catch(() => true);
+    if (!withinLimit) {
+      res.status(200).json({ ok: false, code: 'resource-exhausted', message: '너무 빠르게 요청하고 있어요. 잠시 후 다시 시도해주세요.' });
+      return;
+    }
   }
 
   try {
