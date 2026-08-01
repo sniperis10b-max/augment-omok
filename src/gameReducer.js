@@ -147,12 +147,15 @@ function findBestEmptyCellForPlayer(state, player) {
 }
 
 // 챌린지 "완전 무작위"용: 지금 둘 수 있는(비어있고 안 막힌) 칸 중 무작위로 n개를 뽑아요.
-function pickRandomEmptyCells(state, n) {
+// zone이 있으면(도발 카드로 강제된 영역과 겹칠 때) 그 영역 안에서만 뽑아요 - 안 그러면
+// 무작위로 뽑힌 칸들이 전부 도발 영역 밖에 있어서 아예 둘 곳이 없어지는 문제가 생겨요.
+function pickRandomEmptyCells(state, n, zone = null) {
   const { board } = state;
   const size = board.length;
   const options = [];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
+      if (zone && (x < zone.x0 || x > zone.x1 || y < zone.y0 || y > zone.y1)) continue;
       if (board[y][x] === 0 && !isBlocked(state, x, y)) options.push({ x, y });
     }
   }
@@ -380,10 +383,13 @@ function advanceTurn(state, fromPlayer) {
     }
   }
 
-  // 챌린지 "완전 무작위": 내(사람) 턴이 시작될 때마다 둘 수 있는 칸 3개를 새로 뽑아요.
+  // 챌린지 "완전 무작위": 내(사람) 턴이 시작될 때마다 둘 수 있는 칸 5개를 새로 뽑아요.
+  // (도발 카드로 강제 영역이 걸려있으면, 그 영역 밖의 칸이 뽑혀서 둘 곳이 없어지는 일이
+  // 없도록 그 영역 안에서만 뽑아요.)
   if (next.challengeId === 'randomThreeCells') {
     if (next.turn === next.humanColor) {
-      next.allowedCells = pickRandomEmptyCells(next, 3);
+      const zone = next.forcedZone && next.forcedZone.player === next.humanColor ? next.forcedZone : null;
+      next.allowedCells = pickRandomEmptyCells(next, 5, zone);
     } else {
       next.allowedCells = null;
     }
@@ -608,14 +614,14 @@ function tryPlaceStone(state, clickX, clickY) {
   if (board[y][x] !== 0) return { ...workingState, message: '이미 돌이 있는 칸이에요.' };
   if (isBlocked(workingState, x, y)) return { ...workingState, message: '지금은 놓을 수 없는 칸이에요.' };
 
-  // 챌린지 "완전 무작위": 내 턴엔 미리 제시된 3칸 중 하나에만 둘 수 있어요.
+  // 챌린지 "완전 무작위": 내 턴엔 미리 제시된 5칸 중 하나에만 둘 수 있어요.
   if (
     workingState.challengeId === 'randomThreeCells'
     && player === workingState.humanColor
     && Array.isArray(workingState.allowedCells)
     && !workingState.allowedCells.some((c) => c.x === x && c.y === y)
   ) {
-    return { ...workingState, message: '지금은 제시된 3칸 중 한 곳에만 둘 수 있어요.' };
+    return { ...workingState, message: '지금은 제시된 5칸 중 한 곳에만 둘 수 있어요.' };
   }
 
   const forbidden = isForbiddenMove(board, x, y, player, workingState.ruleFlags);
@@ -1825,7 +1831,7 @@ export function gameReducer(state, action) {
 
       // 챌린지 "완전 무작위": 사람이 흑(선공)이면 첫 턴부터도 3칸이 미리 있어야 해요.
       if (challengeId === 'randomThreeCells' && humanColor === BLACK) {
-        base.allowedCells = pickRandomEmptyCells(base, 3);
+        base.allowedCells = pickRandomEmptyCells(base, 5);
       }
 
       // 무카드/손 없이 두기 챌린지는 드래프트 자체를 건너뛰고 바로 대국을 시작해요.
@@ -2011,7 +2017,7 @@ export function gameReducer(state, action) {
 
         // 챌린지 "완전 무작위": 재대국에서도 사람이 흑이면 첫 턴부터 3칸이 필요해요.
         if (state.challengeId === 'randomThreeCells' && state.humanColor === BLACK) {
-          base.allowedCells = pickRandomEmptyCells(base, 3);
+          base.allowedCells = pickRandomEmptyCells(base, 5);
         }
 
         if (state.challengeId === 'noCards' || state.challengeId === 'handlessPlay') {

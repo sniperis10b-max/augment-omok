@@ -69,7 +69,7 @@ export const CHALLENGES_4 = [
   { id: 'forcedCheckmate', name: '외통수 강요', desc: 'AI가 매 턴 내 급소가 될 만한 자리를 하나씩 미리 막아요.' },
   { id: 'boardIsEnemy', name: '판이 곧 적', desc: '무작위 칸 25곳이 처음부터 막힌 채 시작해요.' },
   { id: 'diagonalHell', name: '대각선 지옥', desc: '나는 대각선 승리가 불가능하고, 동시에 6목을 만들어야 승리해요.' },
-  { id: 'randomThreeCells', name: '완전 무작위', desc: '내 턴마다 무작위로 제시되는 3칸 중 하나에만 둘 수 있어요 (AI는 평소대로).' },
+  { id: 'randomThreeCells', name: '완전 무작위', desc: '내 턴마다 무작위로 제시되는 5칸 중 하나에만 둘 수 있어요 (AI는 평소대로).' },
   { id: 'gambitMove', name: '도박수', desc: '내가 돌을 놓을 때마다 30% 확률로만 실제로 놓이고, 실패하면 그냥 턴이 넘어가요.' },
 ];
 
