@@ -651,7 +651,7 @@ function tryPlaceStone(state, clickX, clickY) {
 
   let nextState = { ...workingState, board: nextBoard, lastMove: { x, y } };
   nextState.history = [...workingState.history, nextBoard];
-  nextState = pushMoveLog(nextState, { type: 'place', player, x, y, board: nextBoard });
+  nextState = pushMoveLog(nextState, { type: 'place', player, placedColor, x, y, board: nextBoard });
 
   // 룰렛 "자동 소멸"을 위해 이 칸이 언제(몇 수째) 놓였는지 기억해둬요.
   if (workingState.rouletteRule === 'autoDecay') {

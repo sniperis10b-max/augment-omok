@@ -48,6 +48,85 @@ export function validatePlacement(room, uid, x, y) {
   return { ok: true, myColor, wouldWin: won };
 }
 
+// 룰렛 "색깔 교대전"(10수마다 보드 전체 흑/백 반전), "자동 소멸"(오래된 돌 자동 제거)처럼
+// 착수 외의 순간에도 보드가 바뀌는 규칙이 있어요. 이런 경우 착수 하나에 여러 칸이 달라지는
+// 게 정상이라, 엄격한 "딱 1칸만 바뀜" 검증을 적용하면 정상 승리까지 오탐지해서 막아버려요.
+// 그래서 이런 규칙이 활성화된 게임은 완화된 검증(그 칸에 정확한 색이 실제로 놓였는지만
+// 확인)을 쓰고, 그 외의 평범한 게임만 엄격하게 검증해요.
+const BOARD_MUTATING_ROULETTE_RULES = new Set(['colorSwap', 'autoDecay']);
+
+// state.moveLog는 한 수 한 수마다 그 시점의 보드 스냅샷을 같이 기록해둬요. 이걸 이용해서,
+// "돌 놓기(place)" 타입 기록들이 실제로 매번 딱 한 칸만, 그것도 기록된 사람의 색으로,
+// 원래 비어있던 곳에 놓인 게 맞는지 하나하나 대조해요. 카드 효과(파괴/변환 등)로 인한
+// 변화까지는 검증하지 않지만(그건 별도의 큰 작업이에요), 이 정도만으로도 콘솔에서
+// 보드 배열을 직접 통째로 바꿔치기하는 식의 "빠르고 티 나는" 조작은 걸러낼 수 있어요.
+function validateMoveLogIntegrity(moveLog, rouletteRule) {
+  const strict = !BOARD_MUTATING_ROULETTE_RULES.has(rouletteRule);
+  if (!Array.isArray(moveLog) || moveLog.length === 0) {
+    return { ok: false, message: '대국 기록이 없어요.' };
+  }
+  let prevBoard = null;
+  for (const entry of moveLog) {
+    if (!entry || !Array.isArray(entry.board)) {
+      return { ok: false, message: '대국 기록의 보드 정보가 이상해요.' };
+    }
+    if (prevBoard && entry.type === 'place') {
+      const size = entry.board.length;
+      if (prevBoard.length !== size) {
+        return { ok: false, message: '대국 기록 중 판 크기가 갑자기 바뀌었어요.' };
+      }
+      const expectedColor = entry.placedColor ?? entry.player;
+      if (!strict) {
+        // 완화된 검증: 기록된 좌표에 실제로 정확한 색이 놓여있기만 하면 통과해요.
+        if (entry.board[entry.y]?.[entry.x] !== expectedColor) {
+          return { ok: false, message: `${entry.seq}번째 기록의 좌표에 기록된 색이 실제로 없어요.` };
+        }
+        prevBoard = entry.board;
+        continue;
+      }
+      let diffCount = 0;
+      let diffCell = null;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          if (entry.board[y][x] !== prevBoard[y][x]) {
+            diffCount++;
+            diffCell = { x, y, before: prevBoard[y][x], after: entry.board[y][x] };
+          }
+        }
+      }
+      if (diffCount !== 1) {
+        return { ok: false, message: `${entry.seq}번째 기록에서 한 수에 여러 칸이 동시에 바뀌었어요.` };
+      }
+      if (diffCell.before !== 0) {
+        return { ok: false, message: `${entry.seq}번째 기록이 이미 돌이 있던 칸에 놓인 것으로 되어 있어요.` };
+      }
+      if (diffCell.after !== expectedColor) {
+        return { ok: false, message: `${entry.seq}번째 기록의 돌 색이 실제 놓인 색과 달라요.` };
+      }
+      if (diffCell.x !== entry.x || diffCell.y !== entry.y) {
+        return { ok: false, message: `${entry.seq}번째 기록의 좌표가 실제 변화 위치와 달라요.` };
+      }
+    } else if (prevBoard && entry.type === 'card') {
+      // 카드 효과 하나하나의 정확한 로직까지는 검증 못 하지만(더 큰 작업이에요), 카드
+      // 한 번에 너무 많은 칸이 한꺼번에 바뀌는 건 상식적으로 이상해서 최소한으로 걸러요.
+      const size = entry.board.length;
+      if (prevBoard.length === size) {
+        let diffCount = 0;
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            if (entry.board[y][x] !== prevBoard[y][x]) diffCount++;
+          }
+        }
+        if (diffCount > size) {
+          return { ok: false, message: `${entry.seq}번째 카드 기록에서 한 번에 너무 많은 칸(${diffCount}개)이 바뀌었어요.` };
+        }
+      }
+    }
+    prevBoard = entry.board;
+  }
+  return { ok: true };
+}
+
 // 보드 전체를 훑어서, player가 실제로 승리 조건(연속 돌)을 만족하는 자리가 있는지 확인해요.
 function boardHasWinFor(board, player, options) {
   const size = board.length;
@@ -88,6 +167,30 @@ export function validateGameResult(room, uid) {
     });
     if (!hasWin) {
       return { ok: false, code: 'failed-precondition', message: '보드 상태에서 실제로 승리 조건을 확인할 수 없어요.' };
+    }
+    // 보드 모양이 진짜 승리 조건이어도, 그 모양이 실제로 정상적인 수순으로 만들어졌는지도
+    // 이동 기록으로 한 번 더 대조해요 (콘솔로 보드를 직접 바꿔치기하는 조작을 잡기 위해서).
+    // 이동 기록의 마지막 스냅샷과 실제로 제출된 최종 보드가 같은지도 확인해요.
+    // (여기가 없으면, 기록 자체는 멀쩡해도 마지막에 최종 board만 몰래 바꿔치기하는 걸 못 잡아요.)
+    const lastEntry = Array.isArray(state.moveLog) ? state.moveLog[state.moveLog.length - 1] : null;
+    if (lastEntry && Array.isArray(lastEntry.board)) {
+      const size = state.board.length;
+      let mismatch = lastEntry.board.length !== size;
+      if (!mismatch) {
+        outer: for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            if (state.board[y][x] !== lastEntry.board[y][x]) { mismatch = true; break outer; }
+          }
+        }
+      }
+      if (mismatch) {
+        return { ok: false, code: 'failed-precondition', message: '최종 보드가 이동 기록의 마지막 상태와 달라요.' };
+      }
+    }
+
+    const integrity = validateMoveLogIntegrity(state.moveLog, state.rouletteRule);
+    if (!integrity.ok) {
+      return { ok: false, code: 'failed-precondition', message: `대국 기록이 실제 보드와 안 맞아요: ${integrity.message}` };
     }
   }
 
