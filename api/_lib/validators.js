@@ -1,5 +1,5 @@
 // 순수 함수로 분리해둔 핵심 검증 로직이에요 (Firebase Admin 없이도 직접 테스트할 수 있어요).
-import { BLACK, WHITE, checkWin, isForbiddenMove } from './gameLogic.js';
+import { BLACK, WHITE, WILD, checkWin, isForbiddenMove } from './gameLogic.js';
 import { getTierForRating } from './tiers.js';
 
 // ⚠️ 중요: 클라이언트(src/network.js)는 rooms/{code}/state를 객체가 아니라
@@ -165,6 +165,10 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
         } else if (cardId === 'overwrite') {
           if (diffs.length !== 1 || diffs[0].before === 0 || diffs[0].after !== mover) {
             return { ok: false, message: `${entry.seq}번째 '관통' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'wildcard') {
+          if (diffs.length !== 1 || diffs[0].before !== 0 || diffs[0].after !== WILD) {
+            return { ok: false, message: `${entry.seq}번째 '와일드카드' 기록이 실제 효과와 안 맞아요.` };
           }
         } else if (diffs.length > size) {
           // 그 외 카드는 정확한 로직까지는 검증 못 하지만(더 큰 작업이에요), 한 번에 너무
