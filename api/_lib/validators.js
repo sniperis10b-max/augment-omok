@@ -127,18 +127,49 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
         return { ok: false, message: `${entry.seq}번째 기록의 좌표가 실제 변화 위치와 달라요.` };
       }
     } else if (prevBoard && entry.type === 'card') {
-      // 카드 효과 하나하나의 정확한 로직까지는 검증 못 하지만(더 큰 작업이에요), 카드
-      // 한 번에 너무 많은 칸이 한꺼번에 바뀌는 건 상식적으로 이상해서 최소한으로 걸러요.
       const size = entry.board.length;
       if (prevBoard.length === size) {
-        let diffCount = 0;
+        const diffs = [];
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
-            if (entry.board[y][x] !== prevBoard[y][x]) diffCount++;
+            if (entry.board[y][x] !== prevBoard[y][x]) {
+              diffs.push({ x, y, before: prevBoard[y][x], after: entry.board[y][x] });
+            }
           }
         }
-        if (diffCount > size) {
-          return { ok: false, message: `${entry.seq}번째 카드 기록에서 한 번에 너무 많은 칸(${diffCount}개)이 바뀌었어요.` };
+        const mover = entry.player;
+        const opponent = mover === BLACK ? WHITE : BLACK;
+        const cardId = entry.cardId;
+
+        // 위험도가 높은 카드들(상대 돌 제거/전환, 위치 조작)은 실제 효과 모양까지 정확히 대조해요.
+        if (cardId === 'destroy') {
+          if (diffs.length !== 1 || diffs[0].before !== opponent || diffs[0].after !== 0) {
+            return { ok: false, message: `${entry.seq}번째 '파괴' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'destroyChain') {
+          if (diffs.length < 1 || diffs.length > 2 || diffs.some((d) => d.before !== opponent || d.after !== 0)) {
+            return { ok: false, message: `${entry.seq}번째 '연쇄 파괴' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'alchemy') {
+          if (diffs.length !== 1 || diffs[0].before !== opponent || diffs[0].after !== mover) {
+            return { ok: false, message: `${entry.seq}번째 '연금술' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'swap') {
+          const validSwap = diffs.length === 2 && (
+            (diffs[0].before === mover && diffs[0].after === opponent && diffs[1].before === opponent && diffs[1].after === mover)
+            || (diffs[0].before === opponent && diffs[0].after === mover && diffs[1].before === mover && diffs[1].after === opponent)
+          );
+          if (!validSwap) {
+            return { ok: false, message: `${entry.seq}번째 '위치 교환' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'overwrite') {
+          if (diffs.length !== 1 || diffs[0].before === 0 || diffs[0].after !== mover) {
+            return { ok: false, message: `${entry.seq}번째 '관통' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (diffs.length > size) {
+          // 그 외 카드는 정확한 로직까지는 검증 못 하지만(더 큰 작업이에요), 한 번에 너무
+          // 많은 칸이 한꺼번에 바뀌는 건 상식적으로 이상해서 최소한으로 걸러요.
+          return { ok: false, message: `${entry.seq}번째 카드 기록에서 한 번에 너무 많은 칸(${diffs.length}개)이 바뀌었어요.` };
         }
       }
     }
@@ -211,6 +242,14 @@ export function validateGameResult(room, uid) {
     const integrity = validateMoveLogIntegrity(state.moveLog, state.rouletteRule);
     if (!integrity.ok) {
       return { ok: false, code: 'failed-precondition', message: `대국 기록이 실제 보드와 안 맞아요: ${integrity.message}` };
+    }
+
+    // 연금술/위치 교환/관통/돌 이동은 카드 설명에 "이 카드로는 승리를 완성할 수 없어요"라고
+    // 명시되어 있어요. 마지막 기록이 이런 카드였다면(=그 카드로 승리 모양이 막 만들어진
+    // 거라면) 거부해요.
+    const NO_WIN_CARDS = new Set(['alchemy', 'swap', 'overwrite', 'moveStone']);
+    if (lastEntry && lastEntry.type === 'card' && NO_WIN_CARDS.has(lastEntry.cardId)) {
+      return { ok: false, code: 'failed-precondition', message: '이 카드로는 승리를 완성할 수 없어요.' };
     }
   }
 
