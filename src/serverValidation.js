@@ -23,8 +23,11 @@ import { getAuth } from 'firebase/auth';
 import { firebaseConfig, isFirebaseConfigured } from './firebaseConfig.js';
 
 // 이 코드들은 "서버가 게임 규칙을 근거로 명확히 거부한 것"만 나타내요.
-// 이것들만 실제로 착수/결과 반영을 막아요.
-const HARD_REJECT_CODES = new Set(['failed-precondition', 'invalid-argument']);
+// ⚠️ 지금은 비워뒀어요: phase/turn 체크가 "클라이언트가 최신 상태를 Firebase에 다
+// 올리기 전에 서버가 그 사이의 상태를 읽어버리는" 타이밍 문제로 정상적인 착수까지
+// 잘못 거부하는 게 실제로 확인돼서, 원인을 제대로 고칠 때까지 서버 응답을 로그로만
+// 남기고 실제로 막지는 않게 해뒀어요.
+const HARD_REJECT_CODES = new Set([]);
 
 function getAuthInstance() {
   if (!isFirebaseConfigured()) throw new Error('Firebase 설정이 비어있어요.');
