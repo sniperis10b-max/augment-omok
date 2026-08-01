@@ -8,7 +8,7 @@ import {
   BLACK, WHITE,
 } from './_lib/gameLogic.js';
 import {
-  validateGameResult, computeRatingDelta, computeRankPointsDelta, DEFAULT_RATING, DEFAULT_RANK_POINTS,
+  validateGameResult, computeRatingDelta, computeRankPointsDelta, DEFAULT_RATING, DEFAULT_RANK_POINTS, parseRoomState,
 } from './_lib/validators.js';
 
 // placeStone과 같은 이유예요: 클라이언트가 "대국이 끝났다"는 최신 상태를 Firebase에
@@ -83,7 +83,7 @@ export default async function handler(req, res) {
 
     const { hostUid, guestUid, hostColor } = room;
     const guestColor = hostColor === BLACK ? WHITE : BLACK;
-    const winner = room.state.winner;
+    const winner = parseRoomState(room)?.winner;
     const hostResult = winner === null ? 'draw' : winner === hostColor ? 'win' : 'loss';
     const guestResult = winner === null ? 'draw' : winner === guestColor ? 'win' : 'loss';
     const ranked = !!room.ranked;

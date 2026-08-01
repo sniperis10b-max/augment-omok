@@ -8,7 +8,7 @@ import { getTierForRating } from './tiers.js';
 // 실제로는 한 번도 제대로 동작하지 않고 매번 "정보가 이상함"으로 취급되며 그냥
 // 통과되기만 했을 거예요. 그래서 항상 이 함수를 통해서만 state를 꺼내요 (이미 객체로
 // 들어오는 경우 — 테스트에서 순수 객체를 바로 넣는 경우 — 도 그대로 지원해요).
-function parseRoomState(room) {
+export function parseRoomState(room) {
   if (!room) return null;
   const raw = room.state;
   if (raw == null) return null;
