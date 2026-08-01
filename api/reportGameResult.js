@@ -57,7 +57,6 @@ export default async function handler(req, res) {
 
   try {
     const db = getDb();
-    const roomRef = db.ref(`rooms/${roomCode}`);
     const { room, check } = await validateResultWithRetry(db, roomCode, uid);
 
     if (!check.ok) {
@@ -72,7 +71,10 @@ export default async function handler(req, res) {
 
     // 이 방의 이번 대국 결과가 이미 처리됐으면 중복 반영하지 않아요 (양쪽이 동시에
     // 호출해도 딱 한 번만 반영되도록 트랜잭션으로 "선점"해요).
-    const claimTx = await roomRef.child('resultClaimed').transaction((current) => {
+    // rooms/{code} 밖의 별도 경로에 둬요 - rooms 안에 두면 호스트/게스트의 쓰기 권한이
+    // 자식 경로까지 그대로 캐스케이드돼서, 그 사람들이 이 값을 직접 초기화하고 같은
+    // 결과를 또 반영시키는(레이팅 중복 획득) 게 가능해질 수 있어요.
+    const claimTx = await db.ref(`gameResults/${roomCode}/claimed`).transaction((current) => {
       if (current) return; // 이미 있으면 그대로 두고 트랜잭션을 취소해요.
       return true;
     });
