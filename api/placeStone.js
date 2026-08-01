@@ -9,8 +9,9 @@ import { validatePlacement } from './_lib/validators.js';
 // 클라이언트가 방금 둔 수를 Firebase에 다 올리기 전에, 서버가 그 사이의(한 수 전) 상태를
 // 읽어버리면 "내 턴이 아니에요"/"착수할 수 있는 상태가 아니에요" 같은 오판이 나요
 // (validatePlacement가 이런 경우 code: 'stale-state'로 표시해요). 그래서 그 경우엔
-// 곧바로 거부하지 않고, 짧게 기다렸다가 최신 상태를 다시 읽어서 재검증해요.
-async function validateWithRetry(db, roomCode, uid, x, y, attempts = 4, delayMs = 250) {
+// 곧바로 거부하지 않고, 아주 짧게 기다렸다가 최신 상태를 다시 읽어서 재검증해요.
+// (재시도 간격/횟수를 크게 하면 그만큼 매 착수마다 체감 지연이 커져서, 최소한으로만 줘요.)
+async function validateWithRetry(db, roomCode, uid, x, y, attempts = 2, delayMs = 80) {
   let result;
   for (let i = 0; i < attempts; i++) {
     const roomSnap = await db.ref(`rooms/${roomCode}`).get();

@@ -14,7 +14,7 @@ import {
 // placeStone과 같은 이유예요: 클라이언트가 "대국이 끝났다"는 최신 상태를 Firebase에
 // 다 올리기 전에 서버가 그 사이의 상태를 읽으면 "아직 안 끝났어요"로 오판할 수 있어서,
 // 그 경우(code: 'stale-state')엔 짧게 기다렸다가 다시 읽어서 재검증해요.
-async function validateResultWithRetry(db, roomCode, uid, attempts = 4, delayMs = 250) {
+async function validateResultWithRetry(db, roomCode, uid, attempts = 3, delayMs = 150) {
   let room;
   let check;
   for (let i = 0; i < attempts; i++) {

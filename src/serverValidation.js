@@ -39,19 +39,32 @@ function getAuthInstance() {
   return getAuth(app);
 }
 
+// placeStone은 매 착수마다 부르는 거라, 서버가 느리면(예: Vercel 콜드 스타트) 그만큼
+// 체감 지연이 커져요. 너무 오래 걸리면 포기하고 통과시켜서(호출부의 catch에서 처리),
+// 게임이 서버 상태 때문에 느려지거나 멈추지 않게 해요.
+const API_TIMEOUT_MS = 2500;
+
 async function callApi(path, body) {
   const authInstance = getAuthInstance();
   const idToken = await authInstance.currentUser?.getIdToken();
   if (!idToken) throw new Error('로그인 정보가 없어요.');
 
-  const res = await fetch(`/api/${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`/api/${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (!res.ok && res.status >= 500) {
     // 서버 자체 오류(배포 문제 등)예요 - 호출부에서 "통과 처리"하도록 예외를 던져요.
     throw new Error(`서버 오류 (${res.status})`);
