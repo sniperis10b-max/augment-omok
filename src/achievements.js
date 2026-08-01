@@ -375,6 +375,7 @@ export async function getUserProgressByEmail(email) {
     blockedBoardSkins: data.blockedBoardSkins || {},
     blockedStoneSkins: data.blockedStoneSkins || {},
     achievementStats: data.achievementStats || {},
+    seasonCoins: data.seasonCoins || 0,
   };
 }
 

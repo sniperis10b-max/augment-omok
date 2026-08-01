@@ -52,7 +52,7 @@ import { verifyPlacementOnServer, reportGameResultToServer } from './serverValid
 import {
   CURRENT_SEASON, levelProgress, getDailyMissionProgress, getWeeklyMissionProgress, getSeasonMilestoneProgress,
   ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
-  SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS, devSetSeasonLevel,
+  SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS, devSetSeasonLevel, adminSetSeasonCoins,
 } from './seasonPass.js';
 import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, getChallengeById, hasCompletedAllChallenges, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
 import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
@@ -1619,6 +1619,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [desiredStoneSkins, setDesiredStoneSkins] = useState({});
   const [desiredBlockedBoardSkins, setDesiredBlockedBoardSkins] = useState({});
   const [desiredBlockedStoneSkins, setDesiredBlockedStoneSkins] = useState({});
+  const [seasonCoinsInput, setSeasonCoinsInput] = useState(0);
+  const [coinUpdateStatus, setCoinUpdateStatus] = useState('');
   const [scoreEditEmail, setScoreEditEmail] = useState('');
   const [scoreEditRating, setScoreEditRating] = useState('');
   const [scoreEditRankPoints, setScoreEditRankPoints] = useState('');
@@ -2329,6 +2331,8 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
         setDesiredStoneSkins({ ...res.grantedStoneSkins });
         setDesiredBlockedBoardSkins({ ...res.blockedBoardSkins });
         setDesiredBlockedStoneSkins({ ...res.blockedStoneSkins });
+        setSeasonCoinsInput(res.seasonCoins || 0);
+        setCoinUpdateStatus('');
         setRevokeStatus('');
       } else {
         setRevokeLookup(null);
@@ -2524,6 +2528,36 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                     {s.name}
                   </label>
                 ))}
+              </div>
+
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>
+                시즌 코인
+              </div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+                <p className="setup-card-desc" style={{ marginBottom: 8 }}>
+                  현재 보유 코인: <strong>{revokeLookup.seasonCoins ?? 0}개</strong>
+                </p>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    value={seasonCoinsInput}
+                    onChange={(e) => setSeasonCoinsInput(e.target.value)}
+                    style={{ width: 100, padding: '4px 8px' }}
+                  />
+                  <button
+                    className="reset-btn"
+                    onClick={async () => {
+                      const newValue = await adminSetSeasonCoins(revokeLookup.uid, Number(seasonCoinsInput) || 0);
+                      setRevokeLookup((prev) => ({ ...prev, seasonCoins: newValue }));
+                      setSeasonCoinsInput(newValue);
+                      setCoinUpdateStatus(`코인을 ${newValue}개로 변경했어요.`);
+                    }}
+                  >
+                    코인 변경
+                  </button>
+                </div>
+                {coinUpdateStatus && <p className="setup-card-desc" style={{ marginTop: 6, color: '#3fae52' }}>{coinUpdateStatus}</p>}
               </div>
 
               <button className="reset-btn confirm-danger-btn" style={{ marginTop: 10 }} onClick={handleApplyChanges}>

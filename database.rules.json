@@ -47,6 +47,9 @@
         "equippedTierId": {
           ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
         },
+        "seasonCoins": {
+          ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
+        },
         "grantedBoardSkins": {
           "$skinId": {
             ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"

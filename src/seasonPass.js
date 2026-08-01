@@ -283,3 +283,10 @@ export async function claimSeasonMission(uid, periodType, missionId, points, cur
 
   return { newPoints, newCoins, coinsAwarded, leveledUpTo: coinsAwarded > 0 ? afterLevel : null };
 }
+
+// 관리자(개발자) 전용: 지정한 유저의 시즌 코인을 원하는 값으로 강제로 바꿔요.
+export async function adminSetSeasonCoins(uid, newCoins) {
+  const db = getDb();
+  await update(ref(db, `users/${uid}`), { seasonCoins: Math.max(0, Math.floor(newCoins)) });
+  return Math.max(0, Math.floor(newCoins));
+}
