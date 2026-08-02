@@ -10,9 +10,9 @@
         ".write": "auth != null && auth.uid === $uid",
 
         "profile": {
-          "customPhoto": {
-            ".read": "auth != null"
-          }
+          "displayName": { ".read": "auth != null" },
+          "photoURL": { ".read": "auth != null" },
+          "customPhoto": { ".read": "auth != null" }
         },
 
         "friends": {

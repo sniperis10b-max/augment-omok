@@ -8,13 +8,22 @@ import { getTierForRating } from './tiers.js';
 // 실제로는 한 번도 제대로 동작하지 않고 매번 "정보가 이상함"으로 취급되며 그냥
 // 통과되기만 했을 거예요. 그래서 항상 이 함수를 통해서만 state를 꺼내요 (이미 객체로
 // 들어오는 경우 — 테스트에서 순수 객체를 바로 넣는 경우 — 도 그대로 지원해요).
+export // 클라이언트(src/network.js)가 Infinity 값(영구 차단 표시 등)을 JSON으로 저장할 때,
+// JSON.stringify가 Infinity를 그냥 없애버리는 문제 때문에 특별한 문자열 마커로 바꿔서
+// 저장해요. 여기서도 똑같이 되돌려줘야 blockedCells의 "영구 차단"이 서버에서도 정확히
+// 인식돼요 (안 그러면 장벽/판 축소 같은 카드로 막은 칸을 서버가 "안 막혔다"고 오판해요).
+const INFINITY_MARKER = '__Infinity__';
+function stateReviver(_key, value) {
+  return value === INFINITY_MARKER ? Infinity : value;
+}
+
 export function parseRoomState(room) {
   if (!room) return null;
   const raw = room.state;
   if (raw == null) return null;
   if (typeof raw === 'string') {
     try {
-      return JSON.parse(raw);
+      return JSON.parse(raw, stateReviver);
     } catch {
       return null;
     }

@@ -114,6 +114,19 @@ export async function getRoomPlayers(code) {
   return { hostUid: data.hostUid || null, guestUid: data.guestUid || null };
 }
 
+// blockedCells 등에는 "영구 차단"을 뜻하는 Infinity 값이 들어있는데, JSON.stringify는
+// Infinity를 그냥 null로 바꿔버려요(직렬화 불가). 그러면 온라인 대전에서 상대방이 이
+// 상태를 JSON.parse로 받았을 때 "영구 차단"이 사라져서, 장벽/판 축소/오염 같은 카드로
+// 막은 칸에 상대가 그냥 둘 수 있게 되는 심각한 버그가 생겨요. 그래서 문자열로 바꿔서
+// 보존했다가 파싱할 때 다시 Infinity로 되돌려요.
+const INFINITY_MARKER = '__Infinity__';
+function stateReplacer(_key, value) {
+  return value === Infinity ? INFINITY_MARKER : value;
+}
+function stateReviver(_key, value) {
+  return value === INFINITY_MARKER ? Infinity : value;
+}
+
 // 방 전체(상태 포함)를 구독해요. onUpdate(roomData)가 변경마다 호출돼요.
 // state는 JSON 문자열로 저장돼있어서, 여기서 미리 파싱해서 넘겨줘요.
 export function subscribeRoom(code, onUpdate) {
@@ -125,7 +138,7 @@ export function subscribeRoom(code, onUpdate) {
     let parsedState = null;
     if (typeof data.state === 'string') {
       try {
-        parsedState = JSON.parse(data.state);
+        parsedState = JSON.parse(data.state, stateReviver);
       } catch {
         parsedState = null;
       }
@@ -140,7 +153,7 @@ export function subscribeRoom(code, onUpdate) {
 // 배열로 바꾸거나 빈 배열/객체 값을 통째로 지워버리는 문제가 있어서, 문자열로 통째로 저장해요.
 export async function pushGameState(code, state) {
   const db = getDb();
-  await update(ref(db, `rooms/${code}`), { state: JSON.stringify(state), updatedAt: serverTimestamp() });
+  await update(ref(db, `rooms/${code}`), { state: JSON.stringify(state, stateReplacer), updatedAt: serverTimestamp() });
 }
 
 export async function leaveRoom(code) {
