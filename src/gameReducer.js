@@ -1322,6 +1322,28 @@ function resolveTargetedEffect(state, cardId, targets) {
     const blackWon = checkWin(board, t.x, t.y, BLACK, { sealedLines: next.sealedLines, markedStones: next.markedStones });
     const whiteWon = !blackWon && checkWin(board, t.x, t.y, WHITE, { sealedLines: next.sealedLines, markedStones: next.markedStones });
     const winner = blackWon ? BLACK : whiteWon ? WHITE : null;
+    // 챌린지 "이중 증명": 사람(나)이 5목을 완성해도, 3번째로 완성한 게 아니면 승리 처리
+    // 안 하고 그 라인을 낙인 처리해서(재사용 방지) 계속 진행해요.
+    if (winner && next.challengeId === 'doubleProof' && winner === next.humanColor) {
+      const line = findLineCells(board, t.x, t.y, winner, 5, next.markedStones);
+      const provenCount = (next.provenWinCount || 0) + 1;
+      if (provenCount < 3) {
+        const newMarked = { ...next.markedStones };
+        if (line) for (const c of line) newMarked[key(c.x, c.y)] = true;
+        next.markedStones = newMarked;
+        next.provenWinCount = provenCount;
+        if (isBoardFull(board)) {
+          next.phase = 'over';
+          next.winner = null;
+          next.message = '무승부예요.';
+          return next;
+        }
+        const res = finishTurnAfterPlacement(next, player);
+        res.message = `5목을 완성했지만 아직 부족해요! (${provenCount}/3) ${res.message}`;
+        return res;
+      }
+      next.provenWinCount = provenCount;
+    }
     if (winner) {
       next.phase = 'over';
       next.winner = winner;

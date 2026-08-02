@@ -100,7 +100,7 @@ function targetMatches(targets, index, diff) {
 // 원래 비어있던 곳에 놓인 게 맞는지 하나하나 대조해요. 카드 효과(파괴/변환 등)로 인한
 // 변화까지는 검증하지 않지만(그건 별도의 큰 작업이에요), 이 정도만으로도 콘솔에서
 // 보드 배열을 직접 통째로 바꿔치기하는 식의 "빠르고 티 나는" 조작은 걸러낼 수 있어요.
-function validateMoveLogIntegrity(moveLog, rouletteRule) {
+function validateMoveLogIntegrity(moveLog, rouletteRule, challengeId, humanColor) {
   const strict = !BOARD_MUTATING_ROULETTE_RULES.has(rouletteRule);
   if (!Array.isArray(moveLog) || moveLog.length === 0) {
     return { ok: false, message: '대국 기록이 없어요.' };
@@ -153,7 +153,7 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
     } else if (prevBoard && entry.type === 'card') {
       const size = entry.board.length;
       if (prevBoard.length === size) {
-        const diffs = [];
+        let diffs = [];
         for (let y = 0; y < size; y++) {
           for (let x = 0; x < size; x++) {
             if (entry.board[y][x] !== prevBoard[y][x]) {
@@ -165,16 +165,33 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
         const opponent = mover === BLACK ? WHITE : BLACK;
         const cardId = entry.cardId;
 
+        // 챌린지 "유리 심장": 어떤 카드든 돌 하나만 파괴/변환해도 내(사람) 돌 전부가 같이
+        // 사라져요. 그러면 카드 하나의 원래 효과보다 훨씬 많은 칸이 한꺼번에 바뀌어서,
+        // 아래의 카드별 정밀 검증이 이걸 조작으로 오해할 수 있어요. alchemy/swap/overwrite/
+        // wildcard처럼 "OO → 0"이 원래 효과에 없는 카드는 그런 칸을 전부 미리 빼고
+        // 검증해요. destroy/destroyChain처럼 원래 효과 자체가 "상대 돌 → 0"인 카드는
+        // (상대가 마침 사람일 수도 있어서) 뒤에서 별도로 판단해요.
+        const isGlassHeart = challengeId === 'glassHeart' && !!humanColor;
+        if (isGlassHeart && !['destroy', 'destroyChain'].includes(cardId)) {
+          diffs = diffs.filter((d) => !(d.before === humanColor && d.after === 0));
+        }
+
         // 위험도가 높은 카드들(상대 돌 제거/전환, 위치 조작)은 실제 효과 모양까지 정확히 대조해요.
         if (cardId === 'destroy') {
-          if (diffs.length !== 1 || diffs[0].before !== opponent || diffs[0].after !== 0) {
+          const t = entry.targets?.[0];
+          const primary = t && diffs.find((d) => d.x === t.x && d.y === t.y && d.before === opponent && d.after === 0);
+          const rest = diffs.filter((d) => d !== primary);
+          const restOk = isGlassHeart ? rest.every((d) => d.before === humanColor && d.after === 0) : rest.length === 0;
+          if (!primary || !restOk) {
             return { ok: false, message: `${entry.seq}번째 '파괴' 카드 기록이 실제 효과와 안 맞아요.` };
           }
-          if (!targetMatches(entry.targets, 0, diffs[0])) {
-            return { ok: false, message: `${entry.seq}번째 '파괴' 카드의 대상 좌표가 실제 변화 위치와 달라요.` };
-          }
         } else if (cardId === 'destroyChain') {
-          if (diffs.length < 1 || diffs.length > 2 || diffs.some((d) => d.before !== opponent || d.after !== 0)) {
+          const t = entry.targets?.[0];
+          const hasSeed = t && diffs.some((d) => d.x === t.x && d.y === t.y && d.before === opponent && d.after === 0);
+          const opponentRemovals = diffs.filter((d) => d.before === opponent && d.after === 0);
+          const rest = diffs.filter((d) => !(d.before === opponent && d.after === 0));
+          const restOk = isGlassHeart ? rest.every((d) => d.before === humanColor && d.after === 0) : rest.length === 0;
+          if (!hasSeed || opponentRemovals.length > 2 || !restOk) {
             return { ok: false, message: `${entry.seq}번째 '연쇄 파괴' 카드 기록이 실제 효과와 안 맞아요.` };
           }
         } else if (cardId === 'alchemy') {
@@ -374,7 +391,7 @@ export function validateGameResult(room, uid) {
       }
     }
 
-    const integrity = validateMoveLogIntegrity(state.moveLog, state.rouletteRule);
+    const integrity = validateMoveLogIntegrity(state.moveLog, state.rouletteRule, state.challengeId, state.humanColor);
     if (!integrity.ok) {
       return { ok: false, code: 'failed-precondition', message: `대국 기록이 실제 보드와 안 맞아요: ${integrity.message}` };
     }
