@@ -77,6 +77,27 @@ export function hasCompletedAllChallenges4(clearedSet = {}) {
   return CHALLENGES_4.every((c) => clearedSet[c.id]);
 }
 
+// 챌린지 다섯 번째 세트예요. 매우 극악한 난이도로, 10개를 전부 클리어하면 '은하수' 돌
+// 스킨을 받아요.
+export const CHALLENGES_5_CARD_BAN_NOTE = '(사목 승리/기적/단축 승리/연장 승리 카드는 이 챌린지 세트에서 뽑을 수 없어요.)';
+
+export const CHALLENGES_5 = [
+  { id: 'curseOfTen', name: '10목의 저주', desc: `나는 10목을 완성해야 승리해요 (흑에게 걸리는 6목 금수는 해제돼요). ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'gambleLife', name: '도박 인생', desc: `내가 두는 모든 수는 5% 확률로만 실제로 놓여요. ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'instant', name: '찰나', desc: `내 제한시간이 0.5초로 고정돼요 (AI는 무제한). ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'tripleAssault', name: '삼중 공세', desc: `AI는 매 턴 무조건 3수씩 둬요. ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'doubleProof', name: '이중 증명', desc: `서로 다른 위치에서 5목을 3번 완성해야 진짜 승리로 인정돼요. ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'isolation', name: '고립무원', desc: `내 돌은 상대(적) 돌과 8방향으로 붙어있는 칸에는 놓을 수 없어요. ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'criticalMoment', name: '결정적 순간', desc: `내가 4목을 만들면, 그 라인에 있는 돌 중 무작위로 하나가 파괴돼요. ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'randomBetrayal', name: '무작위 배신', desc: `내가 놓는 돌은 75% 확률로 AI 색으로 바로 뒤바뀌어요. ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'erasure', name: '삭제', desc: `내가 돌을 놓을 때마다, 판 위의 내 기존 돌 전부가 각각 50% 확률로 파괴돼요. ${CHALLENGES_5_CARD_BAN_NOTE}` },
+  { id: 'glassHeart', name: '유리 심장', desc: `판 위의 어떤 돌이든(내 것이든 상대 것이든) 하나라도 파괴/변환당하면, 내 돌 전부가 즉시 사라져요. ${CHALLENGES_5_CARD_BAN_NOTE}` },
+];
+
+export function hasCompletedAllChallenges5(clearedSet = {}) {
+  return CHALLENGES_5.every((c) => clearedSet[c.id]);
+}
+
 // 파괴/방어 계열로 분류되는 카드 id들 (파괴 금지/방어 금지 챌린지에서 드래프트 풀에서 제외돼요)
 export const DESTROY_CARD_IDS = new Set([
   'destroy', 'destroyChain', 'lightning', 'tsunami', 'blackhole', 'erosion', 'dice', 'coinFlip', 'mark', 'alchemy',
@@ -86,7 +107,7 @@ export const DEFENSE_CARD_IDS = new Set([
 ]);
 
 export function getChallengeById(id) {
-  return CHALLENGES.find((c) => c.id === id) || CHALLENGES_2.find((c) => c.id === id) || CHALLENGES_3.find((c) => c.id === id) || CHALLENGES_4.find((c) => c.id === id) || null;
+  return CHALLENGES.find((c) => c.id === id) || CHALLENGES_2.find((c) => c.id === id) || CHALLENGES_3.find((c) => c.id === id) || CHALLENGES_4.find((c) => c.id === id) || CHALLENGES_5.find((c) => c.id === id) || null;
 }
 
 // 완주(전 챌린지 클리어) 여부를 계산해요. clearedSet은 achievementStats.challengesCleared 같은 객체예요.

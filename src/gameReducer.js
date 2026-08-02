@@ -12,7 +12,7 @@ import {
   DIRECTIONS,
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
-import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
+import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS, PROB_CARD_IDS, CHALLENGES_5 } from './challenges.js';
 import { pickRandomRouletteRule, rollingWinLength, getRouletteRuleById } from './roulette.js';
 
 const STANDALONE = new Set([
@@ -131,6 +131,31 @@ function simpleLineScore(board, x, y, player) {
   return score;
 }
 
+// 챌린지 "이중 증명"/"결정적 순간"용: (x,y)에서 완성된 targetLength 길이의 줄이 있다면
+// 그 줄을 이루는 좌표들을 전부 찾아서 돌려줘요 (없으면 null).
+function findLineCells(board, x, y, player, targetLength, markedStones = {}) {
+  const size = board.length;
+  for (const [dx, dy] of DIRECTIONS) {
+    const cells = [{ x, y }];
+    for (let step = 1; step < 8; step++) {
+      const nx = x + dx * step, ny = y + dy * step;
+      if (nx < 0 || nx >= size || ny < 0 || ny >= size) break;
+      if (markedStones[`${nx},${ny}`]) break;
+      if (board[ny][nx] !== player && board[ny][nx] !== WILD) break;
+      cells.push({ x: nx, y: ny });
+    }
+    for (let step = 1; step < 8; step++) {
+      const nx = x - dx * step, ny = y - dy * step;
+      if (nx < 0 || nx >= size || ny < 0 || ny >= size) break;
+      if (markedStones[`${nx},${ny}`]) break;
+      if (board[ny][nx] !== player && board[ny][nx] !== WILD) break;
+      cells.unshift({ x: nx, y: ny });
+    }
+    if (cells.length >= targetLength) return cells;
+  }
+  return null;
+}
+
 function findBestEmptyCellForPlayer(state, player) {
   const { board } = state;
   const size = board.length;
@@ -166,10 +191,21 @@ function pickRandomEmptyCells(state, n, zone = null) {
   return options.slice(0, n);
 }
 
+// 챌린지 세트 5에서 사람/AI 둘 다 못 쓰게 막는 카드들 (승리 조건을 바꿔버려서 그 세트의
+// 챌린지들과 충돌해요).
+const CHALLENGES_5_BANNED_CARDS = new Set(['fourToWin', 'miracle', 'shortWin', 'longWin']);
+
 // 챌린지의 "파괴 금지"/"방어 금지" 같은 카드 제한을 사람 플레이어의 드래프트 풀에만 적용해요.
+// 단, 챌린지 세트 5의 승리조건 카드 금지(사목 승리/기적/단축 승리/연장 승리)는 사람/AI
+// 양쪽 모두에게 적용돼요 - 안 그러면 AI가 그 카드로 승리 조건을 바꿔서 챌린지 자체가
+// 무의미해질 수 있어요.
 function draftPoolForChallenge(pool, player, state) {
-  if (!state.challengeCardBan || player !== state.humanColor) return pool;
-  return pool.filter((id) => !state.challengeCardBan[id]);
+  let filtered = pool;
+  if (state.challengeId && CHALLENGES_5.some((c) => c.id === state.challengeId)) {
+    filtered = filtered.filter((id) => !CHALLENGES_5_BANNED_CARDS.has(id));
+  }
+  if (!state.challengeCardBan || player !== state.humanColor) return filtered;
+  return filtered.filter((id) => !state.challengeCardBan[id]);
 }
 
 // 룰렛 "파괴전": 드래프트 풀을 파괴 계열 카드로만 제한해요 (챌린지와 달리 양쪽 다 적용돼요).
@@ -250,6 +286,7 @@ export function createInitialState() {
     scatteredFogCells: {}, // 챌린지 "흩어진 시야": 항상 안 보이는 무작위 칸들 (렌더링 전용, 착수 자체는 가능)
     humanCardUsedCount: 0, // 챌린지 "카드 한 방 승부": 내가 이번 판에 카드를 몇 번 썼는지
     misfireOriginalCard: null, // 챌린지 "카드 감별 실패": 실제로 손에서 빠져야 할 원래 카드 id
+    provenWinCount: 0, // 챌린지 "이중 증명": 지금까지 완성한(서로 다른) 5목 줄 개수
     allowedCells: null, // 챌린지 "완전 무작위": 이번 내 턴에 둘 수 있는 칸 3개 (null이면 제한 없음)
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
     winner: null,
@@ -637,6 +674,26 @@ function tryPlaceStone(state, clickX, clickY) {
     res.message = `도박 실패! 이번 수는 놓이지 않고 턴이 넘어갔어요. ${res.message}`;
     return res;
   }
+  // 챌린지 "도박 인생": 내가 두는 수는 5% 확률로만 실제로 놓여요.
+  if (workingState.challengeId === 'gambleLife' && player === workingState.humanColor && Math.random() >= 0.05) {
+    const res = advanceTurn(workingState, player);
+    res.message = `도박 실패! 이번 수는 놓이지 않고 턴이 넘어갔어요. ${res.message}`;
+    return res;
+  }
+  // 챌린지 "고립무원": 내(사람) 돌은 상대 돌과 8방향으로 붙어있는 칸에는 놓을 수 없어요.
+  if (workingState.challengeId === 'isolation' && player === workingState.humanColor) {
+    const size = board.length;
+    const opponent = otherPlayer(player);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && nx < size && ny >= 0 && ny < size && board[ny][nx] === opponent) {
+          return { ...workingState, message: '상대 돌과 붙어있는 칸에는 둘 수 없어요.' };
+        }
+      }
+    }
+  }
 
   const nextBoard = cloneBoard(board);
 
@@ -644,6 +701,11 @@ function tryPlaceStone(state, clickX, clickY) {
   let placedColor = player;
   let betrayed = false;
   if (workingState.rouletteRule === 'betrayal' && Math.random() < 0.5) {
+    placedColor = otherPlayer(player);
+    betrayed = true;
+  }
+  // 챌린지 "무작위 배신": 내(사람)가 놓는 돌은 75% 확률로 AI 색으로 바로 뒤바뀌어요.
+  if (workingState.challengeId === 'randomBetrayal' && player === workingState.humanColor && Math.random() < 0.75) {
     placedColor = otherPlayer(player);
     betrayed = true;
   }
@@ -698,9 +760,30 @@ function tryPlaceStone(state, clickX, clickY) {
   if (workingState.challengeId === 'aiDoubleMove' && player === workingState.aiPlayer && !isBonusMove) {
     nextState.buffs = { ...nextState.buffs, doubleMoveRemaining: 1 };
   }
-  const winBlockedByBonusMove = isBonusMove && workingState.challengeId !== 'aiDoubleMove';
+  // 챌린지 "삼중 공세": AI만 매 턴 3수씩 둬요 (보너스 2번 = 총 3수). 어느 수로도 승리 인정.
+  if (workingState.challengeId === 'tripleAssault' && player === workingState.aiPlayer && !isBonusMove) {
+    nextState.buffs = { ...nextState.buffs, doubleMoveRemaining: 2 };
+  }
+  const winBlockedByBonusMove = isBonusMove && workingState.challengeId !== 'aiDoubleMove' && workingState.challengeId !== 'tripleAssault';
 
   const won = !winBlockedByBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal });
+
+  // 챌린지 "이중 증명": 사람(나)이 5목을 완성해도, 서로 다른 위치에서 3번째로 완성한
+  // 것이 아니면 승리 처리하지 않고 그 라인을 "낙인" 처리해서(재사용 방지) 계속 진행해요.
+  if (won && workingState.challengeId === 'doubleProof' && placedColor === workingState.humanColor) {
+    const line = findLineCells(nextBoard, x, y, placedColor, winLength, workingState.markedStones);
+    const provenCount = (workingState.provenWinCount || 0) + 1;
+    if (provenCount < 3) {
+      const newMarked = { ...nextState.markedStones };
+      if (line) for (const c of line) newMarked[key(c.x, c.y)] = true;
+      nextState.markedStones = newMarked;
+      nextState.provenWinCount = provenCount;
+      const res = finishTurnAfterPlacement(nextState, player);
+      res.message = `5목을 완성했지만 아직 부족해요! (${provenCount}/3) ${res.message}`;
+      return res;
+    }
+    nextState.provenWinCount = provenCount;
+  }
 
   if (won) {
     // 룰렛 "역전 오목": 완성한 쪽이 오히려 패배해요.
@@ -732,6 +815,44 @@ function tryPlaceStone(state, clickX, clickY) {
     nextState.winner = null;
     nextState.message = '무승부예요.';
     return nextState;
+  }
+
+  // 챌린지 "결정적 순간": 사람(나)이 4목을 만들면, 그 라인의 돌 중 무작위 하나가 파괴돼요.
+  if (!won && workingState.challengeId === 'criticalMoment' && placedColor === workingState.humanColor) {
+    const line = findLineCells(nextBoard, x, y, placedColor, 4, workingState.markedStones);
+    if (line && line.length >= 4) {
+      const target = line[Math.floor(Math.random() * line.length)];
+      const destroyedBoard = nextBoard.map((row) => row.slice());
+      destroyedBoard[target.y][target.x] = 0;
+      nextState.board = destroyedBoard;
+      nextState.stoneLossLog = [...nextState.stoneLossLog, { owner: placedColor, x: target.x, y: target.y, ply: nextState.ply }];
+      nextState.message = '4목을 완성했지만, 그 라인의 돌 하나가 파괴됐어요!';
+    }
+  }
+
+  // 챌린지 "삭제": 내(사람)가 돌을 놓을 때마다, 판 위의 내 기존 돌(이번에 놓은 것 제외)이
+  // 각각 독립적으로 50% 확률로 파괴돼요.
+  if (workingState.challengeId === 'erasure' && placedColor === workingState.humanColor) {
+    const size = nextState.board.length;
+    const erasedBoard = nextState.board.map((row) => row.slice());
+    const erasedCells = [];
+    for (let ey = 0; ey < size; ey++) {
+      for (let ex = 0; ex < size; ex++) {
+        if (ex === x && ey === y) continue;
+        if (erasedBoard[ey][ex] === placedColor && Math.random() < 0.5) {
+          erasedBoard[ey][ex] = 0;
+          erasedCells.push({ x: ex, y: ey });
+        }
+      }
+    }
+    if (erasedCells.length > 0) {
+      nextState.board = erasedBoard;
+      nextState.stoneLossLog = [
+        ...nextState.stoneLossLog,
+        ...erasedCells.map((c) => ({ owner: placedColor, x: c.x, y: c.y, ply: nextState.ply })),
+      ];
+      nextState.message = `대가로 내 돌 ${erasedCells.length}개가 사라졌어요!`;
+    }
   }
 
   if (winBlockedByBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal })) {
@@ -1143,6 +1264,23 @@ function resolveTargetedEffect(state, cardId, targets) {
     }
   }
 
+  // 챌린지 "유리 심장": 판 위의 어떤 돌이든(내 것이든 상대 것이든) 하나라도 파괴/변환당하면
+  // 내(사람) 돌 전부가 즉시 사라져요.
+  if (next.challengeId === 'glassHeart' && next.humanColor && next.stoneLossLog.length > state.stoneLossLog.length) {
+    const size = next.board.length;
+    const shatteredBoard = next.board.map((row) => row.slice());
+    let shattered = 0;
+    for (let sy = 0; sy < size; sy++) {
+      for (let sx = 0; sx < size; sx++) {
+        if (shatteredBoard[sy][sx] === next.humanColor) { shatteredBoard[sy][sx] = 0; shattered++; }
+      }
+    }
+    if (shattered > 0) {
+      next.board = shatteredBoard;
+      next.message = `유리 심장이 깨졌어요! 내 돌 ${shattered}개가 전부 사라졌어요.`;
+    }
+  }
+
   if (cardId === 'overwrite' || cardId === 'wildcard') {
     next.lastMove = { x: targets[0].x, y: targets[0].y };
   }
@@ -1549,6 +1687,23 @@ function resolveStandaloneNoTarget(state, cardId) {
     }
   }
 
+  // 챌린지 "유리 심장": 판 위의 어떤 돌이든(내 것이든 상대 것이든) 하나라도 파괴/변환당하면
+  // 내(사람) 돌 전부가 즉시 사라져요.
+  if (next.challengeId === 'glassHeart' && next.humanColor && next.stoneLossLog.length > state.stoneLossLog.length) {
+    const size = next.board.length;
+    const shatteredBoard = next.board.map((row) => row.slice());
+    let shattered = 0;
+    for (let sy = 0; sy < size; sy++) {
+      for (let sx = 0; sx < size; sx++) {
+        if (shatteredBoard[sy][sx] === next.humanColor) { shatteredBoard[sy][sx] = 0; shattered++; }
+      }
+    }
+    if (shattered > 0) {
+      next.board = shatteredBoard;
+      next.message = `유리 심장이 깨졌어요! 내 돌 ${shattered}개가 전부 사라졌어요.`;
+    }
+  }
+
   const boardChanged = ['undoLast', 'timeReset', 'chaosShift', 'restore'].includes(cardId);
   if (boardChanged) {
     next.history = [...next.history, board];
@@ -1722,6 +1877,15 @@ export function gameReducer(state, action) {
           if (!PROB_CARD_IDS.has(c.id)) challengeCardBan[c.id] = true;
         }
       }
+      // 챌린지 세트 5(10목의 저주, 이중 증명 등)는 승리 조건 자체를 다루는 챌린지들이라,
+      // 승리 조건을 바꿔버리는 카드들(사목 승리/기적/단축 승리/연장 승리)과 충돌해요.
+      // 그래서 세트 5의 모든 챌린지에서 이 4개 카드는 아예 못 뽑게 막아요.
+      if (CHALLENGES_5.some((c) => c.id === challengeId)) {
+        challengeCardBan.fourToWin = true;
+        challengeCardBan.miracle = true;
+        challengeCardBan.shortWin = true;
+        challengeCardBan.longWin = true;
+      }
       if (challengeId === 'narrowVision5') {
         const size = fresh.board.length;
         for (let y = 0; y < size; y++) {
@@ -1755,6 +1919,11 @@ export function gameReducer(state, action) {
         // 대각선 승리 불가 + 6목이어야 승리 (6목 완성 수 자체가 장목 금수로 막히지 않게 해제).
         ruleFlags = { ...ruleFlags, noDiagonalFor: humanColor, allowOverline: true };
         winLengthOverride = { ...winLengthOverride, [humanColor]: 6 };
+      }
+      if (challengeId === 'curseOfTen' && humanColor) {
+        // 10목이어야 승리 (장목 금수 해제).
+        ruleFlags = { ...ruleFlags, allowOverline: true };
+        winLengthOverride = { ...winLengthOverride, [humanColor]: 10 };
       }
       if (challengeId === 'boardIsEnemy') {
         const size = fresh.board.length;
@@ -1794,9 +1963,10 @@ export function gameReducer(state, action) {
         ...fresh,
         aiPlayer: aiPlayer || null,
         aiDifficulty: difficulty || 'normal',
-        // '속전속결' 챌린지는 15초, '얼어붙은 시간'은 1초로 무조건 고정돼요.
+        // '속전속결' 챌린지는 15초, '얼어붙은 시간'은 1초, '찰나'는 0.5초로 무조건 고정돼요.
         timeLimitSec: challengeId === 'speedRun' ? 15
           : challengeId === 'frozenTime' ? 1
+          : challengeId === 'instant' ? 0.5
           : (timeLimitSec || 0),
         humanColor,
         challengeId: challengeId || null,
@@ -1966,12 +2136,12 @@ export function gameReducer(state, action) {
             ...fresh.ruleFlags,
             noDiagonalFor: state.ruleFlags?.noDiagonalFor || null,
             // 6목/7목 챌린지는 재대국해도 계속 이 챌린지이므로 장목 금수 해제를 유지해요.
-            allowOverline: (state.challengeId === 'sixInRow' || state.challengeId === 'sevenInRow' || state.challengeId === 'diagonalHell') ? true : fresh.ruleFlags.allowOverline,
+            allowOverline: (state.challengeId === 'sixInRow' || state.challengeId === 'sevenInRow' || state.challengeId === 'diagonalHell' || state.challengeId === 'curseOfTen') ? true : fresh.ruleFlags.allowOverline,
             forbiddenColor: state.challengeId === 'colorReverse' ? WHITE : undefined,
           },
           // '단축 승리'/'연장 승리' 카드 효과는 "이번 판 끝까지"만 적용되는 일회성 효과라
           // 재대국하면 초기화돼야 해요. 챌린지(6목/7목/4목 승리) 자체의 규칙만 재대국에도 이어져요.
-          winLengthOverride: ['sixInRow', 'sevenInRow', 'fourVsFive', 'diagonalHell'].includes(state.challengeId)
+          winLengthOverride: ['sixInRow', 'sevenInRow', 'fourVsFive', 'diagonalHell', 'curseOfTen'].includes(state.challengeId)
             ? { ...state.winLengthOverride }
             : fresh.winLengthOverride,
           blockedCells: ['narrowVision', 'narrowVision5', 'doubleForbidden', 'quadForbidden', 'boardIsEnemy'].includes(state.challengeId)

@@ -3,7 +3,7 @@
 // "내 계정만 열어준다"는 건 UI에서 개발자 계정일 때만 선택 가능하게 막아둔다는 뜻이에요).
 
 import { CARDS } from './cards.js';
-import { CHALLENGES, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4 } from './challenges.js';
+import { CHALLENGES, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4, hasCompletedAllChallenges5 } from './challenges.js';
 
 // background-image는 색상값(#fff 같은)을 그대로 못 받아서, 단색 스킨은 그라데이션으로 감싸줘요.
 // (실제 게임판/돌 렌더링과 설정 화면의 미리보기 스와치 둘 다 이 함수로 통일해서 써요.)
@@ -706,6 +706,40 @@ export const STONE_SKINS = [
     whiteBorder: '#c9a04a',
     questDesc: '챌린지 세트 2 (10개) 전부 클리어',
   },
+  {
+    // 성운의 안개와 별빛을 여러 겹의 radial-gradient로 쌓아 만든 스킨이에요. 별 4개 +
+    // 성운 구름 2겹 + 심우주 바탕, 총 7겹을 흑돌/백돌 각각에 맞춰 톤만 다르게 배치했어요.
+    id: 'milkyWay',
+    name: '은하수',
+    black:
+      'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.85) 14%, rgba(255,255,255,0) 45%), '
+      + 'radial-gradient(circle, #ffe6c2 0%, rgba(255,214,150,0.8) 14%, rgba(255,214,150,0) 45%), '
+      + 'radial-gradient(circle, #d5f6ff 0%, rgba(170,235,255,0.85) 14%, rgba(170,235,255,0) 45%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 55%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 55%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.75) 0%, rgba(255,255,255,0) 50%), '
+      + 'linear-gradient(125deg, rgba(255,255,255,0) 30%, rgba(210,225,255,0.28) 45%, rgba(255,255,255,0.4) 50%, rgba(210,225,255,0.28) 55%, rgba(255,255,255,0) 70%), '
+      + 'radial-gradient(circle, rgba(160,70,220,0.5) 0%, rgba(160,70,220,0) 70%), '
+      + 'radial-gradient(circle, rgba(50,190,210,0.38) 0%, rgba(50,190,210,0) 70%), '
+      + 'radial-gradient(circle at 35% 40%, #241542, #06040f 78%)',
+    blackPosition: '18% 16%, 74% 28%, 36% 70%, 82% 78%, 12% 58%, 58% 10%, 0 0, 28% 58%, 70% 22%, 0 0',
+    blackSize: '9% 9%, 7% 7%, 6% 6%, 5% 5%, 4% 4%, 3% 3%, 100% 100%, 100% 100%, 90% 90%, 100% 100%',
+    white:
+      'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.9) 14%, rgba(255,255,255,0) 45%), '
+      + 'radial-gradient(circle, #fff0d8 0%, rgba(255,224,180,0.85) 14%, rgba(255,224,180,0) 45%), '
+      + 'radial-gradient(circle, #e2f0ff 0%, rgba(150,200,255,0.8) 14%, rgba(150,200,255,0) 45%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 55%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 50%), '
+      + 'linear-gradient(125deg, rgba(255,255,255,0) 30%, rgba(230,210,255,0.3) 45%, rgba(255,255,255,0.5) 50%, rgba(230,210,255,0.3) 55%, rgba(255,255,255,0) 70%), '
+      + 'radial-gradient(circle, rgba(190,150,230,0.35) 0%, rgba(190,150,230,0) 70%), '
+      + 'radial-gradient(circle, rgba(130,210,220,0.3) 0%, rgba(130,210,220,0) 70%), '
+      + 'radial-gradient(circle at 35% 40%, #f7f2fb, #ddd2ea 78%)',
+    whitePosition: '18% 16%, 74% 28%, 36% 70%, 82% 78%, 12% 58%, 58% 10%, 0 0, 28% 58%, 70% 22%, 0 0',
+    whiteSize: '9% 9%, 7% 7%, 6% 6%, 5% 5%, 4% 4%, 3% 3%, 100% 100%, 100% 100%, 90% 90%, 100% 100%',
+    whiteBorder: '#b39ddb',
+    questDesc: '챌린지 세트 5 (10개) 전부 클리어',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -857,6 +891,7 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     }
     case 'lightningMark': return hasCompletedAllChallenges3(ctx.challengesCleared || {});
     case 'unbreakableWill': return hasCompletedAllChallenges2(ctx.challengesCleared || {});
+    case 'milkyWay': return hasCompletedAllChallenges5(ctx.challengesCleared || {});
     case 'twins': return (stats.duplicateUses || 0) >= 30;
     case 'frostbite': return (stats.freezeCellUses || 0) >= 50;
     case 'swappedFate': return (stats.swapUses || 0) >= 100;

@@ -54,7 +54,7 @@ import {
   ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
   SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS, devSetSeasonLevel, adminSetSeasonCoins,
 } from './seasonPass.js';
-import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, getChallengeById, hasCompletedAllChallenges, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
+import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5, getChallengeById, hasCompletedAllChallenges, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4, hasCompletedAllChallenges5, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
 import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
@@ -4251,7 +4251,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   }
 
   if (step === 'challenge-select') {
-    const activeList = challengeSetTab === 'set1' ? CHALLENGES : challengeSetTab === 'set2' ? CHALLENGES_2 : challengeSetTab === 'set3' ? CHALLENGES_3 : CHALLENGES_4;
+    const activeList = challengeSetTab === 'set1' ? CHALLENGES : challengeSetTab === 'set2' ? CHALLENGES_2 : challengeSetTab === 'set3' ? CHALLENGES_3 : challengeSetTab === 'set4' ? CHALLENGES_4 : CHALLENGES_5;
     return (
       <div className="page">
         <header className="header">
@@ -4291,6 +4291,13 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             onClick={() => setChallengeSetTab('set4')}
           >
             챌린지 4
+          </button>
+          <button
+            className={`reset-btn ${challengeSetTab === 'set5' ? 'title-pick-active' : ''}`}
+            style={{ flex: 1 }}
+            onClick={() => setChallengeSetTab('set5')}
+          >
+            챌린지 5
           </button>
         </div>
 
@@ -4340,8 +4347,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <>{CHALLENGES_2.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_2.length}개 클리어 — 전부 클리어하면 "불굴의 의지" 스킨을 얻어요.</>
           ) : challengeSetTab === 'set3' ? (
             <>{CHALLENGES_3.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_3.length}개 클리어 — 전부 클리어하면 "번개 각인" 스킨을 얻어요.</>
-          ) : (
+          ) : challengeSetTab === 'set4' ? (
             <>{CHALLENGES_4.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_4.length}개 클리어 — 전부 클리어하면 "카지노 펠트" 스킨을 얻어요.</>
+          ) : (
+            <>{CHALLENGES_5.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_5.length}개 클리어 — 전부 클리어하면 "은하수" 스킨을 얻어요.</>
           )}
         </p>
       </div>
