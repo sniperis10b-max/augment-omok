@@ -5600,16 +5600,22 @@ function Board({ state, dispatch, online, settings }) {
 
   // 온라인 대전에서 "그냥 돌 놓기"(카드 대상 선택 중이 아닐 때)는 서버에도 한 번 더
   // 유효한지 물어봐요. 서버가 명확히 거부하면 로컬에는 아예 반영하지 않아요.
-  async function handleCellClick(x, y) {
+  function handleCellClick(x, y) {
     const isPlainOnlinePlacement = online && !isSpectator && !state.activeCard && state.phase === 'play';
-    if (isPlainOnlinePlacement) {
-      const check = await verifyPlacementOnServer(online.code, x, y);
-      if (!check.ok) {
-        console.warn('서버가 이 착수를 거부했어요:', check.message);
-        return;
-      }
-    }
+    // 서버 검증 요청을 먼저 "시작"만 해두고(응답은 기다리지 않아요) - 그래야 서버가
+    // Firebase를 읽는 시점이 최대한 "이 착수가 반영되기 전" 상태와 가깝게 돼요. 그 직후
+    // 바로 화면에 반영해서(클라이언트 쪽 gameReducer가 어차피 내 턴/빈 칸/금수를 즉시 다시
+    // 검사하니, 정상적인 실수는 이미 거기서 걸러져요) 체감 지연을 없애요. 서버 검증은
+    // "콘솔로 직접 조작하는" 것 같은 진짜 부정행위를 잡기 위한 뒷단 안전장치예요.
+    const verifyPromise = isPlainOnlinePlacement ? verifyPlacementOnServer(online.code, x, y) : null;
     dispatch({ type: 'SELECT_CELL', x, y });
+    if (verifyPromise) {
+      verifyPromise.then((check) => {
+        if (!check.ok) {
+          console.warn('서버가 방금 착수를 사후 검증에서 거부했어요:', check.message);
+        }
+      });
+    }
   }
 
   // 룰렛 "안개 전장": 상대 돌이 안 보여요 (내 색을 알 수 있는 경우에만 - 2인 로컬은 예외).
