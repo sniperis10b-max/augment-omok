@@ -195,6 +195,17 @@ function pickRandomEmptyCells(state, n, zone = null) {
 // 챌린지들과 충돌해요).
 const CHALLENGES_5_BANNED_CARDS = new Set(['fourToWin', 'miracle', 'shortWin', 'longWin']);
 
+// poolForPlayer(player)의 결과에 챌린지5 카드 금지를 적용해요. 드래프트뿐 아니라 "머릿수
+// 싸움"/"재수정"/"무작위 소환"/"복권"처럼 게임 도중에 무작위 카드를 얻는 카드 효과들도
+// 전부 이 함수를 거쳐야, 그 효과들로 금지된 카드가 몰래 들어오는 걸 막을 수 있어요.
+function poolForPlayerFiltered(player, state) {
+  const pool = poolForPlayer(player);
+  if (state?.challengeId && CHALLENGES_5.some((c) => c.id === state.challengeId)) {
+    return pool.filter((id) => !CHALLENGES_5_BANNED_CARDS.has(id));
+  }
+  return pool;
+}
+
 // 챌린지의 "파괴 금지"/"방어 금지" 같은 카드 제한을 사람 플레이어의 드래프트 풀에만 적용해요.
 // 단, 챌린지 세트 5의 승리조건 카드 금지(사목 승리/기적/단축 승리/연장 승리)는 사람/AI
 // 양쪽 모두에게 적용돼요 - 안 그러면 AI가 그 카드로 승리 조건을 바꿔서 챌린지 자체가
@@ -1411,7 +1422,7 @@ function resolveStandaloneNoTarget(state, cardId) {
         }
       }
       if (myCount < oppCount) {
-        const pool = poolForPlayer(player);
+        const pool = poolForPlayerFiltered(player, next);
         const pickedCards = [];
         let hand = next.draft.hands[player];
         for (let i = 0; i < 2; i++) {
@@ -1432,7 +1443,7 @@ function resolveStandaloneNoTarget(state, cardId) {
     }
     case 'reroll': {
       const count = next.draft.hands[player].length;
-      const pool = poolForPlayer(player).filter((id) => id !== 'reroll');
+      const pool = poolForPlayerFiltered(player, next).filter((id) => id !== 'reroll');
       const newHand = Array.from({ length: count }, () => pool[Math.floor(Math.random() * pool.length)]);
       next.draft = { ...next.draft, hands: { ...next.draft.hands, [player]: newHand } };
       next.message = '손패를 전부 버리고 새로 뽑았어요.';
@@ -1534,7 +1545,7 @@ function resolveStandaloneNoTarget(state, cardId) {
       break;
     }
     case 'randomSummon': {
-      const allIds = poolForPlayer(player);
+      const allIds = poolForPlayerFiltered(player, next);
       const randomId = allIds[Math.floor(Math.random() * allIds.length)];
       next.draft = {
         ...next.draft,
@@ -1640,7 +1651,7 @@ function resolveStandaloneNoTarget(state, cardId) {
       next.lotteryResult = success ? 'success' : 'fail';
       bumpProbTally(next, player, success);
       if (success) {
-        const pool = poolForPlayer(player);
+        const pool = poolForPlayerFiltered(player, next);
         const picks = [pool[Math.floor(Math.random() * pool.length)], pool[Math.floor(Math.random() * pool.length)]];
         next.draft = { ...next.draft, hands: { ...next.draft.hands, [player]: [...next.draft.hands[player], ...picks] } };
         next.message = '복권 당첨! 무작위 카드 2장을 얻었어요!';
