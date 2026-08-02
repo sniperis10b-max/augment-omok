@@ -63,6 +63,8 @@ export function validatePlacement(room, uid, x, y) {
   const won = checkWin(nextBoard, x, y, myColor, {
     winLength,
     excludeDiagonal: state.ruleFlags?.noDiagonalFor === myColor,
+    markedStones: state.markedStones,
+    sealedLines: state.sealedLines,
   });
 
   return { ok: true, myColor, wouldWin: won };
@@ -191,6 +193,55 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
           if (!targetMatches(entry.targets, 0, diffs[0])) {
             return { ok: false, message: `${entry.seq}번째 '와일드카드'의 대상 좌표가 실제 변화 위치와 달라요.` };
           }
+        } else if (cardId === 'mark' || cardId === 'duplicate' || cardId === 'trade') {
+          // 이 카드들은 보드 자체를 안 바꿔요(낙인은 표시만, 복제/거래는 손패만 변해요).
+          if (diffs.length !== 0) {
+            return { ok: false, message: `${entry.seq}번째 '${entry.cardId}' 카드가 보드를 바꾸면 안 되는데 바뀌었어요.` };
+          }
+        } else if (cardId === 'coinFlip') {
+          // 지정한 상대 돌 2개 각각 50%로 파괴 - 0~2개까지 파괴될 수 있어요.
+          const targetKeys = new Set((entry.targets || []).map((t) => `${t.x},${t.y}`));
+          if (diffs.length > 2 || diffs.some((d) => d.before !== opponent || d.after !== 0 || !targetKeys.has(`${d.x},${d.y}`))) {
+            return { ok: false, message: `${entry.seq}번째 '동전 던지기' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'dice') {
+          // 지정한 상대 돌 1개 + 인접 최대 2개까지, 최대 3개 파괴돼요. 대상 자신은 항상
+          // 파괴 후보에 포함되지만, "실패"(1~2)면 0개예요.
+          if (diffs.length > 3 || diffs.some((d) => d.before !== opponent || d.after !== 0)) {
+            return { ok: false, message: `${entry.seq}번째 '주사위' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'lightning' || cardId === 'tsunami') {
+          // 지정한 칸이 속한 세로줄(낙뢰)/가로줄(해일)에서 최대 3개까지 파괴돼요.
+          const t = entry.targets?.[0];
+          const sameLine = (d) => (cardId === 'lightning' ? d.x === t?.x : d.y === t?.y);
+          if (diffs.length > 3 || diffs.some((d) => d.before !== opponent || d.after !== 0 || (t && !sameLine(d)))) {
+            return { ok: false, message: `${entry.seq}번째 '${cardId === 'lightning' ? '낙뢰' : '해일'}' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'blackhole') {
+          // 지정한 칸 반경 2칸(5x5) 안의 모든 돌(양쪽 다)을 제거해요.
+          const t = entry.targets?.[0];
+          const inRange = (d) => !t || (Math.abs(d.x - t.x) <= 2 && Math.abs(d.y - t.y) <= 2);
+          if (diffs.some((d) => d.after !== 0 || (d.before !== BLACK && d.before !== WHITE) || !inRange(d))) {
+            return { ok: false, message: `${entry.seq}번째 '블랙홀' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'vortex') {
+          // 지정한 칸 3x3 범위 안의 돌들이 뒤섞여요 - 새로 생기거나 사라지진 않고 위치만
+          // 바뀌어야 해요(범위 안에서 색깔별 개수가 그대로 보존돼야 해요).
+          const t = entry.targets?.[0];
+          const inRange = (x, y) => !t || (Math.abs(x - t.x) <= 1 && Math.abs(y - t.y) <= 1);
+          if (diffs.some((d) => !inRange(d.x, d.y))) {
+            return { ok: false, message: `${entry.seq}번째 '소용돌이' 카드가 지정 범위 밖까지 바꿨어요.` };
+          }
+          const beforeCounts = {};
+          const afterCounts = {};
+          for (const d of diffs) {
+            beforeCounts[d.before] = (beforeCounts[d.before] || 0) + 1;
+            afterCounts[d.after] = (afterCounts[d.after] || 0) + 1;
+          }
+          const sameDistribution = [BLACK, WHITE, WILD, 0].every((v) => (beforeCounts[v] || 0) === (afterCounts[v] || 0));
+          if (!sameDistribution) {
+            return { ok: false, message: `${entry.seq}번째 '소용돌이' 카드가 돌을 없애거나 새로 만들었어요.` };
+          }
         } else if (diffs.length > size) {
           // 그 외 카드는 정확한 로직까지는 검증 못 하지만(더 큰 작업이에요), 한 번에 너무
           // 많은 칸이 한꺼번에 바뀌는 건 상식적으로 이상해서 최소한으로 걸러요.
@@ -206,9 +257,16 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
 // 보드 전체를 훑어서, player가 실제로 승리 조건(연속 돌)을 만족하는 자리가 있는지 확인해요.
 function boardHasWinFor(board, player, options) {
   const size = board.length;
+  const markedStones = options?.markedStones || {};
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       if (board[y][x] !== player) continue;
+      // checkWin은 "시작점으로 준 좌표 자체"가 낙인 찍혔는지는 검사하지 않고, 거기서부터
+      // 뻗어나가며 지나치는 낙인만 걸러요. 원래는 "방금 놓은 돌"에서만 호출되니 문제가
+      // 없었는데, 여기서는 보드 전체 칸을 다 시작점 삼아 스캔하다 보니 "낙인 찍힌 돌
+      // 자신을 시작점으로 스캔하면 낙인이 무시되는" 우회로가 생겨요. 그래서 낙인 찍힌
+      // 칸은 아예 시작점 후보에서 빼요.
+      if (markedStones[`${x},${y}`]) continue;
       if (checkWin(board, x, y, player, options)) return true;
     }
   }
@@ -240,6 +298,8 @@ export function validateGameResult(room, uid) {
     const hasWin = boardHasWinFor(state.board, winner, {
       winLength,
       excludeDiagonal: state.ruleFlags?.noDiagonalFor === winner,
+      markedStones: state.markedStones,
+      sealedLines: state.sealedLines,
     });
     if (!hasWin) {
       return { ok: false, code: 'failed-precondition', message: '보드 상태에서 실제로 승리 조건을 확인할 수 없어요.' };
