@@ -65,13 +65,17 @@ export function isCellInSealedLine(sealedLines, x, y) {
 export function checkWin(board, x, y, player, options = {}) {
   const { winLength = 5, sealedLines = [], markedStones = {}, excludeDiagonal = false, onlyDiagonal = false } = options;
   const size = board.length;
+  // 놓은 돌이 줄의 한쪽 끝에 있을 수도 있으니, winLength(예: 10목)만큼은 한쪽 방향으로만도
+  // 다 셀 수 있어야 해요. 예전엔 7로 고정돼있어서 7목까지만 정확했고, 8목 이상(예: 10목의
+  // 저주 챌린지)에서는 줄 끝에서 놓으면 반대편을 다 못 세는 버그가 있었어요.
+  const maxStep = Math.max(7, winLength - 1, size);
 
   for (const [dx, dy] of DIRECTIONS) {
     if (excludeDiagonal && dx === 1 && (dy === 1 || dy === -1)) continue;
     if (onlyDiagonal && !(dx === 1 && (dy === 1 || dy === -1))) continue;
     let count = 1;
 
-    for (let step = 1; step < 8; step++) {
+    for (let step = 1; step <= maxStep; step++) {
       const nx = x + dx * step;
       const ny = y + dy * step;
       if (nx < 0 || nx >= size || ny < 0 || ny >= size) break;
@@ -80,7 +84,7 @@ export function checkWin(board, x, y, player, options = {}) {
       count++;
     }
 
-    for (let step = 1; step < 8; step++) {
+    for (let step = 1; step <= maxStep; step++) {
       const nx = x - dx * step;
       const ny = y - dy * step;
       if (nx < 0 || nx >= size || ny < 0 || ny >= size) break;
