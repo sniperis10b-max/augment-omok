@@ -116,21 +116,25 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
         continue;
       }
       let diffCount = 0;
-      let diffCell = null;
+      const diffs = [];
       for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
           if (entry.board[y][x] !== prevBoard[y][x]) {
             diffCount++;
-            diffCell = { x, y, before: prevBoard[y][x], after: entry.board[y][x] };
+            diffs.push({ x, y, before: prevBoard[y][x], after: entry.board[y][x] });
           }
         }
       }
-      if (diffCount !== 1) {
-        return { ok: false, message: `${entry.seq}번째 기록에서 한 수에 여러 칸이 동시에 바뀌었어요.` };
+      // 착수와 같은 타이밍에 "시한폭탄"이 터지면 그 폭발(최대 3x3칸 제거)까지 같은 기록에
+      // 함께 반영돼요. 그래서 "빈 칸 → 내 색"으로 바뀐 추가는 정확히 1개만 있어야 하고,
+      // 그 나머지는 전부 "돌이 있던 칸 → 빈 칸"(제거, 폭탄 효과)만 허용해요.
+      const additions = diffs.filter((d) => d.before === 0);
+      const removals = diffs.filter((d) => d.before !== 0 && d.after === 0);
+      const weird = diffs.filter((d) => d.before !== 0 && d.after !== 0);
+      if (additions.length !== 1 || weird.length > 0 || additions.length + removals.length !== diffCount) {
+        return { ok: false, message: `${entry.seq}번째 기록에서 한 수에 이상한 변화가 있어요.` };
       }
-      if (diffCell.before !== 0) {
-        return { ok: false, message: `${entry.seq}번째 기록이 이미 돌이 있던 칸에 놓인 것으로 되어 있어요.` };
-      }
+      const diffCell = additions[0];
       if (diffCell.after !== expectedColor) {
         return { ok: false, message: `${entry.seq}번째 기록의 돌 색이 실제 놓인 색과 달라요.` };
       }
@@ -242,10 +246,47 @@ function validateMoveLogIntegrity(moveLog, rouletteRule) {
           if (!sameDistribution) {
             return { ok: false, message: `${entry.seq}번째 '소용돌이' 카드가 돌을 없애거나 새로 만들었어요.` };
           }
-        } else if (diffs.length > size) {
-          // 그 외 카드는 정확한 로직까지는 검증 못 하지만(더 큰 작업이에요), 한 번에 너무
-          // 많은 칸이 한꺼번에 바뀌는 건 상식적으로 이상해서 최소한으로 걸러요.
-          return { ok: false, message: `${entry.seq}번째 카드 기록에서 한 번에 너무 많은 칸(${diffs.length}개)이 바뀌었어요.` };
+        } else if (cardId === 'undoLast' || cardId === 'erosion') {
+          // undoLast: 가장 최근에 놓인 돌 1개 제거(어느 색이든). erosion: 상대의 가장 오래된
+          // 돌 1개 제거(상대 색만).
+          const okShape = diffs.length <= 1 && diffs.every((d) => (
+            d.after === 0 && (cardId === 'erosion' ? d.before === opponent : d.before !== 0)
+          ));
+          if (!okShape) {
+            return { ok: false, message: `${entry.seq}번째 '${cardId === 'undoLast' ? '타임 리턴' : '침식'}' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'timeReset') {
+          // 판을 5수 전으로 되돌려요 - 여러 칸이 한꺼번에 사라질 수 있지만, 새로 생기거나
+          // 색이 바뀌는 칸은 없어야 해요(전부 제거만).
+          if (diffs.some((d) => d.after !== 0)) {
+            return { ok: false, message: `${entry.seq}번째 '타임 리셋' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'chaosShift') {
+          // 모든 돌이 무작위 방향으로 한 칸씩 밀려요 - 판 밖으로 밀려나면 사라질 수 있지만,
+          // 색깔별 전체 개수가 원래보다 늘어나면 안 돼요(새로 생기면 안 되니까요).
+          const countColor = (b, color) => {
+            let n = 0;
+            for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (b[y][x] === color) n++;
+            return n;
+          };
+          const notIncreased = [BLACK, WHITE, WILD].every((c) => countColor(entry.board, c) <= countColor(prevBoard, c));
+          if (!notIncreased) {
+            return { ok: false, message: `${entry.seq}번째 '격동' 카드 기록에서 돌 개수가 늘어났어요.` };
+          }
+        } else if (cardId === 'restore') {
+          // 최근에 잃은 내 돌 1개를 원래 자리에 되돌려요.
+          if (diffs.length > 1 || diffs.some((d) => d.before !== 0 || d.after !== mover)) {
+            return { ok: false, message: `${entry.seq}번째 '복구' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (cardId === 'resurrection') {
+          // 이번 판에서 잃은 내 돌을 전부 되돌려요(0개 이상, 전부 내 색으로 추가만).
+          if (diffs.some((d) => d.before !== 0 || d.after !== mover)) {
+            return { ok: false, message: `${entry.seq}번째 '재림' 카드 기록이 실제 효과와 안 맞아요.` };
+          }
+        } else if (diffs.length !== 0) {
+          // 그 외 카드(방어막/버프/확률/카드 뽑기류)는 전부 보드 자체를 바꾸지 않아요.
+          // 위에서 다루지 않은 카드인데 보드가 바뀌었다면 의심스러운 조작이에요.
+          return { ok: false, message: `${entry.seq}번째 '${cardId || '알 수 없는'}' 카드는 보드를 바꾸면 안 되는데 ${diffs.length}칸이 바뀌었어요.` };
         }
       }
     }
