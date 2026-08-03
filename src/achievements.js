@@ -214,6 +214,14 @@ export async function addToStatSet(uid, field, key) {
   return Object.keys(val).length;
 }
 
+// 관리자 전용: 지정한 챌린지 id들을 전부 한 번에 "클리어됨"으로 처리해요.
+export async function adminSetChallengesCleared(uid, challengeIds) {
+  const db = getDb();
+  const updates = {};
+  for (const id of challengeIds) updates[id] = true;
+  await update(ref(db, `users/${uid}/achievementStats/challengesCleared`), updates);
+}
+
 // addToStatSet의 반대예요: 지정한 키들을 achievementStats/{field} 집합에서 전부
 // 제거해요(값을 null로 지워요). 챌린지 6의 "10연승"에서 패배하면 이미 클리어한 항목들을
 // 포함해 세트 전체를 되돌릴 때 써요.

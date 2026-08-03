@@ -345,7 +345,7 @@ export const BOARD_SKINS = [
     // 기존 "은하수"/"네뷸러" 보드보다 훨씬 촘촘하게, 크기가 다른 별 10개 + 성운 구름 3겹을
     // 겹겹이 쌓아서 진짜 별자리 사진처럼 보이도록 만들었어요.
     id: 'starCluster',
-    name: '별무리',
+    name: '우주',
     background:
       'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.9) 40%, rgba(255,255,255,0) 100%), '
       + 'radial-gradient(circle, #ffe9c2 0%, rgba(255,233,194,0.9) 40%, rgba(255,233,194,0) 100%), '
@@ -387,7 +387,7 @@ export const BOARD_SKINS = [
       + '100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%',
     border: '#241a44',
     line: 'rgba(200, 190, 255, 0.22)',
-    questDesc: '(해금 조건 미정 - 추후 연결 예정)',
+    questDesc: '획득 불가',
   },
 ];
 

@@ -58,7 +58,7 @@ import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5, CHA
 import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
-  getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, removeFromStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
+  getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, removeFromStatSet, adminSetChallengesCleared, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
   getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak, getTitleProgress,
   getUserProgressByEmail, adminRevokeTitles, adminGrantTitles,
 } from './achievements.js';
@@ -1663,6 +1663,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   const [desiredBlockedStoneSkins, setDesiredBlockedStoneSkins] = useState({});
   const [seasonCoinsInput, setSeasonCoinsInput] = useState(0);
   const [coinUpdateStatus, setCoinUpdateStatus] = useState('');
+  const [challengeClearStatus, setChallengeClearStatus] = useState('');
   const [scoreEditEmail, setScoreEditEmail] = useState('');
   const [scoreEditRating, setScoreEditRating] = useState('');
   const [scoreEditRankPoints, setScoreEditRankPoints] = useState('');
@@ -2600,6 +2601,30 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                   </button>
                 </div>
                 {coinUpdateStatus && <p className="setup-card-desc" style={{ marginTop: 6, color: '#3fae52' }}>{coinUpdateStatus}</p>}
+              </div>
+
+              <div className="setup-card-desc" style={{ fontWeight: 700, marginTop: 10, marginBottom: 4 }}>
+                챌린지
+              </div>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+                <button
+                  className="reset-btn"
+                  onClick={async () => {
+                    const allIds = [...CHALLENGES, ...CHALLENGES_2, ...CHALLENGES_3, ...CHALLENGES_4, ...CHALLENGES_5, ...CHALLENGES_6].map((c) => c.id);
+                    await adminSetChallengesCleared(revokeLookup.uid, allIds);
+                    setChallengeClearStatus(`챌린지 ${allIds.length}개를 전부 클리어 처리했어요.`);
+                    if (user && revokeLookup.uid === user.uid) {
+                      setChallengesCleared((prev) => {
+                        const next = { ...prev };
+                        for (const id of allIds) next[id] = true;
+                        return next;
+                      });
+                    }
+                  }}
+                >
+                  모든 챌린지 자동 클리어
+                </button>
+                {challengeClearStatus && <p className="setup-card-desc" style={{ marginTop: 6, color: '#3fae52' }}>{challengeClearStatus}</p>}
               </div>
 
               <button className="reset-btn confirm-danger-btn" style={{ marginTop: 10 }} onClick={handleApplyChanges}>
