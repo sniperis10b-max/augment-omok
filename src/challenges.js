@@ -105,7 +105,7 @@ export const CHALLENGES_6_CARD_BAN_NOTE = '(사목 승리/기적/단축 승리/�
 export const CHALLENGES_6 = [
   { id: 'falseVictory', name: '거짓 승리', desc: `5목을 완성해도, 그 라인에 AI 돌이 하나라도 인접해 있으면 승리로 인정되지 않아요. ${CHALLENGES_6_CARD_BAN_NOTE}` },
   { id: 'infiniteLoop', name: '무한 굴레', desc: `10수마다 판 위의 내 돌이 전부 사라져요 (AI 돌은 그대로예요). ${CHALLENGES_6_CARD_BAN_NOTE}` },
-  { id: 'shadowWar', name: '그림자 전쟁', desc: `나는 카드를 아예 쓸 수 없어요. AI는 카드가 무제한이에요(30장으로 시작). ${CHALLENGES_6_CARD_BAN_NOTE}` },
+  { id: 'shadowWar', name: '그림자 전쟁', desc: `나는 카드를 아예 쓸 수 없어요. AI는 모든 카드를 다 가지고 있고, 카드를 써도 손에서 사라지지 않아요. ${CHALLENGES_6_CARD_BAN_NOTE}` },
   { id: 'miracleStreak', name: '기적의 연속', desc: `내가 두는 모든 수는 1% 확률로만 실제로 놓여요. (연금술/관통 카드도 이 챌린지에서 뽑을 수 없어요.) ${CHALLENGES_6_CARD_BAN_NOTE}` },
   { id: 'aiRebellion', name: 'AI의 반란', desc: `AI는 매 턴 무조건 4수씩 둬요. ${CHALLENGES_6_CARD_BAN_NOTE}` },
   { id: 'winDenied', name: '승리 방지', desc: `내가 5목을 완성하면 99% 확률로 승리가 무효 처리되고 그 즉시 내 돌이 전부 사라져요. (1% 확률로만 진짜 승리로 인정돼요.) ${CHALLENGES_6_CARD_BAN_NOTE}` },

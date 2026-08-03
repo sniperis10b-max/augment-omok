@@ -1018,6 +1018,11 @@ function removeFromHand(state, player, cardId) {
     return next;
   }
 
+  // 챌린지 "그림자 전쟁": AI는 카드를 써도 손에서 사라지지 않아요 (진짜 무제한).
+  if (next.challengeId === 'shadowWar' && next.aiPlayer && player === next.aiPlayer) {
+    return next;
+  }
+
   const hand = next.draft.hands[player].filter((id, idx, arr) => {
     const firstIdx = arr.indexOf(actualCardId);
     return !(idx === firstIdx && id === actualCardId);
@@ -2177,15 +2182,15 @@ export function gameReducer(state, action) {
         };
       }
 
-      // 챌린지 "그림자 전쟁": 나는 카드를 아예 못 쓰고, AI는 카드가 무제한(30장)으로 시작해요.
+      // 챌린지 "그림자 전쟁": 나는 카드를 아예 못 쓰고, AI는 모든 카드를 다 가진 채로
+      // 시작해요 (카드를 써도 손에서 안 사라져서 사실상 무제한이에요).
       if (challengeId === 'shadowWar' && aiPlayer) {
-        const aiPool = poolForPlayerFiltered(aiPlayer, base);
-        const aiHand = Array.from({ length: 30 }, () => aiPool[Math.floor(Math.random() * aiPool.length)]);
+        const aiHand = poolForPlayerFiltered(aiPlayer, base);
         return {
           ...base,
           phase: 'play',
           turn: BLACK,
-          message: '그림자 전쟁! 나는 카드를 쓸 수 없고, AI는 카드가 무제한이에요.',
+          message: '그림자 전쟁! 나는 카드를 쓸 수 없고, AI는 모든 카드를 다 가지고 있어요.',
           draft: {
             pool: [],
             hands: { [BLACK]: [], [WHITE]: [], [aiPlayer]: aiHand },
@@ -2381,13 +2386,12 @@ export function gameReducer(state, action) {
         }
 
         if (state.challengeId === 'shadowWar' && state.aiPlayer) {
-          const aiPool = poolForPlayerFiltered(state.aiPlayer, base);
-          const aiHand = Array.from({ length: 30 }, () => aiPool[Math.floor(Math.random() * aiPool.length)]);
+          const aiHand = poolForPlayerFiltered(state.aiPlayer, base);
           return {
             ...base,
             phase: 'play',
             turn: BLACK,
-            message: '그림자 전쟁! 나는 카드를 쓸 수 없고, AI는 카드가 무제한이에요.',
+            message: '그림자 전쟁! 나는 카드를 쓸 수 없고, AI는 모든 카드를 다 가지고 있어요.',
             draft: {
               pool: [],
               hands: { [BLACK]: [], [WHITE]: [], [state.aiPlayer]: aiHand },
