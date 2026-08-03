@@ -5391,7 +5391,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       <TurnTimer state={state} dispatch={dispatch} online={online} />
 
       <div className="board-scroll">
-        <Board state={state} dispatch={dispatch} online={online} settings={settings} />
+        <Board state={state} dispatch={dispatch} online={online} settings={settings} user={user} />
       </div>
 
       {showMoveLog && <MoveLogPanel state={state} onClose={() => setShowMoveLog(false)} />}
@@ -5596,7 +5596,7 @@ function HandPanel({ player, state, dispatch, disabled, online }) {
   );
 }
 
-function Board({ state, dispatch, online, settings }) {
+function Board({ state, dispatch, online, settings, user }) {
   const size = state.board.length;
   const gapPct = 100 / (size - 1);
   const gameOver = state.phase === 'over';
@@ -5714,7 +5714,7 @@ function Board({ state, dispatch, online, settings }) {
                       value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'
                     } ${protectedStone ? 'stone-protected' : ''} ${markedStone ? 'stone-marked' : ''} ${isLastMove ? placementEffect.className : ''} ${
                       state.challengeId === 'silhouette' && value !== WILD ? (value === 1 ? 'stone-silhouette-fill' : 'stone-silhouette-ring') : ''
-                    }`}
+                    } ${settings.stoneSkin === 'milkyWay' && isDevAccount(user) ? 'stone-galaxy-shimmer' : ''}`}
                     style={stoneStyle || undefined}
                   >
                     {isLastMove && <span className="last-move-dot" />}
