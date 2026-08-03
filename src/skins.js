@@ -763,6 +763,34 @@ export const STONE_SKINS = [
     whiteBorder: '#c9bfe0',
     questDesc: '챌린지 세트 6 (8개) 전부 클리어',
   },
+  {
+    // 짙은 심해 바닷속에 발광 플랑크톤 점들과 해파리처럼 은은하게 퍼지는 생체발광 빛무리,
+    // 그리고 비스듬히 흐르는 발광 정맥 줄기를 여러 겹으로 쌓아 만들었어요.
+    id: 'bioluminescence',
+    name: '심해 생물발광',
+    black:
+      'radial-gradient(circle, #7ef9ff 0%, rgba(126,249,255,0.85) 14%, rgba(126,249,255,0) 45%), '
+      + 'radial-gradient(circle, #4dffb8 0%, rgba(77,255,184,0.8) 14%, rgba(77,255,184,0) 45%), '
+      + 'radial-gradient(circle, rgba(126,249,255,0.55) 0%, rgba(126,249,255,0) 55%), '
+      + 'radial-gradient(circle, rgba(77,255,184,0.4) 0%, rgba(77,255,184,0) 55%), '
+      + 'radial-gradient(ellipse 60% 32%, rgba(80,220,220,0.4) 0%, rgba(80,220,220,0) 70%), '
+      + 'linear-gradient(110deg, rgba(80,220,220,0) 35%, rgba(100,230,230,0.3) 48%, rgba(160,255,255,0.42) 50%, rgba(100,230,230,0.3) 52%, rgba(80,220,220,0) 65%), '
+      + 'radial-gradient(circle at 35% 40%, #0a1f2e, #010508 78%)',
+    blackPosition: '20% 66%, 68% 30%, 45% 82%, 78% 55%, 60% 45%, 0 0, 0 0',
+    blackSize: '8% 8%, 6% 6%, 4% 4%, 5% 5%, 55% 32%, 100% 100%, 100% 100%',
+    white:
+      'radial-gradient(circle, #eafffe 0%, rgba(190,255,250,0.95) 14%, rgba(190,255,250,0) 45%), '
+      + 'radial-gradient(circle, #baffe0 0%, rgba(186,255,224,0.85) 14%, rgba(186,255,224,0) 45%), '
+      + 'radial-gradient(circle, rgba(190,255,250,0.6) 0%, rgba(190,255,250,0) 55%), '
+      + 'radial-gradient(circle, rgba(186,255,224,0.4) 0%, rgba(186,255,224,0) 55%), '
+      + 'radial-gradient(ellipse 55% 30%, rgba(140,225,225,0.35) 0%, rgba(140,225,225,0) 70%), '
+      + 'linear-gradient(110deg, rgba(140,225,225,0) 35%, rgba(170,235,235,0.3) 48%, rgba(220,255,255,0.45) 50%, rgba(170,235,235,0.3) 52%, rgba(140,225,225,0) 65%), '
+      + 'radial-gradient(circle at 35% 40%, #eaf7f7, #cfe8e8 78%)',
+    whitePosition: '20% 66%, 68% 30%, 45% 82%, 78% 55%, 60% 45%, 0 0, 0 0',
+    whiteSize: '8% 8%, 6% 6%, 4% 4%, 5% 5%, 55% 32%, 100% 100%, 100% 100%',
+    whiteBorder: '#7dd8d8',
+    questDesc: '불가능 난이도 AI에게 30연승',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -916,6 +944,7 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'unbreakableWill': return hasCompletedAllChallenges2(ctx.challengesCleared || {});
     case 'milkyWay': return hasCompletedAllChallenges5(ctx.challengesCleared || {});
     case 'rainbowObsidian': return hasCompletedAllChallenges6(ctx.challengesCleared || {});
+    case 'bioluminescence': return (stats.impossibleWinStreak || 0) >= 30;
     case 'twins': return (stats.duplicateUses || 0) >= 30;
     case 'frostbite': return (stats.freezeCellUses || 0) >= 50;
     case 'swappedFate': return (stats.swapUses || 0) >= 100;
@@ -1033,6 +1062,7 @@ export function getStoneSkinProgress(skinId, stats = {}, ctx = {}) {
     case 'gemstoneRough': return clampProgress(stats.rankedGamesPlayed, 60);
     case 'magnetic': return clampProgress(stats.sealLineUses, 50);
     case 'constellation': return clampProgress(stats.impossibleWinStreak, 30);
+    case 'bioluminescence': return clampProgress(stats.impossibleWinStreak, 30);
     case 'dragonScale': return clampProgress(stats.flawlessVictories, 30);
     case 'teaLeaf': return clampProgress(stats.friendGamesPlayed, 50);
     case 'amethyst': return clampProgress(stats.alchemyUses, 100);
