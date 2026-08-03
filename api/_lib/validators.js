@@ -176,6 +176,17 @@ function validateMoveLogIntegrity(moveLog, rouletteRule, challengeId, humanColor
           diffs = diffs.filter((d) => !(d.before === humanColor && d.after === 0));
         }
 
+        // "반사" 카드가 활성화되어 있으면, 파괴 계열 효과(파괴/연쇄파괴/연금술/동전던지기/
+        // 주사위/낙뢰/해일/침식)를 걸었다가 오히려 그대로 반사당해서, 원래 대상이 아니라
+        // 시전자(mover) 자신의 돌 하나가 파괴되는 것으로 결과가 완전히 바뀔 수 있어요.
+        // 이 경우 diffs가 "시전자 자신의 돌 1개 → 0"이라는, 각 카드 고유의 패턴과는 전혀
+        // 다른 모양이 되는데, 이것도 정상적인 결과라서 카드별 정밀 검증보다 먼저 확인해요.
+        const REFLECTABLE_CARDS = new Set(['destroy', 'destroyChain', 'alchemy', 'coinFlip', 'dice', 'lightning', 'tsunami', 'erosion']);
+        if (REFLECTABLE_CARDS.has(cardId) && diffs.length === 1 && diffs[0].before === mover && diffs[0].after === 0) {
+          prevBoard = entry.board;
+          continue;
+        }
+
         // 위험도가 높은 카드들(상대 돌 제거/전환, 위치 조작)은 실제 효과 모양까지 정확히 대조해요.
         if (cardId === 'destroy') {
           const t = entry.targets?.[0];
