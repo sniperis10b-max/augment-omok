@@ -1454,6 +1454,47 @@ function resolveTargetedEffect(state, cardId, targets) {
       }
       next.provenWinCount = provenCount;
     }
+    // 챌린지 "거짓 승리": 사람(나)이 완성한 라인의 어느 칸이든 AI 돌과 8방향으로 인접해
+    // 있으면 승리로 인정하지 않아요.
+    if (winner && next.challengeId === 'falseVictory' && winner === next.humanColor) {
+      const line = findLineCells(board, t.x, t.y, winner, 5, next.markedStones);
+      const opponent = otherPlayer(winner);
+      const size = board.length;
+      let touchesEnemy = false;
+      if (line) {
+        outerWildcardFalseVictory: for (const c of line) {
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const nx = c.x + dx, ny = c.y + dy;
+              if (nx >= 0 && nx < size && ny >= 0 && ny < size && board[ny][nx] === opponent) {
+                touchesEnemy = true;
+                break outerWildcardFalseVictory;
+              }
+            }
+          }
+        }
+      }
+      if (touchesEnemy) {
+        const res = finishTurnAfterPlacement(next, player);
+        res.message = `5목을 완성했지만 상대 돌과 인접해 있어서 무효예요! ${res.message}`;
+        return res;
+      }
+    }
+    // 챌린지 "승리 방지": 사람(나)이 완성하면 99% 확률로 무효 처리되고 내 돌이 전부 사라져요.
+    if (winner && next.challengeId === 'winDenied' && winner === next.humanColor && Math.random() >= 0.01) {
+      const size = board.length;
+      const shatteredBoard = board.map((row) => row.slice());
+      for (let sy = 0; sy < size; sy++) {
+        for (let sx = 0; sx < size; sx++) {
+          if (shatteredBoard[sy][sx] === winner) shatteredBoard[sy][sx] = 0;
+        }
+      }
+      const shatteredState = { ...next, board: shatteredBoard };
+      const res = finishTurnAfterPlacement(shatteredState, player);
+      res.message = `5목을 완성했지만 승리가 무효 처리되고 내 돌이 전부 사라졌어요! ${res.message}`;
+      return res;
+    }
     if (winner) {
       next.phase = 'over';
       next.winner = winner;
