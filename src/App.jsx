@@ -1059,7 +1059,7 @@ export default function App() {
                     // 계속 누적해요 (세트를 여러 번 반복 클리어했는지 확인하는 데 써요).
                     bumpCounter(user.uid, `challengeWinCounts/${state.challengeId}`, 1).catch(() => {});
                   }
-                  if (state.challengeId && state.challengeId !== 'ladder' && !challengesCleared[state.challengeId]) {
+                  if (state.challengeId && state.challengeId !== 'ladder' && state.challengeId !== 'tenWinStreak' && !challengesCleared[state.challengeId]) {
                     await addToStatSet(user.uid, 'challengesCleared', state.challengeId);
                     setChallengesCleared((prev) => ({ ...prev, [state.challengeId]: true }));
                     const challenge = getChallengeById(state.challengeId);
