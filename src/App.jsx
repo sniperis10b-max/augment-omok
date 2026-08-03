@@ -988,6 +988,16 @@ export default function App() {
             bumpCardGameOutcome([...usedThisGame], result === 'win');
           }
 
+          // 파편 폭발 이펙트: 파괴류 카드로 상대 돌을 파괴한 누적 개수 (2인 로컬 대국은
+          // myColor가 없어서 이 블록 자체가 실행 안 되니 자동으로 제외돼요).
+          if (isFirebaseConfigured()) {
+            const opponentColor = otherPlayer(myColor);
+            const destroyedThisGame = (state.stoneLossLog || []).filter((l) => l.owner === opponentColor).length;
+            if (destroyedThisGame > 0) {
+              bumpCounter(user.uid, 'destroyedStonesCount', destroyedThisGame).catch(() => {});
+            }
+          }
+
           // 시즌 패스: 대국 판수(승패 무관, 2인 로컬 대국은 myColor가 없어서 이미 제외됨)
           if (isFirebaseConfigured() && isSeasonActive()) {
             bumpCounter(user.uid, 'seasonGamesPlayed', 1).catch(() => {});
@@ -1044,6 +1054,11 @@ export default function App() {
                   }
 
                   // 챌린지(핸디캡) 클리어 기록 - 5단 계단은 별도 effect에서 단계별로 처리해요.
+                  if (state.challengeId && state.challengeId !== 'ladder') {
+                    // 균열 이펙트용: "처음 클리어했는지"와 무관하게 이 챌린지를 이긴 횟수 자체를
+                    // 계속 누적해요 (세트를 여러 번 반복 클리어했는지 확인하는 데 써요).
+                    bumpCounter(user.uid, `challengeWinCounts/${state.challengeId}`, 1).catch(() => {});
+                  }
                   if (state.challengeId && state.challengeId !== 'ladder' && !challengesCleared[state.challengeId]) {
                     await addToStatSet(user.uid, 'challengesCleared', state.challengeId);
                     setChallengesCleared((prev) => ({ ...prev, [state.challengeId]: true }));
@@ -1137,6 +1152,10 @@ export default function App() {
                   // 시즌 패스: 이번 시즌 온라인 대전 판수 (주간 미션 "온라인 대전 5판"용)
                   if (isSeasonActive()) {
                     bumpCounter(user.uid, 'seasonOnlineGames', 1).catch(() => {});
+                  }
+
+                  if (result === 'win') {
+                    bumpCounter(user.uid, 'onlineWins', 1).catch(() => {});
                   }
 
                   if (result === 'draw' && state.drawByOffer) {

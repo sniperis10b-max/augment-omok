@@ -1,12 +1,39 @@
 // 돌을 놓을 때 나오는 시각 이펙트 카탈로그예요. 스킨보다 조건을 더 어렵게 잡았어요.
 // className은 index.css에 정의된 CSS 애니메이션 클래스와 짝을 이뤄요.
 
+import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5 } from './challenges.js';
+
+const CHALLENGE_SETS = [CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5];
+
+// 세트 하나(10개 챌린지)를 전부 최소 minTimes번씩 이겼는지 확인해요. challengeWinCounts는
+// { [challengeId]: 누적 승리 횟수 } 형태예요.
+function setClearedAtLeast(set, challengeWinCounts, minTimes) {
+  return set.every((c) => (challengeWinCounts?.[c.id] || 0) >= minTimes);
+}
+
+// 5개 세트 전부에서 "가장 적게 이긴 챌린지의 승수"들 중 최솟값 - 진행률 표시에 써요.
+function minChallengeSetClears(challengeWinCounts) {
+  let minAcrossSets = Infinity;
+  for (const set of CHALLENGE_SETS) {
+    for (const c of set) {
+      const n = challengeWinCounts?.[c.id] || 0;
+      if (n < minAcrossSets) minAcrossSets = n;
+    }
+  }
+  return minAcrossSets === Infinity ? 0 : minAcrossSets;
+}
+
 export const PLACEMENT_EFFECTS = [
   { id: 'none', name: '없음 (기본)', className: '', questDesc: '기본 제공' },
   { id: 'shock', name: '충격파', className: 'fx-shock', questDesc: '랭크전 15연승' },
   { id: 'ripple', name: '파동', className: 'fx-ripple', questDesc: '마스터 티어 도달 후, 그 상태에서 랭크전 10승 추가' },
   { id: 'flash', name: '섬광', className: 'fx-flash', questDesc: "불가능 AI 10승 + 흑 10승 + 백 10승 모두 달성" },
   { id: 'glow', name: '잔광', className: 'fx-glow', questDesc: '스킨 6종 이상 + 칭호 20개 이상 해금' },
+  { id: 'fragBurst', name: '파편 폭발', className: 'fx-fragburst', questDesc: '파괴류 카드로 상대 돌 누적 500개 파괴 (온라인/AI 대전만 인정)' },
+  { id: 'crack', name: '균열', className: 'fx-crack', questDesc: '챌린지 세트 1~5를 각각 3번씩 클리어' },
+  { id: 'magnetPull', name: '자석 흡입', className: 'fx-magnetpull', questDesc: '칭호 30개 이상 획득' },
+  { id: 'stamp', name: '도장 찍기', className: 'fx-stamp', questDesc: '온라인 대전 누적 승수 300회' },
+  { id: 'ringChase', name: '링 체이서', className: 'fx-ringchase', questDesc: '온라인 대전 누적 300판 플레이' },
 ];
 
 export function getPlacementEffectById(id) {
@@ -26,6 +53,11 @@ export function isPlacementEffectUnlocked(effectId, stats = {}, ctx = {}) {
         && (stats.whiteWins || 0) >= 10;
     case 'glow':
       return (ctx.unlockedSkinCount || 0) >= 6 && (ctx.titleCount || 0) >= 20;
+    case 'fragBurst': return (stats.destroyedStonesCount || 0) >= 500;
+    case 'crack': return CHALLENGE_SETS.every((set) => setClearedAtLeast(set, stats.challengeWinCounts, 3));
+    case 'magnetPull': return (ctx.titleCount || 0) >= 30;
+    case 'stamp': return (stats.onlineWins || 0) >= 300;
+    case 'ringChase': return (stats.onlineGames || 0) >= 300;
     default: return false;
   }
 }
@@ -53,6 +85,11 @@ export function getPlacementEffectProgress(effectId, stats = {}, ctx = {}) {
       const p2 = clampProgress(ctx.titleCount, 20).pct;
       return { current: null, target: null, pct: Math.min(p1, p2) };
     }
+    case 'fragBurst': return clampProgress(stats.destroyedStonesCount, 500);
+    case 'crack': return clampProgress(minChallengeSetClears(stats.challengeWinCounts), 3);
+    case 'magnetPull': return clampProgress(ctx.titleCount, 30);
+    case 'stamp': return clampProgress(stats.onlineWins, 300);
+    case 'ringChase': return clampProgress(stats.onlineGames, 300);
     default: return null;
   }
 }
