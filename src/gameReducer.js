@@ -474,13 +474,14 @@ function finishTurnAfterPlacement(state, placingPlayer) {
   next = explodeBombs(next);
 
   // 챌린지 "무한 굴레": 10수마다 판 위의 내(사람) 돌이 전부 사라져요 (AI 돌은 그대로예요).
+  // 강화된(reinforce로 보호된) 돌은 다른 모든 파괴 효과와 마찬가지로 예외예요.
   if (next.challengeId === 'infiniteLoop' && next.humanColor && next.ply % 10 === 0 && next.ply > 0) {
     const size = next.board.length;
     const clearedBoard = next.board.map((row) => row.slice());
     let cleared = 0;
     for (let cy = 0; cy < size; cy++) {
       for (let cx = 0; cx < size; cx++) {
-        if (clearedBoard[cy][cx] === next.humanColor) { clearedBoard[cy][cx] = 0; cleared++; }
+        if (clearedBoard[cy][cx] === next.humanColor && !next.protectedStones[key(cx, cy)]) { clearedBoard[cy][cx] = 0; cleared++; }
       }
     }
     if (cleared > 0) {
@@ -490,7 +491,7 @@ function finishTurnAfterPlacement(state, placingPlayer) {
   }
 
   // 챌린지 "변질": 내(사람)가 수를 둘 때마다, 판 위의 내 돌 전부가 각각 80% 확률로
-  // 상대 색으로 바뀌어요.
+  // 상대 색으로 바뀌어요. 강화된(보호된) 돌은 예외예요.
   if (next.challengeId === 'corruption' && next.humanColor && placingPlayer === next.humanColor) {
     const size = next.board.length;
     const opponent = otherPlayer(next.humanColor);
@@ -498,7 +499,7 @@ function finishTurnAfterPlacement(state, placingPlayer) {
     let corrupted = 0;
     for (let cy = 0; cy < size; cy++) {
       for (let cx = 0; cx < size; cx++) {
-        if (corruptedBoard[cy][cx] === next.humanColor && Math.random() < 0.8) {
+        if (corruptedBoard[cy][cx] === next.humanColor && !next.protectedStones[key(cx, cy)] && Math.random() < 0.8) {
           corruptedBoard[cy][cx] = opponent;
           corrupted++;
         }
