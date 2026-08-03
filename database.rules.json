@@ -69,6 +69,9 @@
           "$skinId": {
             ".write": "auth != null && auth.token.email === 'sniperis10b@gmail.com'"
           }
+        },
+        "achievementStats": {
+          ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'sniperis10b@gmail.com')"
         }
       }
     },
