@@ -2177,6 +2177,25 @@ export function gameReducer(state, action) {
         };
       }
 
+      // 챌린지 "그림자 전쟁": 나는 카드를 아예 못 쓰고, AI는 카드가 무제한(30장)으로 시작해요.
+      if (challengeId === 'shadowWar' && aiPlayer) {
+        const aiPool = poolForPlayerFiltered(aiPlayer, base);
+        const aiHand = Array.from({ length: 30 }, () => aiPool[Math.floor(Math.random() * aiPool.length)]);
+        return {
+          ...base,
+          phase: 'play',
+          turn: BLACK,
+          message: '그림자 전쟁! 나는 카드를 쓸 수 없고, AI는 카드가 무제한이에요.',
+          draft: {
+            pool: [],
+            hands: { [BLACK]: [], [WHITE]: [], [aiPlayer]: aiHand },
+            order: [],
+            currentIndex: 0,
+            options: [],
+          },
+        };
+      }
+
       // 룰렛 "매턴 카드 자동 지급"도 드래프트를 건너뛰고, 대신 매 턴마다 카드를 자동으로 받아요.
       // (선공인 흑도 형평성 있게 첫 턴에 카드 1장을 미리 받아요 - 안 그러면 advanceTurn을
       // 한 번도 안 거치는 첫 턴만 카드 없이 시작해서 백보다 불리해요.)
@@ -2351,6 +2370,24 @@ export function gameReducer(state, action) {
             phase: 'play',
             turn: BLACK,
             message: '불가능 챌린지! 나는 카드 없이, AI는 카드 30장으로 시작해요.',
+            draft: {
+              pool: [],
+              hands: { [BLACK]: [], [WHITE]: [], [state.aiPlayer]: aiHand },
+              order: [],
+              currentIndex: 0,
+              options: [],
+            },
+          };
+        }
+
+        if (state.challengeId === 'shadowWar' && state.aiPlayer) {
+          const aiPool = poolForPlayerFiltered(state.aiPlayer, base);
+          const aiHand = Array.from({ length: 30 }, () => aiPool[Math.floor(Math.random() * aiPool.length)]);
+          return {
+            ...base,
+            phase: 'play',
+            turn: BLACK,
+            message: '그림자 전쟁! 나는 카드를 쓸 수 없고, AI는 카드가 무제한이에요.',
             draft: {
               pool: [],
               hands: { [BLACK]: [], [WHITE]: [], [state.aiPlayer]: aiHand },
