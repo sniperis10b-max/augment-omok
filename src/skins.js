@@ -341,6 +341,54 @@ export const BOARD_SKINS = [
     line: 'rgba(212, 175, 55, 0.35)',
     questDesc: '챌린지 세트 4 (10개) 전부 클리어',
   },
+  {
+    // 기존 "은하수"/"네뷸러" 보드보다 훨씬 촘촘하게, 크기가 다른 별 10개 + 성운 구름 3겹을
+    // 겹겹이 쌓아서 진짜 별자리 사진처럼 보이도록 만들었어요.
+    id: 'starCluster',
+    name: '별무리',
+    background:
+      'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.9) 40%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, #ffe9c2 0%, rgba(255,233,194,0.9) 40%, rgba(255,233,194,0) 100%), '
+      + 'radial-gradient(circle, #c2f0ff 0%, rgba(194,240,255,0.9) 40%, rgba(194,240,255,0) 100%), '
+      + 'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.85) 40%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, #ffe9c2 0%, rgba(255,233,194,0.8) 40%, rgba(255,233,194,0) 100%), '
+      + 'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.75) 40%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, #c2f0ff 0%, rgba(194,240,255,0.7) 40%, rgba(194,240,255,0) 100%), '
+      + 'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.7) 40%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, #ffe9c2 0%, rgba(255,233,194,0.6) 40%, rgba(255,233,194,0) 100%), '
+      + 'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.6) 40%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(200,230,255,0.6) 0%, rgba(200,230,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(255,235,200,0.55) 0%, rgba(255,235,200,0) 100%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(200,230,255,0.5) 0%, rgba(200,230,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.8) 40%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 100%), '
+      + 'radial-gradient(circle, #ffe9c2 0%, rgba(255,233,194,0.75) 40%, rgba(255,233,194,0) 100%), '
+      + 'radial-gradient(circle, rgba(194,240,255,0.55) 0%, rgba(194,240,255,0) 100%), '
+      + 'radial-gradient(circle, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 100%), '
+      + 'linear-gradient(125deg, rgba(255,255,255,0) 32%, rgba(200,210,255,0.14) 45%, rgba(255,255,255,0.2) 50%, rgba(200,210,255,0.14) 55%, rgba(255,255,255,0) 68%), '
+      + 'radial-gradient(circle at 25% 70%, rgba(140,70,220,0.35) 0%, rgba(140,70,220,0) 60%), '
+      + 'radial-gradient(circle at 75% 25%, rgba(40,180,200,0.3) 0%, rgba(40,180,200,0) 60%), '
+      + 'radial-gradient(circle at 60% 80%, rgba(220,80,160,0.22) 0%, rgba(220,80,160,0) 55%), '
+      + 'radial-gradient(circle at 35% 35%, #1c1338, #05040d 78%)',
+    backgroundPosition:
+      '8% 12%, 22% 28%, 38% 8%, 52% 35%, 68% 15%, 80% 42%, 14% 55%, 44% 68%, 62% 62%, 90% 75%, '
+      + '5% 45%, 30% 90%, 48% 55%, 72% 68%, 85% 10%, 95% 50%, 18% 5%, 58% 90%, '
+      + '12% 88%, 35% 82%, 55% 92%, 78% 85%, 95% 92%, '
+      + '0 0, 0 0, 0 0, 0 0, 0 0',
+    backgroundSize:
+      '1.4% 1.4%, 1% 1%, 0.8% 0.8%, 1.2% 1.2%, 0.9% 0.9%, 1.1% 1.1%, 0.7% 0.7%, 1% 1%, 0.8% 0.8%, 1.3% 1.3%, '
+      + '0.5% 0.5%, 0.4% 0.4%, 0.5% 0.5%, 0.4% 0.4%, 0.6% 0.6%, 0.4% 0.4%, 0.5% 0.5%, 0.4% 0.4%, '
+      + '1% 1%, 0.4% 0.4%, 0.9% 0.9%, 0.5% 0.5%, 0.4% 0.4%, '
+      + '100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%',
+    border: '#241a44',
+    line: 'rgba(200, 190, 255, 0.22)',
+    questDesc: '(해금 조건 미정 - 추후 연결 예정)',
+  },
 ];
 
 export const STONE_SKINS = [
@@ -912,6 +960,8 @@ export function isBoardSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'libraryArchive': return (stats.totalCardUses || 0) >= 150;
     case 'seasonFireworksSky': return (stats.seasonLevel || 0) >= 10;
     case 'casinoFelt': return hasCompletedAllChallenges4(ctx.challengesCleared || {});
+    // TODO: 별무리 보드 스킨 해금 조건 아직 미정
+    case 'starCluster': return false;
     default: return false;
   }
 }
