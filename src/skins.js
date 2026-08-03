@@ -3,7 +3,7 @@
 // "내 계정만 열어준다"는 건 UI에서 개발자 계정일 때만 선택 가능하게 막아둔다는 뜻이에요).
 
 import { CARDS } from './cards.js';
-import { CHALLENGES, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4, hasCompletedAllChallenges5 } from './challenges.js';
+import { CHALLENGES, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4, hasCompletedAllChallenges5, hasCompletedAllChallenges6 } from './challenges.js';
 
 // background-image는 색상값(#fff 같은)을 그대로 못 받아서, 단색 스킨은 그라데이션으로 감싸줘요.
 // (실제 게임판/돌 렌더링과 설정 화면의 미리보기 스와치 둘 다 이 함수로 통일해서 써요.)
@@ -740,6 +740,29 @@ export const STONE_SKINS = [
     whiteBorder: '#b39ddb',
     questDesc: '챌린지 세트 5 (10개) 전부 클리어',
   },
+  {
+    // 무지개 흑요석(rainbow obsidian) 컨셉: 매끈한 유리질 검은 표면 위에 보라~시안~핑크~금빛이
+    // 비스듬히 스치는 무지개 유광 줄무늬 + 작은 하이라이트 점으로 광택 재질감을 표현했어요.
+    // 백돌은 같은 컨셉을 문스톤(달빛석)으로 옮겨서 파스텔 톤으로 맞췄어요.
+    id: 'rainbowObsidian',
+    name: '무지개',
+    black:
+      'radial-gradient(circle 6px at 28% 24%, rgba(255,255,255,0.9), transparent 100%), '
+      + 'linear-gradient(128deg, transparent 26%, rgba(90,60,190,0.55) 38%, rgba(50,170,190,0.55) 45%, rgba(210,70,150,0.45) 52%, rgba(230,180,60,0.3) 58%, transparent 68%), '
+      + 'linear-gradient(48deg, transparent 60%, rgba(60,140,220,0.25) 72%, transparent 82%), '
+      + 'radial-gradient(circle at 38% 32%, #333338, #060608 78%)',
+    blackPosition: '0 0, 0 0, 0 0, 0 0',
+    blackSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%',
+    white:
+      'radial-gradient(circle 7px at 28% 24%, rgba(255,255,255,1), transparent 100%), '
+      + 'linear-gradient(128deg, transparent 26%, rgba(190,210,255,0.65) 38%, rgba(220,240,255,0.7) 45%, rgba(230,200,255,0.5) 52%, rgba(255,235,210,0.3) 58%, transparent 68%), '
+      + 'linear-gradient(48deg, transparent 60%, rgba(180,210,255,0.3) 72%, transparent 82%), '
+      + 'radial-gradient(circle at 38% 32%, #faf8fc, #ddd7ea 78%)',
+    whitePosition: '0 0, 0 0, 0 0, 0 0',
+    whiteSize: '100% 100%, 100% 100%, 100% 100%, 100% 100%',
+    whiteBorder: '#c9bfe0',
+    questDesc: '챌린지 세트 6 (8개) 전부 클리어',
+  },
 ];
 
 export function getBoardSkinById(id) {
@@ -892,6 +915,7 @@ export function isStoneSkinUnlocked(skinId, stats = {}, ctx = {}) {
     case 'lightningMark': return hasCompletedAllChallenges3(ctx.challengesCleared || {});
     case 'unbreakableWill': return hasCompletedAllChallenges2(ctx.challengesCleared || {});
     case 'milkyWay': return hasCompletedAllChallenges5(ctx.challengesCleared || {});
+    case 'rainbowObsidian': return hasCompletedAllChallenges6(ctx.challengesCleared || {});
     case 'twins': return (stats.duplicateUses || 0) >= 30;
     case 'frostbite': return (stats.freezeCellUses || 0) >= 50;
     case 'swappedFate': return (stats.swapUses || 0) >= 100;

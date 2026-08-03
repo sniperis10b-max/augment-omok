@@ -452,20 +452,6 @@ body {
   animation: stonePop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), stoneGlitchFlicker 3.2s infinite;
 }
 
-/* 은하수 스킨 전용(개발자 계정에서만): 색조가 보라~파랑 사이로 은은하게 넘실거리는 효과 (G. 오로라 물결) */
-.stone-galaxy-shimmer {
-  animation: stonePop 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), galaxyHueShift 6s ease-in-out infinite;
-}
-
-@keyframes galaxyHueShift {
-  0%, 100% {
-    filter: hue-rotate(0deg) brightness(1);
-  }
-  50% {
-    filter: hue-rotate(25deg) brightness(1.1);
-  }
-}
-
 @keyframes stoneGlitchFlicker {
   0%, 5%, 11%, 34%, 40%, 63%, 69%, 91%, 100% {
     filter: brightness(1) contrast(1) hue-rotate(0deg) saturate(1);

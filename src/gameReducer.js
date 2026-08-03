@@ -12,7 +12,7 @@ import {
   DIRECTIONS,
 } from './gameLogic.js';
 import { CARDS, drawRandomCards, poolForPlayer } from './cards.js';
-import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS, PROB_CARD_IDS, CHALLENGES_5 } from './challenges.js';
+import { DESTROY_CARD_IDS, DEFENSE_CARD_IDS, LADDER_LEVELS, PROB_CARD_IDS, CHALLENGES_5, CHALLENGES_6 } from './challenges.js';
 import { pickRandomRouletteRule, rollingWinLength, getRouletteRuleById } from './roulette.js';
 
 const STANDALONE = new Set([
@@ -191,29 +191,43 @@ function pickRandomEmptyCells(state, n, zone = null) {
   return options.slice(0, n);
 }
 
-// 챌린지 세트 5에서 사람/AI 둘 다 못 쓰게 막는 카드들 (승리 조건을 바꿔버려서 그 세트의
-// 챌린지들과 충돌해요).
-const CHALLENGES_5_BANNED_CARDS = new Set(['fourToWin', 'miracle', 'shortWin', 'longWin']);
+// 챌린지 세트 5, 6에서 사람/AI 둘 다 못 쓰게 막는 카드들 (승리 조건을 바꿔버려서 그
+// 세트들의 챌린지와 충돌해요).
+const WIN_CONDITION_BANNED_CARDS = new Set(['fourToWin', 'miracle', 'shortWin', 'longWin']);
+// 챌린지 "기적의 연속"에서 사람/AI 둘 다 못 쓰게 막는 카드들 (착수 성공률 자체를 우회할
+// 수 있는 카드라서 막아요).
+const MIRACLE_STREAK_BANNED_CARDS = new Set(['alchemy', 'overwrite']);
 
-// poolForPlayer(player)의 결과에 챌린지5 카드 금지를 적용해요. 드래프트뿐 아니라 "머릿수
-// 싸움"/"재수정"/"무작위 소환"/"복권"처럼 게임 도중에 무작위 카드를 얻는 카드 효과들도
-// 전부 이 함수를 거쳐야, 그 효과들로 금지된 카드가 몰래 들어오는 걸 막을 수 있어요.
+function isWinConditionChallenge(challengeId) {
+  return CHALLENGES_5.some((c) => c.id === challengeId) || CHALLENGES_6.some((c) => c.id === challengeId);
+}
+
+// poolForPlayer(player)의 결과에 챌린지5/6/기적의 연속 카드 금지를 적용해요. 드래프트뿐
+// 아니라 "머릿수 싸움"/"재수정"/"무작위 소환"/"복권"처럼 게임 도중에 무작위 카드를
+// 얻는 카드 효과들도 전부 이 함수를 거쳐야, 그 효과들로 금지된 카드가 몰래 들어오는 걸
+// 막을 수 있어요.
 function poolForPlayerFiltered(player, state) {
-  const pool = poolForPlayer(player);
-  if (state?.challengeId && CHALLENGES_5.some((c) => c.id === state.challengeId)) {
-    return pool.filter((id) => !CHALLENGES_5_BANNED_CARDS.has(id));
+  let pool = poolForPlayer(player);
+  if (state?.challengeId && isWinConditionChallenge(state.challengeId)) {
+    pool = pool.filter((id) => !WIN_CONDITION_BANNED_CARDS.has(id));
+  }
+  if (state?.challengeId === 'miracleStreak') {
+    pool = pool.filter((id) => !MIRACLE_STREAK_BANNED_CARDS.has(id));
   }
   return pool;
 }
 
 // 챌린지의 "파괴 금지"/"방어 금지" 같은 카드 제한을 사람 플레이어의 드래프트 풀에만 적용해요.
-// 단, 챌린지 세트 5의 승리조건 카드 금지(사목 승리/기적/단축 승리/연장 승리)는 사람/AI
-// 양쪽 모두에게 적용돼요 - 안 그러면 AI가 그 카드로 승리 조건을 바꿔서 챌린지 자체가
-// 무의미해질 수 있어요.
+// 단, 챌린지 세트 5/6의 승리조건 카드 금지(사목 승리/기적/단축 승리/연장 승리)와 "기적의
+// 연속"의 연금술/관통 금지는 사람/AI 양쪽 모두에게 적용돼요 - 안 그러면 AI가 그 카드로
+// 챌린지 취지를 무력화할 수 있어요.
 function draftPoolForChallenge(pool, player, state) {
   let filtered = pool;
-  if (state.challengeId && CHALLENGES_5.some((c) => c.id === state.challengeId)) {
-    filtered = filtered.filter((id) => !CHALLENGES_5_BANNED_CARDS.has(id));
+  if (state.challengeId && isWinConditionChallenge(state.challengeId)) {
+    filtered = filtered.filter((id) => !WIN_CONDITION_BANNED_CARDS.has(id));
+  }
+  if (state.challengeId === 'miracleStreak') {
+    filtered = filtered.filter((id) => !MIRACLE_STREAK_BANNED_CARDS.has(id));
   }
   if (!state.challengeCardBan || player !== state.humanColor) return filtered;
   return filtered.filter((id) => !state.challengeCardBan[id]);
@@ -459,6 +473,43 @@ function finishTurnAfterPlacement(state, placingPlayer) {
   let next = { ...state, ply: state.ply + 1 };
   next = explodeBombs(next);
 
+  // 챌린지 "무한 굴레": 10수마다 판 위의 내(사람) 돌이 전부 사라져요 (AI 돌은 그대로예요).
+  if (next.challengeId === 'infiniteLoop' && next.humanColor && next.ply % 10 === 0 && next.ply > 0) {
+    const size = next.board.length;
+    const clearedBoard = next.board.map((row) => row.slice());
+    let cleared = 0;
+    for (let cy = 0; cy < size; cy++) {
+      for (let cx = 0; cx < size; cx++) {
+        if (clearedBoard[cy][cx] === next.humanColor) { clearedBoard[cy][cx] = 0; cleared++; }
+      }
+    }
+    if (cleared > 0) {
+      next.board = clearedBoard;
+      next.message = `무한 굴레! 내 돌 ${cleared}개가 전부 사라졌어요. ${next.message || ''}`;
+    }
+  }
+
+  // 챌린지 "변질": 내(사람)가 수를 둘 때마다, 판 위의 내 돌 전부가 각각 80% 확률로
+  // 상대 색으로 바뀌어요.
+  if (next.challengeId === 'corruption' && next.humanColor && placingPlayer === next.humanColor) {
+    const size = next.board.length;
+    const opponent = otherPlayer(next.humanColor);
+    const corruptedBoard = next.board.map((row) => row.slice());
+    let corrupted = 0;
+    for (let cy = 0; cy < size; cy++) {
+      for (let cx = 0; cx < size; cx++) {
+        if (corruptedBoard[cy][cx] === next.humanColor && Math.random() < 0.8) {
+          corruptedBoard[cy][cx] = opponent;
+          corrupted++;
+        }
+      }
+    }
+    if (corrupted > 0) {
+      next.board = corruptedBoard;
+      next.message = `변질! 내 돌 ${corrupted}개가 상대 색으로 바뀌었어요. ${next.message || ''}`;
+    }
+  }
+
   if (placingPlayer === BLACK) {
     next.ruleFlags = { ...next.ruleFlags, ignoreDoubleFourOnce: false };
   }
@@ -691,6 +742,12 @@ function tryPlaceStone(state, clickX, clickY) {
     res.message = `도박 실패! 이번 수는 놓이지 않고 턴이 넘어갔어요. ${res.message}`;
     return res;
   }
+  // 챌린지 "기적의 연속": 내가 두는 수는 1% 확률로만 실제로 놓여요.
+  if (workingState.challengeId === 'miracleStreak' && player === workingState.humanColor && Math.random() >= 0.01) {
+    const res = advanceTurn(workingState, player);
+    res.message = `실패! 이번 수는 놓이지 않고 턴이 넘어갔어요. ${res.message}`;
+    return res;
+  }
   // 챌린지 "고립무원": 내(사람) 돌은 상대 돌과 8방향으로 붙어있는 칸에는 놓을 수 없어요.
   if (workingState.challengeId === 'isolation' && player === workingState.humanColor) {
     const size = board.length;
@@ -775,7 +832,11 @@ function tryPlaceStone(state, clickX, clickY) {
   if (workingState.challengeId === 'tripleAssault' && player === workingState.aiPlayer && !isBonusMove) {
     nextState.buffs = { ...nextState.buffs, doubleMoveRemaining: 2 };
   }
-  const winBlockedByBonusMove = isBonusMove && workingState.challengeId !== 'aiDoubleMove' && workingState.challengeId !== 'tripleAssault';
+  // 챌린지 "AI의 반란": AI만 매 턴 4수씩 둬요 (보너스 3번 = 총 4수). 어느 수로도 승리 인정.
+  if (workingState.challengeId === 'aiRebellion' && player === workingState.aiPlayer && !isBonusMove) {
+    nextState.buffs = { ...nextState.buffs, doubleMoveRemaining: 3 };
+  }
+  const winBlockedByBonusMove = isBonusMove && workingState.challengeId !== 'aiDoubleMove' && workingState.challengeId !== 'tripleAssault' && workingState.challengeId !== 'aiRebellion';
 
   const won = !winBlockedByBonusMove && checkWin(nextBoard, x, y, placedColor, { winLength, sealedLines: workingState.sealedLines, markedStones: workingState.markedStones, excludeDiagonal, onlyDiagonal });
 
@@ -794,6 +855,50 @@ function tryPlaceStone(state, clickX, clickY) {
       return res;
     }
     nextState.provenWinCount = provenCount;
+  }
+
+  // 챌린지 "거짓 승리": 사람(나)이 5목을 완성해도, 그 라인의 어느 칸이든 AI 돌과 8방향으로
+  // 인접해 있으면 승리로 인정하지 않고 계속 진행해요.
+  if (won && workingState.challengeId === 'falseVictory' && placedColor === workingState.humanColor) {
+    const line = findLineCells(nextBoard, x, y, placedColor, winLength, workingState.markedStones);
+    const opponent = otherPlayer(placedColor);
+    const size = nextBoard.length;
+    let touchesEnemy = false;
+    if (line) {
+      outerFalseVictory: for (const c of line) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = c.x + dx, ny = c.y + dy;
+            if (nx >= 0 && nx < size && ny >= 0 && ny < size && nextBoard[ny][nx] === opponent) {
+              touchesEnemy = true;
+              break outerFalseVictory;
+            }
+          }
+        }
+      }
+    }
+    if (touchesEnemy) {
+      const res = finishTurnAfterPlacement(nextState, player);
+      res.message = `5목을 완성했지만 상대 돌과 인접해 있어서 무효예요! ${res.message}`;
+      return res;
+    }
+  }
+
+  // 챌린지 "승리 방지": 사람(나)이 5목을 완성하면 99% 확률로 무효 처리되고 그 즉시 내 돌이
+  // 전부 사라져요. 1% 확률로만 진짜 승리로 인정돼요.
+  if (won && workingState.challengeId === 'winDenied' && placedColor === workingState.humanColor && Math.random() >= 0.01) {
+    const size = nextBoard.length;
+    const shatteredBoard = nextBoard.map((row) => row.slice());
+    for (let sy = 0; sy < size; sy++) {
+      for (let sx = 0; sx < size; sx++) {
+        if (shatteredBoard[sy][sx] === placedColor) shatteredBoard[sy][sx] = 0;
+      }
+    }
+    const shatteredState = { ...nextState, board: shatteredBoard };
+    const res = finishTurnAfterPlacement(shatteredState, player);
+    res.message = `5목을 완성했지만 승리가 무효 처리되고 내 돌이 전부 사라졌어요! ${res.message}`;
+    return res;
   }
 
   if (won) {
@@ -1995,11 +2100,14 @@ export function gameReducer(state, action) {
       const base = {
         ...fresh,
         aiPlayer: aiPlayer || null,
-        aiDifficulty: difficulty || 'normal',
-        // '속전속결' 챌린지는 15초, '얼어붙은 시간'은 1초, '찰나'는 0.5초로 무조건 고정돼요.
+        // '10연승' 챌린지는 반드시 최고 난이도(불가능) AI와 대결해요.
+        aiDifficulty: challengeId === 'tenWinStreak' ? 'impossible' : (difficulty || 'normal'),
+        // '속전속결' 챌린지는 15초, '얼어붙은 시간'은 1초, '찰나'는 0.5초, '10연승'은
+        // 10초로 무조건 고정돼요.
         timeLimitSec: challengeId === 'speedRun' ? 15
           : challengeId === 'frozenTime' ? 1
           : challengeId === 'instant' ? 0.5
+          : challengeId === 'tenWinStreak' ? 10
           : (timeLimitSec || 0),
         humanColor,
         challengeId: challengeId || null,
@@ -2348,6 +2456,11 @@ export function gameReducer(state, action) {
       // 챌린지 "침묵의 시작": 처음 10수 동안 나는 카드를 쓸 수 없어요.
       if (state.challengeId === 'silentStartPlayer' && player === state.humanColor && state.ply < 10) {
         return { ...state, message: `아직 침묵 중이에요 (${10 - state.ply}수 후 카드를 쓸 수 있어요).` };
+      }
+
+      // 챌린지 "그림자 전쟁": 나는 카드를 아예 쓸 수 없어요.
+      if (state.challengeId === 'shadowWar' && player === state.humanColor) {
+        return { ...state, message: '이 챌린지에서는 카드를 쓸 수 없어요.' };
       }
 
       let misfireOriginalCard = null;

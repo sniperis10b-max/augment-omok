@@ -54,11 +54,11 @@ import {
   ensureSeasonDailyMissions, ensureSeasonWeeklyMissions, claimSeasonMission, getSeasonProgressData,
   SHOP_ITEMS, purchaseShopItem, REWARD_LEVELS, devSetSeasonLevel, adminSetSeasonCoins,
 } from './seasonPass.js';
-import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5, getChallengeById, hasCompletedAllChallenges, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4, hasCompletedAllChallenges5, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
+import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5, CHALLENGES_6, getChallengeById, hasCompletedAllChallenges, hasCompletedAllChallenges2, hasCompletedAllChallenges3, hasCompletedAllChallenges4, hasCompletedAllChallenges5, hasCompletedAllChallenges6, LADDER_LEVELS, PROB_CARD_IDS } from './challenges.js';
 import { ROULETTE_RULES, getRouletteRuleById, rollingWinLength } from './roulette.js';
 import {
   TITLES, getTitleById, computeNewlyUnlockedWinTiers, checkSimpleThreshold, DESTROYER_THRESHOLD,
-  getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
+  getAchievementData, bumpCounter, bumpStreakCounter, addToStatSet, removeFromStatSet, bumpNestedCounter, markCardUsed, unlockTitle, unlockTitles, equipTitle, getTitleCounts, recomputeTitleCounts,
   getTitleHolders, revokeAllTitlesByEmail, updateWinStreak, updateLoginStreak, getTitleProgress,
   getUserProgressByEmail, adminRevokeTitles, adminGrantTitles,
 } from './achievements.js';
@@ -1066,6 +1066,16 @@ export default function App() {
                     setTitleUnlockToast({ label: '챌린지 클리어!', name: challenge?.name || state.challengeId });
                   }
 
+                  // 챌린지 "10연승": 이기면 연승 카운터를 늘리고, 10에 도달하면 클리어 처리해요.
+                  if (state.challengeId === 'tenWinStreak') {
+                    const newStreak = await bumpStreakCounter(user.uid, 'tenWinStreakProgress', true);
+                    if (newStreak >= 10 && !challengesCleared.tenWinStreak) {
+                      await addToStatSet(user.uid, 'challengesCleared', 'tenWinStreak');
+                      setChallengesCleared((prev) => ({ ...prev, tenWinStreak: true }));
+                      setTitleUnlockToast({ label: '챌린지 클리어!', name: '10연승' });
+                    }
+                  }
+
                   // 5단 계단: 이번이 마지막 단계(불가능)였으면 챌린지 전체 클리어, 아니면 다음 단계로.
                   if (state.challengeId === 'ladder') {
                     if (state.aiDifficulty === LADDER_LEVELS[LADDER_LEVELS.length - 1]) {
@@ -1197,6 +1207,19 @@ export default function App() {
                   const newStreak = await updateWinStreak(user.uid, result === 'win');
                   if (checkSimpleThreshold('eternalStreak', newStreak)) unlockAndNotify('eternalStreak');
                   else if (checkSimpleThreshold('stormStreak', newStreak)) unlockAndNotify('stormStreak');
+                }
+
+                // 챌린지 "10연승": 한 번이라도 지면 연승 카운터를 0으로 되돌리고, 챌린지 6
+                // 전체 진행 상황(이미 클리어한 7개 포함)을 전부 초기화해요.
+                if (state.challengeId === 'tenWinStreak' && result === 'loss') {
+                  await bumpStreakCounter(user.uid, 'tenWinStreakProgress', false);
+                  await removeFromStatSet(user.uid, 'challengesCleared', CHALLENGES_6.map((c) => c.id));
+                  setChallengesCleared((prev) => {
+                    const next = { ...prev };
+                    for (const c of CHALLENGES_6) delete next[c.id];
+                    return next;
+                  });
+                  setTitleUnlockToast({ label: '챌린지 6 초기화', name: '10연승에서 패배해서 챌린지 6 전체가 초기화됐어요.' });
                 }
               } catch {
                 // 업적 집계는 부가 기능이라 실패해도 게임 결과엔 영향 없어야 해요
@@ -4270,7 +4293,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
   }
 
   if (step === 'challenge-select') {
-    const activeList = challengeSetTab === 'set1' ? CHALLENGES : challengeSetTab === 'set2' ? CHALLENGES_2 : challengeSetTab === 'set3' ? CHALLENGES_3 : challengeSetTab === 'set4' ? CHALLENGES_4 : CHALLENGES_5;
+    const activeList = challengeSetTab === 'set1' ? CHALLENGES : challengeSetTab === 'set2' ? CHALLENGES_2 : challengeSetTab === 'set3' ? CHALLENGES_3 : challengeSetTab === 'set4' ? CHALLENGES_4 : challengeSetTab === 'set5' ? CHALLENGES_5 : CHALLENGES_6;
     return (
       <div className="page">
         <header className="header">
@@ -4318,17 +4341,28 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
           >
             챌린지 5
           </button>
+          <button
+            className={`reset-btn ${challengeSetTab === 'set6' ? 'title-pick-active' : ''}`}
+            style={{ flex: 1 }}
+            onClick={() => setChallengeSetTab('set6')}
+          >
+            챌린지 6
+          </button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {activeList.map((c) => {
             const cleared = !!challengesCleared[c.id];
+            // '10연승'은 챌린지6의 나머지 7개를 전부 클리어해야만 도전할 수 있어요.
+            const isLocked = c.id === 'tenWinStreak' && !CHALLENGES_6.filter((o) => o.id !== 'tenWinStreak').every((o) => challengesCleared[o.id]);
             return (
               <button
                 key={c.id}
                 className="setup-card"
-                style={{ textAlign: 'left', alignItems: 'flex-start' }}
+                style={{ textAlign: 'left', alignItems: 'flex-start', opacity: isLocked ? 0.5 : 1 }}
+                disabled={isLocked}
                 onClick={() => {
+                  if (isLocked) return;
                   setSelectedChallenge(c.id);
                   if (c.id === 'colorReverse') {
                     // 이 챌린지는 항상 내가 백이 되도록 강제되기 때문에, 색깔을 고르는 화면
@@ -4352,6 +4386,7 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
                 <div className="setup-card-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {cleared && <span style={{ color: '#3fae52' }}>✓</span>} {c.name}
                   {c.id === 'ladder' && <span className="setup-card-desc">(현재 {ladderLevel}/5단계)</span>}
+                  {isLocked && <span className="setup-card-desc">🔒 나머지 7개를 먼저 클리어하세요</span>}
                 </div>
                 <div className="setup-card-desc">{c.desc}</div>
               </button>
@@ -4368,8 +4403,10 @@ function SetupScreen({ dispatch, online, setOnline, settings, updateSettings, us
             <>{CHALLENGES_3.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_3.length}개 클리어 — 전부 클리어하면 "번개 각인" 스킨을 얻어요.</>
           ) : challengeSetTab === 'set4' ? (
             <>{CHALLENGES_4.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_4.length}개 클리어 — 전부 클리어하면 "카지노 펠트" 스킨을 얻어요.</>
-          ) : (
+          ) : challengeSetTab === 'set5' ? (
             <>{CHALLENGES_5.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_5.length}개 클리어 — 전부 클리어하면 "은하수" 스킨을 얻어요.</>
+          ) : (
+            <>{CHALLENGES_6.filter((c) => challengesCleared[c.id]).length} / {CHALLENGES_6.length}개 클리어 — 전부 클리어하면 "무지개" 스킨을 얻어요. (마지막 "10연승"은 나머지 7개를 전부 클리어해야 도전할 수 있고, 한 번이라도 지면 이 세트 전체가 초기화돼요.)</>
           )}
         </p>
       </div>
@@ -5410,7 +5447,7 @@ function GameScreen({ state, dispatch, online, onReset, settings, updateSettings
       <TurnTimer state={state} dispatch={dispatch} online={online} />
 
       <div className="board-scroll">
-        <Board state={state} dispatch={dispatch} online={online} settings={settings} user={user} />
+        <Board state={state} dispatch={dispatch} online={online} settings={settings} />
       </div>
 
       {showMoveLog && <MoveLogPanel state={state} onClose={() => setShowMoveLog(false)} />}
@@ -5615,7 +5652,7 @@ function HandPanel({ player, state, dispatch, disabled, online }) {
   );
 }
 
-function Board({ state, dispatch, online, settings, user }) {
+function Board({ state, dispatch, online, settings }) {
   const size = state.board.length;
   const gapPct = 100 / (size - 1);
   const gameOver = state.phase === 'over';
@@ -5733,7 +5770,7 @@ function Board({ state, dispatch, online, settings, user }) {
                       value === WILD ? 'stone-wild' : value === 1 ? 'stone-black' : 'stone-white'
                     } ${protectedStone ? 'stone-protected' : ''} ${markedStone ? 'stone-marked' : ''} ${isLastMove ? placementEffect.className : ''} ${
                       state.challengeId === 'silhouette' && value !== WILD ? (value === 1 ? 'stone-silhouette-fill' : 'stone-silhouette-ring') : ''
-                    } ${settings.stoneSkin === 'milkyWay' && isDevAccount(user) ? 'stone-galaxy-shimmer' : ''}`}
+                    }`}
                     style={stoneStyle || undefined}
                   >
                     {isLastMove && <span className="last-move-dot" />}

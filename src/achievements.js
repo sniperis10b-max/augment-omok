@@ -214,6 +214,16 @@ export async function addToStatSet(uid, field, key) {
   return Object.keys(val).length;
 }
 
+// addToStatSet의 반대예요: 지정한 키들을 achievementStats/{field} 집합에서 전부
+// 제거해요(값을 null로 지워요). 챌린지 6의 "10연승"에서 패배하면 이미 클리어한 항목들을
+// 포함해 세트 전체를 되돌릴 때 써요.
+export async function removeFromStatSet(uid, field, keys) {
+  const db = getDb();
+  const updates = {};
+  for (const key of keys) updates[key] = null;
+  await update(ref(db, `users/${uid}/achievementStats/${field}`), updates);
+}
+
 // achievementStats 안에 "카드별 사용 횟수"처럼 중첩된 카운터를 늘릴 때 써요.
 export async function bumpNestedCounter(uid, field, subKey, amount = 1) {
   const db = getDb();

@@ -1,9 +1,9 @@
 // 돌을 놓을 때 나오는 시각 이펙트 카탈로그예요. 스킨보다 조건을 더 어렵게 잡았어요.
 // className은 index.css에 정의된 CSS 애니메이션 클래스와 짝을 이뤄요.
 
-import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5 } from './challenges.js';
+import { CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5, CHALLENGES_6 } from './challenges.js';
 
-const CHALLENGE_SETS = [CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5];
+const CHALLENGE_SETS = [CHALLENGES, CHALLENGES_2, CHALLENGES_3, CHALLENGES_4, CHALLENGES_5, CHALLENGES_6];
 
 // 세트 하나(10개 챌린지)를 전부 최소 minTimes번씩 이겼는지 확인해요. challengeWinCounts는
 // { [challengeId]: 누적 승리 횟수 } 형태예요.
@@ -30,7 +30,7 @@ export const PLACEMENT_EFFECTS = [
   { id: 'flash', name: '섬광', className: 'fx-flash', questDesc: "불가능 AI 10승 + 흑 10승 + 백 10승 모두 달성" },
   { id: 'glow', name: '잔광', className: 'fx-glow', questDesc: '스킨 6종 이상 + 칭호 20개 이상 해금' },
   { id: 'fragBurst', name: '파편 폭발', className: 'fx-fragburst', questDesc: '파괴류 카드로 상대 돌 누적 500개 파괴 (온라인/AI 대전만 인정)' },
-  { id: 'crack', name: '균열', className: 'fx-crack', questDesc: '챌린지 세트 1~5를 각각 3번씩 클리어' },
+  { id: 'crack', name: '균열', className: 'fx-crack', questDesc: '챌린지 세트 1~6을 각각 3번씩 클리어' },
   { id: 'magnetPull', name: '자석 흡입', className: 'fx-magnetpull', questDesc: '칭호 30개 이상 획득' },
   { id: 'stamp', name: '도장 찍기', className: 'fx-stamp', questDesc: '온라인 대전 누적 승수 300회' },
   { id: 'ringChase', name: '링 체이서', className: 'fx-ringchase', questDesc: '온라인 대전 누적 300판 플레이' },
