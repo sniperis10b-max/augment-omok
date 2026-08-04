@@ -586,6 +586,13 @@ function pickDestroyLikeCard(hand, board, aiPlayer, protectedStones) {
 export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'normal') {
   if (state.silencedTurns[aiPlayer] > 0) return null; // 침묵 상태면 카드를 쓸 수 없으니 바로 돌을 놓아요.
 
+  // 챌린지 "그림자 전쟁": 손에서 카드가 안 사라지는 대신, 방금 쓴 카드는 몇 턴 동안
+  // 쿨타임에 걸려요. 쿨타임 걸린 카드는 후보에서 아예 제외해요 (다른 카드는 평소대로 씀).
+  const cooldowns = state.cardCooldowns?.[aiPlayer];
+  if (cooldowns) {
+    hand = hand.filter((id) => !(cooldowns[id] > 0));
+  }
+
   const { blockChance, cardUseChance } = DIFFICULTIES[difficulty] ?? DIFFICULTIES.normal;
   const board = state.board;
   const protectedStones = state.protectedStones ?? {};

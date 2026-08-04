@@ -311,6 +311,7 @@ export function createInitialState() {
     scatteredFogCells: {}, // 챌린지 "흩어진 시야": 항상 안 보이는 무작위 칸들 (렌더링 전용, 착수 자체는 가능)
     humanCardUsedCount: 0, // 챌린지 "카드 한 방 승부": 내가 이번 판에 카드를 몇 번 썼는지
     misfireOriginalCard: null, // 챌린지 "카드 감별 실패": 실제로 손에서 빠져야 할 원래 카드 id
+    cardCooldowns: { [BLACK]: {}, [WHITE]: {} }, // 챌린지 "그림자 전쟁": 카드별 남은 쿨타임(플레이어의 남은 턴 수). { cardId: 남은턴수 }
     provenWinCount: 0, // 챌린지 "이중 증명": 지금까지 완성한(서로 다른) 5목 줄 개수
     allowedCells: null, // 챌린지 "완전 무작위": 이번 내 턴에 둘 수 있는 칸 3개 (null이면 제한 없음)
     buffs: { doubleMoveRemaining: 0, fourToWinActive: false, bombArmed: false, doubleMoveBonusPending: false },
@@ -455,6 +456,19 @@ function advanceTurn(state, fromPlayer) {
     } else {
       next.allowedCells = null;
     }
+  }
+
+  // 챌린지 "그림자 전쟁": AI 턴이 새로 시작될 때마다, 걸려있는 카드 쿨타임을 1씩 줄여요.
+  // (카드를 쓴 턴 자체는 그대로 두고, 그 다음부터 AI 턴이 돌아올 때마다 깎여서 5번째로
+  // 돌아오는 AI 턴에 다시 쓸 수 있게 돼요. 0이 되면 목록에서 지워서 계속 안 불어나게 해요.)
+  if (next.challengeId === 'shadowWar' && next.aiPlayer && next.turn === next.aiPlayer) {
+    const current = next.cardCooldowns?.[next.aiPlayer] || {};
+    const updated = {};
+    for (const [cardId, remaining] of Object.entries(current)) {
+      const left = remaining - 1;
+      if (left > 0) updated[cardId] = left;
+    }
+    next.cardCooldowns = { ...next.cardCooldowns, [next.aiPlayer]: updated };
   }
 
   // 챌린지 "카드 폭풍": AI 차례가 되면 카드를 2장씩 자동으로 받아요 (나는 평소대로 드래프트).
@@ -1020,7 +1034,16 @@ function removeFromHand(state, player, cardId) {
   }
 
   // 챌린지 "그림자 전쟁": AI는 카드를 써도 손에서 사라지지 않아요 (진짜 무제한).
+  // 대신 방금 쓴 카드는 5턴 동안 쿨타임에 걸려서 다시 못 써요 (다른 카드는 자유롭게 쓸 수 있어요).
+  // 이게 없으면 AI가 제일 강한 카드 하나만 매턴 반복해서 쓰는 게 가능해져서 사실상 못 이기게 돼요.
   if (next.challengeId === 'shadowWar' && next.aiPlayer && player === next.aiPlayer) {
+    next = {
+      ...next,
+      cardCooldowns: {
+        ...next.cardCooldowns,
+        [player]: { ...(next.cardCooldowns?.[player] || {}), [actualCardId]: 5 },
+      },
+    };
     return next;
   }
 
