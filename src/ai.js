@@ -607,6 +607,16 @@ export function decideAIAction(state, aiPlayer, hand, blockedFn, difficulty = 'n
     return { cardId: hand[0] };
   }
 
+  // 0) 내가 지금 바로 이길 수 있으면(한 수로 5목 완성), 카드를 쓸 이유가 없어요 - 그냥
+  //    이기면 게임이 끝나요. 아래의 다른 모든 카드 판단(위협 방어, 공격 카드 등)보다
+  //    이게 항상 우선이어야 해요. 여기서 카드 판단을 아예 건너뛰도록 null을 반환하면,
+  //    이어서 chooseBestCell이 호출되고 거기서도 즉시 승리를 최우선으로 확인해서
+  //    그 자리에 돌을 두게 돼요. (이 체크가 없으면 열린 삼이나 상대 위협 때문에
+  //    엉뚱하게 카드부터 쓰다가 눈앞의 승리를 놓치는 일이 자주 생겨요.)
+  if (findWinningCellFor(board, aiPlayer, blockedFn, state.ruleFlags, winLength)) {
+    return null;
+  }
+
   const opponentThreat = findOpponentWinningCell(board, aiPlayer, winLength);
   const forcingCell = opponentThreat ? null : findOpponentForcingCell(board, aiPlayer, state.ruleFlags);
   const urgentFlanks = (opponentThreat || forcingCell)
