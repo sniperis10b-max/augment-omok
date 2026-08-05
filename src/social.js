@@ -185,8 +185,25 @@ export function subscribeFriends(uid, onChange) {
     const uids = Object.keys(val);
     const profiles = await Promise.all(
       uids.map(async (fuid) => {
-        const pSnap = await get(ref(db, `users/${fuid}/profile`));
-        return { uid: fuid, ...(pSnap.val() || { displayName: '(알 수 없음)' }) };
+        // 다른 사용자의 profile 전체 노드는 DB 규칙상 읽기가 막혀있어요(친구여도 마찬가지).
+        // 대신 규칙에서 개별적으로 읽기를 열어둔 필드(displayName/photoURL/customPhoto)만
+        // 따로 읽어야 permission denied 없이 정상적으로 값이 와요.
+        try {
+          const [nameSnap, photoSnap, customPhotoSnap] = await Promise.all([
+            get(ref(db, `users/${fuid}/profile/displayName`)),
+            get(ref(db, `users/${fuid}/profile/photoURL`)),
+            get(ref(db, `users/${fuid}/profile/customPhoto`)),
+          ]);
+          return {
+            uid: fuid,
+            displayName: nameSnap.val() || '(알 수 없음)',
+            photoURL: photoSnap.val() || null,
+            customPhoto: customPhotoSnap.val() || null,
+          };
+        } catch {
+          // 혹시 다른 이유로 실패해도 그 한 명만 빠지고, 나머지 친구 목록은 정상적으로 뜨게 해요.
+          return { uid: fuid, displayName: '(알 수 없음)', photoURL: null, customPhoto: null };
+        }
       })
     );
     onChange(profiles);
