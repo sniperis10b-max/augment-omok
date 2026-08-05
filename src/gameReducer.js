@@ -1675,6 +1675,10 @@ function resolveStandaloneNoTarget(state, cardId) {
       if (success) {
         const opponent = otherPlayer(player);
         next.winLengthOverride = { ...next.winLengthOverride, [opponent]: 6 };
+        // 렌주 금수(육목)는 기본적으로 흑에게 적용돼요. 상대가 6목을 승리 조건으로
+        // 강제받았는데 정작 6목을 두는 순간 금수로 막히면 절대 못 이기는 모순이
+        // 생기니까, 이 경우엔 육목 금수를 같이 풀어줘요 (3-3/4-4 금수는 그대로 유지).
+        next.ruleFlags = { ...next.ruleFlags, allowOverline: true };
         next.message = `카드가 발동했어요! ${opponent === BLACK ? '흑' : '백'}은 이번 판 끝까지 6목을 완성해야 승리해요.`;
       } else {
         next.message = '카드가 발동하지 않았어요... (30% 확률) 카드는 소모됐어요.';
