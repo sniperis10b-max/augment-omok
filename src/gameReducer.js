@@ -81,12 +81,26 @@ function bumpWatcherBlock(next, defender) {
 function tryDefend(next, board, player, target) {
   const defender = otherPlayer(player);
   if (next.watcherActive[defender]) {
-    next.watcherActive = { ...next.watcherActive, [defender]: false };
+    // 챌린지 "유리 심장"에서는 파괴류 카드가 턴을 안 쓰는 "프리 액션"이라, 상대가 한 턴에
+    // 파괴 카드를 연달아 여러 번 쓸 수 있어요. 감시자는 원래 "1회용"이라 이 경우 방금
+    // 하나 막아놓고도 바로 다음 카드에 뚫려서 유리 심장이 터지는 문제가 있었어요. 그래서
+    // 이 챌린지에서는 여기서 바로 소모하지 않고, 상대의 이번 턴이 완전히 끝날 때(advanceTurn)
+    // 소모시켜서 "이번에 들어오는 파괴 시도 전부"를 막아줘요. 다른 챌린지/모드에서는 그대로
+    // 원래처럼 1회만 막아요.
+    if (next.challengeId !== 'glassHeart') {
+      next.watcherActive = { ...next.watcherActive, [defender]: false };
+    } else {
+      next.watcherPendingConsume = { ...next.watcherPendingConsume, [defender]: true };
+    }
     bumpWatcherBlock(next, defender);
     return { message: `${defender === BLACK ? '흑' : '백'}의 감시자가 효과를 무효화했어요!` };
   }
   if (next.guardianActive[defender]) {
-    next.guardianActive = { ...next.guardianActive, [defender]: false };
+    if (next.challengeId !== 'glassHeart') {
+      next.guardianActive = { ...next.guardianActive, [defender]: false };
+    } else {
+      next.guardianPendingConsume = { ...next.guardianPendingConsume, [defender]: true };
+    }
     return { message: `${defender === BLACK ? '흑' : '백'}의 수호천사가 효과를 무효화했어요!` };
   }
   if (next.reflectActive[defender]) {
@@ -275,6 +289,14 @@ export function createInitialState() {
     confusion: null,
     winShield: { [BLACK]: false, [WHITE]: false },
     watcherActive: { [BLACK]: false, [WHITE]: false },
+    // 챌린지 "유리 심장" 전용: 감시자/수호천사가 막긴 했지만 아직 실제로 소모(비활성화)는
+    // 안 시킨 상태를 표시해요. 상대의 그 턴이 완전히 끝나는 순간(advanceTurn) 소모돼요.
+    watcherPendingConsume: { [BLACK]: false, [WHITE]: false },
+    guardianPendingConsume: { [BLACK]: false, [WHITE]: false },
+    // 감시자/수호천사가 막았거나 유리 심장이 깨졌을 때, 그 안내 메시지가 곧이어 실행되는
+    // 턴 넘김 로직의 뻔한 메시지("OO 차례예요")에 덮어써지지 않게 잠깐 표시해두는 값이에요.
+    // 매번 사용 직후 advanceTurn에서 다시 false로 정리해요.
+    preserveMessage: false,
     guardianActive: { [BLACK]: false, [WHITE]: false },
     reflectActive: { [BLACK]: false, [WHITE]: false },
     echoActive: { [BLACK]: false, [WHITE]: false },
@@ -419,6 +441,20 @@ function advanceTurn(state, fromPlayer) {
   const candidate = otherPlayer(fromPlayer);
   let next = { ...state };
 
+  // 챌린지 "유리 심장": fromPlayer의 턴이 이제 완전히 끝났으니, 그 턴 동안 감시자/수호천사가
+  // 막아준 걸 이제 실제로 소모시켜요. (tryDefend에서 바로 안 지우고 여기까지 미뤄둔 덕분에,
+  // fromPlayer가 그 턴에 파괴 카드를 여러 번 연달아 써도 전부 다 막혔어요.)
+  if (next.challengeId === 'glassHeart') {
+    if (next.watcherPendingConsume[candidate]) {
+      next.watcherActive = { ...next.watcherActive, [candidate]: false };
+      next.watcherPendingConsume = { ...next.watcherPendingConsume, [candidate]: false };
+    }
+    if (next.guardianPendingConsume[candidate]) {
+      next.guardianActive = { ...next.guardianActive, [candidate]: false };
+      next.guardianPendingConsume = { ...next.guardianPendingConsume, [candidate]: false };
+    }
+  }
+
   if (next.silencedTurns[fromPlayer] > 0) {
     next.silencedTurns = { ...next.silencedTurns, [fromPlayer]: next.silencedTurns[fromPlayer] - 1 };
   }
@@ -426,11 +462,18 @@ function advanceTurn(state, fromPlayer) {
   if (next.skipNextTurn[candidate]) {
     next.skipNextTurn = { ...next.skipNextTurn, [candidate]: false };
     next.turn = fromPlayer;
-    next.message = `${candidate === BLACK ? '흑' : '백'}의 턴이 가시밭에 걸려 스킵됐어요! 다시 ${fromPlayer === BLACK ? '흑' : '백'} 차례예요.`;
+    if (!next.preserveMessage) {
+      next.message = `${candidate === BLACK ? '흑' : '백'}의 턴이 가시밭에 걸려 스킵됐어요! 다시 ${fromPlayer === BLACK ? '흑' : '백'} 차례예요.`;
+    }
   } else {
     next.turn = candidate;
-    next.message = `${candidate === BLACK ? '흑' : '백'} 차례예요.`;
+    if (!next.preserveMessage) {
+      next.message = `${candidate === BLACK ? '흑' : '백'} 차례예요.`;
+    }
   }
+  // 감시자/수호천사/반사가 막았거나 유리 심장이 깨졌을 때처럼, 방금 세팅해둔 안내 메시지를
+  // 위에서 보존했으니 여기서 플래그를 정리해요 (다음 턴까지 계속 남아있으면 안 되니까요).
+  next.preserveMessage = false;
 
   // 룰렛 "강제 카드 턴": 새로 턴을 받는 쪽의 "이번 턴에 카드 썼는지" 표시를 초기화해요.
   if (next.rouletteRule === 'forceCardTurn') {
@@ -1057,6 +1100,11 @@ function removeFromHand(state, player, cardId) {
 function resolveTargetedEffect(state, cardId, targets) {
   const player = state.turn;
   let next = { ...state, lastUsedCard: { ...state.lastUsedCard, [player]: cardId } };
+  // 감시자/수호천사/반사가 막았거나 유리 심장이 깨졌을 때처럼, 아래 FREE_ACTION 처리에서
+  // "OO 차례예요" 같은 뻔한 메시지로 방금 세팅한 안내 메시지를 덮어쓰면 안 되는 경우 true로
+  // 표시해요. (예전엔 이게 없어서 감시자가 실제로 막아놓고도 아무 안내 없이 그냥 넘어가서,
+  // 마치 감시자/수호천사가 적용이 안 된 것처럼 보이는 문제가 있었어요.)
+  let keepMessage = false;
   // 메아리는 대상 선택이 필요 없는 카드에만 중첩 발동돼요. 지금처럼 대상이 필요한 카드를
   // 쓰면 대기 중이던 메아리 효과는 그냥 소모돼요 (중첩 없이).
   if (next.echoActive[player]) {
@@ -1075,7 +1123,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       const [t] = targets;
       const defender = otherPlayer(player);
       const defense = tryDefend(next, board, player, t);
-      if (defense) { next.message = defense.message; break; }
+      if (defense) { next.message = defense.message; keepMessage = true; next.preserveMessage = true; break; }
       const size = board.length;
       const candidates = [];
       for (let y = 0; y < size; y++) {
@@ -1095,7 +1143,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       const [t] = targets;
       const defender = otherPlayer(player);
       const defense = tryDefend(next, board, player, t);
-      if (defense) { next.message = defense.message; break; }
+      if (defense) { next.message = defense.message; keepMessage = true; next.preserveMessage = true; break; }
       const size = board.length;
       const candidates = [];
       for (let x = 0; x < size; x++) {
@@ -1138,7 +1186,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
       const defense = tryDefend(next, board, player, t);
-      if (defense) { next.message = defense.message; break; }
+      if (defense) { next.message = defense.message; keepMessage = true; next.preserveMessage = true; break; }
       const roll = 1 + Math.floor(Math.random() * 6);
       next.diceResult = roll;
       if (roll <= 2) {
@@ -1232,7 +1280,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
       const defense = tryDefend(next, board, player, t);
-      if (defense) { next.message = defense.message; break; }
+      if (defense) { next.message = defense.message; keepMessage = true; next.preserveMessage = true; break; }
       next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = 0;
       bumpDestroyCount(next, player, 1);
@@ -1243,7 +1291,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 파괴할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
       const defense = tryDefend(next, board, player, t);
-      if (defense) { next.message = `${defense.message} (연쇄 파괴 무효화됨)`; break; }
+      if (defense) { next.message = `${defense.message} (연쇄 파괴 무효화됨)`; keepMessage = true; next.preserveMessage = true; break; }
       const removed = [{ x: t.x, y: t.y }];
       next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = 0;
@@ -1294,7 +1342,7 @@ function resolveTargetedEffect(state, cardId, targets) {
       if (next.protectedStones[key(t.x, t.y)]) { next.message = '강화된 돌이라 변환할 수 없어요.'; return next; }
       const defender = otherPlayer(player);
       const defense = tryDefend(next, board, player, t);
-      if (defense) { next.message = defense.message; break; }
+      if (defense) { next.message = defense.message; keepMessage = true; next.preserveMessage = true; break; }
       next.stoneLossLog = [...next.stoneLossLog, { owner: defender, x: t.x, y: t.y, ply: next.ply }];
       board[t.y][t.x] = player;
       break;
@@ -1423,6 +1471,7 @@ function resolveTargetedEffect(state, cardId, targets) {
     if (shattered > 0) {
       next.board = shatteredBoard;
       next.message = `유리 심장이 깨졌어요! 내 돌 ${shattered}개가 전부 사라졌어요.`;
+      keepMessage = true; next.preserveMessage = true;
     }
   }
 
@@ -1534,7 +1583,9 @@ function resolveTargetedEffect(state, cardId, targets) {
   }
 
   if (FREE_ACTION.has(cardId)) {
-    next.message = `${player === BLACK ? '흑' : '백'} 차례예요. 이어서 돌을 놓거나 다른 카드를 쓸 수 있어요.`;
+    if (!keepMessage) {
+      next.message = `${player === BLACK ? '흑' : '백'} 차례예요. 이어서 돌을 놓거나 다른 카드를 쓸 수 있어요.`;
+    }
     return withDeadline(endIfStalemated(next));
   }
 
@@ -1548,6 +1599,9 @@ function resolveStandaloneNoTarget(state, cardId) {
   const player = state.turn;
   let next = { ...state, lastUsedCard: { ...state.lastUsedCard, [player]: cardId } };
   let board = cloneBoard(next.board);
+  // resolveTargetedEffect와 같은 이유로, 감시자/수호천사/반사가 막았거나 유리 심장이
+  // 깨졌을 때 아래 FREE_ACTION 처리에서 그 안내 메시지가 덮어써지지 않게 표시해요.
+  let keepMessage = false;
 
   // 메아리(echo)가 대기 중이었다면, 대상 선택이 필요 없는 이번 카드의 효과를 한 번 더 실행해요.
   // (echo 카드 자신은 스스로를 중첩시키지 않아요)
@@ -1817,7 +1871,7 @@ function resolveStandaloneNoTarget(state, cardId) {
     case 'erosion': {
       const opponent = otherPlayer(player);
       const defense = tryDefend(next, board, player, null);
-      if (defense) { next.message = defense.message; break; }
+      if (defense) { next.message = defense.message; keepMessage = true; next.preserveMessage = true; break; }
       const placements = next.moveLog.filter((m) => m.type === 'place' && m.player === opponent);
       let target = null;
       for (const m of placements) {
@@ -1913,6 +1967,7 @@ function resolveStandaloneNoTarget(state, cardId) {
     if (shattered > 0) {
       next.board = shatteredBoard;
       next.message = `유리 심장이 깨졌어요! 내 돌 ${shattered}개가 전부 사라졌어요.`;
+      keepMessage = true; next.preserveMessage = true;
     }
   }
 
@@ -1933,7 +1988,7 @@ function resolveStandaloneNoTarget(state, cardId) {
   }
 
   if (FREE_ACTION.has(cardId)) {
-    next.message = next.message === '상대가 아직 사용한 카드가 없어요.'
+    next.message = (keepMessage || next.message === '상대가 아직 사용한 카드가 없어요.')
       ? next.message
       : `${player === BLACK ? '흑' : '백'} 차례예요. 이어서 돌을 놓거나 다른 카드를 쓸 수 있어요.`;
     return withDeadline(endIfStalemated(next));
