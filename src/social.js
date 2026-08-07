@@ -261,15 +261,21 @@ export async function quickMatch(timeLimitSec, cardsPerPlayer, hostUid, ranked =
   const existingVal = existing.val();
 
   if (existingVal && existingVal.at && now - existingVal.at < STALE_MS) {
-    // 같은 설정으로 이미 기다리는 사람이 있으면 게스트로 참가
+    // 같은 설정으로 이미 기다리는 사람이 있으면 게스트로 참가.
+    // 조건이 안 맞으면(이미 다른 사람이 가져갔거나 값이 바뀜) undefined를 반환해서
+    // 트랜잭션을 아예 중단시켜요. 예전엔 여기서 그냥 current를 그대로 반환했는데,
+    // 그러면 "이미 비어있어서 내가 아무것도 안 바꿨다"와 "내가 방금 비웠다"를
+    // committed 값만으로 구분할 수 없어서, 두 사람이 동시에 매칭을 시도하면
+    // 둘 다 자기가 자리를 가져간 줄 알고 같은 방에 게스트로 들어가려다가
+    // 한 명은 방에 못 들어가고 관전자로 밀려나는 버그가 있었어요.
     const result = await runTransaction(waitingRef, (current) => {
       if (current && current.code === existingVal.code) {
         return null; // 내가 이 자리를 소비
       }
-      return current;
+      return undefined; // 중단 - 내가 소비한 게 아니면 committed가 false가 돼요.
     });
 
-    if (result.committed && !result.snapshot.val()) {
+    if (result.committed) {
       return { role: 'guest', code: existingVal.code, hostColor: existingVal.hostColor, queueKey, ranked, rouletteMode };
     }
     // 다른 사람이 먼저 가져갔으면 아래로 내려가서 새로 방을 만들어요.
